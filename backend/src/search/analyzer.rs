@@ -10,8 +10,21 @@ pub(crate) struct TokenSpan {
 }
 
 pub(crate) fn search_tokens(text: &str, domain_stopwords: &[String]) -> Vec<String> {
-    let mut analyzer = analyzer_with_stopwords(domain_stopwords);
-    collect_tokens(&mut analyzer, text)
+    SearchTokenizer::new(domain_stopwords).tokens(text)
+}
+
+/// Reuse the configured tokenizer across one ranking pass. Building its filters
+/// stems the stopword list; that work is independent of each candidate's text.
+pub(crate) struct SearchTokenizer(TextAnalyzer);
+
+impl SearchTokenizer {
+    pub(crate) fn new(domain_stopwords: &[String]) -> Self {
+        Self(analyzer_with_stopwords(domain_stopwords))
+    }
+
+    pub(crate) fn tokens(&mut self, text: &str) -> Vec<String> {
+        collect_tokens(&mut self.0, text)
+    }
 }
 
 pub(crate) fn surface_tokens(text: &str, domain_stopwords: &[String]) -> Vec<String> {
@@ -117,6 +130,20 @@ fn stemmed_token_spans(text: &str) -> Vec<TokenSpan> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reused_search_analyzer_keeps_each_document_independent() {
+        let stopwords = vec!["home".to_string(), "acre".to_string()];
+        let mut tokenizer = SearchTokenizer::new(&stopwords);
+        for text in [
+            "Homes near green spaces",
+            "",
+            "ACRES by Schools",
+            "Homes near green spaces",
+        ] {
+            assert_eq!(tokenizer.tokens(text), search_tokens(text, &stopwords));
+        }
+    }
 
     #[test]
     fn stems_plural_variants_without_config_duplicates() {

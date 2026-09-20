@@ -10,10 +10,10 @@ use crate::dag_config::{
 };
 use crate::knowledge::FactValue;
 use crate::models::{KgEntityRefs, Property};
-use crate::proof_focus::ProofFocus;
 use crate::related_societies::related_society_entity_ids_with_entities;
 use crate::routes::map_overlays::MapOverlayPolygon;
 use crate::search::geo::{extract_first_distance_km, haversine_km};
+use crate::search::proof::ResolvedProofFocus;
 use crate::serving::{
     resolve_serving_coordinates, LoadedServingBundle, ServingEntityFactRows, ServingFactRecord,
 };
@@ -34,7 +34,10 @@ pub struct SurfaceSceneResponse {
     pub experience: Option<UiSurfaceSceneExperienceConfig>,
     pub viewport: SceneViewport,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub proof_focus: Option<ProofFocus>,
+    pub proof_focus: Option<ResolvedProofFocus>,
+    pub proof_focus_status: ProofFocusStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub proof_focus_message: Option<String>,
     pub layers: Vec<SceneLayer>,
     pub features: Vec<SceneFeature>,
     pub relations: Vec<SceneRelation>,
@@ -42,6 +45,17 @@ pub struct SurfaceSceneResponse {
     pub receipts: Vec<SceneReceipt>,
     pub fill_rate: SceneFillRate,
     pub gaps: Vec<SceneGap>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ProofFocusStatus {
+    NotRequested,
+    Applied,
+    Stale,
+    Retired,
+    Mismatch,
+    Unavailable,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -276,7 +290,7 @@ pub fn build_surface_scene_with_focus(
     entity_refs: KgEntityRefs,
     bundle: &LoadedServingBundle,
     surface: &UiSurfaceConfig,
-    proof_focus: Option<&ProofFocus>,
+    proof_focus: Option<&ResolvedProofFocus>,
 ) -> Option<SurfaceSceneResponse> {
     let scene_config = surface.scene.as_ref()?;
     let requested_focus = proof_focus.filter(|focus| focus.surface_id == surface.id);
@@ -348,30 +362,32 @@ pub fn build_surface_scene_with_focus(
                     .then_with(|| left.label.cmp(&right.label))
             });
         }
-        dedup_candidates(&mut candidates);
-        let available_count = candidates.len();
-        if let Some(max_items) = layer_rule.max_items {
-            let all_candidates = candidates.clone();
-            candidates = select_layer_candidates(layer_rule, candidates, max_items);
-            if let Some(focus) = requested_focus.filter(|focus| focus.layer_id == layer_rule.id) {
-                if let Some(focused) = all_candidates
+        let focused_candidate = requested_focus
+            .filter(|focus| focus.layer_id == layer_rule.id)
+            .and_then(|focus| {
+                candidates
                     .iter()
                     .find(|candidate| candidate_matches_focus(candidate, focus))
-                    .cloned()
-                {
-                    let already_selected = candidates
-                        .iter()
-                        .any(|candidate| same_scene_candidate(candidate, &focused));
-                    if !already_selected {
-                        candidates.push(focused);
-                    }
-                }
+            })
+            .cloned();
+        dedup_candidates(&mut candidates);
+        let mut available_count = candidates.len();
+        if let Some(max_items) = layer_rule.max_items {
+            candidates = select_layer_candidates(layer_rule, candidates, max_items);
+        }
+        if let Some(focused) = focused_candidate {
+            if !candidates
+                .iter()
+                .any(|candidate| candidate.receipt.id == focused.receipt.id)
+            {
+                candidates.push(focused);
+                available_count = available_count.max(candidates.len());
             }
         }
         let shown_count = candidates.len();
         let fill_state = fill_state(available_count, shown_count);
         for candidate in candidates {
-            let feature_id = format!(
+            let mut feature_id = format!(
                 "{}:{}:{}",
                 surface.id,
                 layer_rule.id,
@@ -382,6 +398,12 @@ pub fn build_surface_scene_with_focus(
                     .replace(':', "-")
             );
             let receipt_id = candidate.receipt.id.clone();
+            if features
+                .iter()
+                .any(|feature: &SceneFeature| feature.id == feature_id)
+            {
+                feature_id = format!("{feature_id}:{receipt_id}");
+            }
             if requested_focus.is_some_and(|focus| candidate_matches_focus(&candidate, focus)) {
                 if let Some(focus) = requested_focus {
                     let mut focus = focus.clone();
@@ -483,6 +505,8 @@ pub fn build_surface_scene_with_focus(
         experience: scene_config.experience.clone(),
         viewport,
         proof_focus: applied_focus,
+        proof_focus_status: ProofFocusStatus::NotRequested,
+        proof_focus_message: None,
         layers,
         features,
         relations,
@@ -663,6 +687,7 @@ pub fn merge_surface_context_polygons(
 
 #[derive(Debug, Clone)]
 struct SceneFeatureCandidate {
+    observation_id: Option<String>,
     entity_id: Option<String>,
     kind: String,
     label: String,
@@ -678,7 +703,15 @@ struct SceneFeatureCandidate {
     receipt: SceneReceipt,
 }
 
-fn candidate_matches_focus(candidate: &SceneFeatureCandidate, focus: &ProofFocus) -> bool {
+fn candidate_matches_focus(candidate: &SceneFeatureCandidate, focus: &ResolvedProofFocus) -> bool {
+    if !focus.observation_ids.is_empty()
+        && !candidate
+            .observation_id
+            .as_ref()
+            .is_some_and(|id| focus.observation_ids.contains(id))
+    {
+        return false;
+    }
     if !candidate
         .receipt
         .fact_key
@@ -727,16 +760,6 @@ fn candidate_matches_focus(candidate: &SceneFeatureCandidate, focus: &ProofFocus
         return value_matches || distance_matches;
     }
     true
-}
-
-fn same_scene_candidate(left: &SceneFeatureCandidate, right: &SceneFeatureCandidate) -> bool {
-    left.receipt.id == right.receipt.id
-        || (left.entity_id.is_some()
-            && left.entity_id == right.entity_id
-            && left
-                .receipt
-                .fact_key
-                .eq_ignore_ascii_case(&right.receipt.fact_key))
 }
 
 fn candidate_text_matches(candidate: &SceneFeatureCandidate, needle: &str) -> bool {
@@ -1007,6 +1030,10 @@ fn feature_candidate_from_fact(
     };
     let properties = scene_feature_properties(layer_rule, source.property_rows);
     Some(SceneFeatureCandidate {
+        observation_id: fact
+            .observation
+            .as_ref()
+            .map(|observation| observation.observation_id.as_str().to_string()),
         entity_id: place
             .map(|place| place.entity_id.clone())
             .or(source.entity_id),
@@ -2573,20 +2600,19 @@ mod tests {
                 }],
             }),
         };
-        let focus = crate::proof_focus::ProofFocus {
+        let focus = crate::search::proof::ResolvedProofFocus {
+            observation_ids: Vec::new(),
             surface_id: "around_this_home".to_string(),
             layer_id: "red_flags".to_string(),
             fact_key: "nearby_graveyards".to_string(),
-            destination_kind: Some("scene".to_string()),
-            target_id: Some("around-this-home".to_string()),
+            destination_kind: "scene".to_string(),
+            target_id: "around-this-home".to_string(),
             entity_id: None,
             feature_id: None,
             receipt_id: None,
             matched_label: Some("Burial ground".to_string()),
             matched_value: Some("Burial ground (50 m)".to_string()),
-            requested_constraint: Some("near Burial ground".to_string()),
             distance_m: Some(50),
-            reason: "matched near Burial ground".to_string(),
         };
 
         let scene = build_surface_scene_with_focus(
@@ -3238,6 +3264,9 @@ mod tests {
         facts: Vec<ServingFactRecord>,
     ) -> LoadedServingBundle {
         let fact_index = crate::serving::ServingFactIndex::from_records(facts.clone(), Vec::new());
+        let evidence_index =
+            crate::serving::ServingEvidenceIndex::from_records(fact_index.all_facts(), &[])
+                .expect("surface test evidence index");
         let temp_dir = tempdir().unwrap();
         let recall_index =
             TantivyRecallIndex::build_in_dir(temp_dir.path(), &entities, &facts, &[]).unwrap();
@@ -3246,6 +3275,7 @@ mod tests {
         LoadedServingBundle {
             manifest: ServingBundleManifest {
                 bundle_version: "test-bundle".to_string(),
+                proof_snapshot_identity: "test-bundle".to_string(),
                 format_version: 1,
                 created_at: Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
                 entity_count: entities.len() as u64,
@@ -3275,6 +3305,7 @@ mod tests {
             graph_index: GraphIndex::default(),
             recall_index,
             fact_index,
+            evidence_index,
             rera_evidence_index: crate::serving::ReraEvidenceIndex::default(),
             entity_index,
             spatial_index,

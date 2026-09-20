@@ -39,6 +39,7 @@ pub fn inventory_options(properties: &[Property]) -> HashMap<String, InventoryOp
                         SNAPSHOT_IDENTITY,
                         &observation,
                     )),
+                    evidence_fact_key: None,
                 },
             )
         })

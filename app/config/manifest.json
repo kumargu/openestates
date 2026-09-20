@@ -33,6 +33,11 @@
       "files": ["discovery_home.json"],
       "purpose": "Landing copy and curated shelves; evidence section ownership moved to app/config/dag/evidence_sections.json"
     },
+    "ui": {
+      "path": "app/config/ui",
+      "files": ["home-atlas.json", "search-journey.json"],
+      "purpose": "Presentation and browser navigation policies; search meaning and proof remain backend-owned"
+    },
     "coverage": {
       "path": "app/config/coverage.json",
       "purpose": "Audit: what is in config vs lake vs still hardcoded in Rust"

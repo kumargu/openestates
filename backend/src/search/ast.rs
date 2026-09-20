@@ -1100,7 +1100,8 @@ fn compile_constraints(
             .iter()
             .filter(|entity| !entity.exclusion && is_entity_type(entity, "builder")),
     );
-    let include_budgets = budget_terms(plan);
+    let include_budgets = budget_terms(plan, SlotPolarity::Include);
+    let exclude_budgets = budget_terms(plan, SlotPolarity::Exclude);
     let include_evidence = evidence_terms(query, &plan.evidence);
     let exclude_bhks = bhk_terms(plan, SlotPolarity::Exclude);
     let mut exclude_areas = area_terms(plan, MentionPolarity::Exclusion);
@@ -1128,6 +1129,7 @@ fn compile_constraints(
     ];
     positive_groups.extend(include_evidence.iter().map(std::slice::from_ref));
     let negative_groups = [
+        exclude_budgets.as_slice(),
         exclude_bhks.as_slice(),
         exclude_areas.as_slice(),
         excluded_societies.as_slice(),
@@ -1321,8 +1323,13 @@ fn builder_terms<'a>(
         .collect()
 }
 
-fn budget_terms(plan: &QueryPlan) -> Vec<SpannedTerm> {
-    plan.slots.budgets.iter().map(spanned_budget_term).collect()
+fn budget_terms(plan: &QueryPlan, polarity: SlotPolarity) -> Vec<SpannedTerm> {
+    plan.slots
+        .budgets
+        .iter()
+        .filter(|budget| budget.polarity == polarity)
+        .map(spanned_budget_term)
+        .collect()
 }
 
 fn spanned_budget_term(budget: &ParsedBudgetConstraint) -> SpannedTerm {

@@ -1,4 +1,25 @@
-import type { ProofFocus, SearchResultItem } from "./types.ts";
+import type { ProofFocus, SearchProofResolution, SearchResultItem } from "./types.ts";
+
+export function resolvedProofFocus(proof: SearchProofResolution, token: string): ProofFocus | undefined {
+  const destination = proof.destination;
+  if (!destination) return undefined;
+  const value = proof.value?.data;
+  const display = typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+    ? String(value) : Array.isArray(value) ? value.join(", ") : undefined;
+  return {
+    proofToken: token,
+    surfaceId: destination.surfaceId,
+    layerId: destination.layerId ?? "",
+    destinationKind: destination.kind,
+    targetId: destination.targetId,
+    factKey: proof.factKey,
+    entityId: proof.targetEntityId,
+    matchedLabel: proof.targetLabel,
+    matchedValue: display && proof.unit ? `${display} ${proof.unit}` : display,
+    sourceUrl: proof.sourceObservations.find((source) => source.sourceUrl)?.sourceUrl,
+    reason: "Matched your search",
+  };
+}
 
 export type PropertyProofMatch = {
   value: string;
@@ -18,39 +39,15 @@ export function propertyProofMatch(
 
 const DEFAULT_PROPERTY_SURFACE_ID = "around_this_home";
 
-type ProofFocusSource = Pick<
-  SearchResultItem,
-  "proof_focuses" | "match_reason" | "match_explanation"
->;
-
+/** Card priority is backend-owned; display text never selects evidence. */
 export function primaryProofFocus(
-  result: ProofFocusSource,
-  query?: string,
+  result: Pick<SearchResultItem, "reasons">,
 ): ProofFocus | undefined {
-  const focuses = result.proof_focuses ?? [];
-  if (focuses.length === 0) return undefined;
-  if (focuses.length === 1) return focuses[0];
-
-  const queryHaystack = normalizeHaystack(query);
-  const reasonHaystack = normalizeHaystack(
-    [
-      result.match_reason,
-      ...(result.match_explanation?.reasons.map((reason) => reason.display) ?? []),
-    ]
-      .filter((value): value is string => Boolean(value?.trim()))
-      .join(" "),
-  );
-
-  let best = focuses[0];
-  let bestScore = Number.NEGATIVE_INFINITY;
-  for (const focus of focuses) {
-    const score = scoreProofFocus(focus, queryHaystack, reasonHaystack);
-    if (score > bestScore) {
-      best = focus;
-      bestScore = score;
-    }
-  }
-  return best;
+  const reason = result.reasons?.find((reason) => reason.showOnCard) ?? result.reasons?.[0];
+  return reason ? {
+    surfaceId: "", layerId: "", factKey: "",
+    reason: reason.explanation, proofToken: reason.proofToken,
+  } : undefined;
 }
 
 export function initialPropertySurfaceId(focus?: ProofFocus): string {
@@ -62,46 +59,4 @@ export function initialPropertySurfaceId(focus?: ProofFocus): string {
 
 export function propertySceneProofFocus(focus?: ProofFocus): ProofFocus | undefined {
   return focus?.destinationKind === "section" ? undefined : focus;
-}
-
-function scoreProofFocus(
-  focus: ProofFocus,
-  queryHaystack: string,
-  reasonHaystack: string,
-): number {
-  let score = 0;
-  const label = normalizeHaystack(focus.matchedLabel);
-  const constraint = normalizeHaystack(focus.requestedConstraint);
-  const layer = normalizeHaystack(focus.layerId.replace(/[_-]+/g, " "));
-  const factToken = normalizeHaystack(
-    focus.factKey.replace(/^nearby[_-]?/i, "").replace(/[_-]+/g, " "),
-  );
-
-  if (label && queryHaystack.includes(label)) score += 200;
-  if (constraint && queryHaystack.includes(constraint)) score += 160;
-  if (layer && haystackHasToken(queryHaystack, layer)) score += 120;
-  if (factToken && haystackHasToken(queryHaystack, factToken)) score += 100;
-  if (label && reasonHaystack.includes(label)) score += 40;
-  if (constraint && reasonHaystack.includes(constraint)) score += 30;
-  if (focus.entityId) score += 10;
-  if (label && queryHaystack.includes(label)) {
-    score += Math.min(label.length, 20);
-  }
-  return score;
-}
-
-function normalizeHaystack(value: string | null | undefined): string {
-  return (value ?? "").trim().toLocaleLowerCase("en-IN");
-}
-
-function haystackHasToken(haystack: string, token: string): boolean {
-  if (!haystack || !token) return false;
-  if (haystack.includes(token)) return true;
-  const first = token.split(/\s+/)[0];
-  if (!first || first.length < 4) return false;
-  return new RegExp(`\\b${escapeRegExp(first)}\\b`, "i").test(haystack);
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

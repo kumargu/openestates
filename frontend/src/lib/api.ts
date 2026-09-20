@@ -11,6 +11,9 @@ import type {
   AreaTrackerResponse,
   DiscoveryResponse,
   SearchResponse,
+  SearchJourneyEnvelope,
+  SearchRevisionTarget,
+  SearchProofResolution,
   SurfaceBatchResponse,
   SurfaceSceneResponse,
 } from "./types.ts";
@@ -19,14 +22,22 @@ import {
   isListableProperty,
 } from "./property-filters.ts";
 import { API_ORIGIN } from "./runtimeConfig.ts";
+import { projectSearchJourney } from "./search-journey.ts";
 
 const META_ENV = (import.meta as ImportMeta & {
   env?: Record<string, string | boolean | undefined>;
 }).env ?? {};
+const ENABLE_DEV_FIXTURES = META_ENV.DEV === true
+  && META_ENV.VITE_USE_FIXTURE_API === "true";
 const inFlightSearches = new Map<string, Promise<SearchResponse>>();
+const inFlightResumes = new Map<string, Promise<SearchJourneyEnvelope>>();
+const inFlightSurfaceBatches = new Map<string, Promise<SurfaceBatchResponse>>();
 const PROPERTY_CATALOG_CACHE_MS = 60_000;
+const DISCOVERY_CACHE_MS = 60_000;
 let cachedPropertyCatalog: { loadedAt: number; value: PropertyCard[] } | null = null;
 let inFlightPropertyCatalog: Promise<PropertyCard[]> | null = null;
+let cachedDiscovery: { loadedAt: number; value: DiscoveryResponse } | null = null;
+let inFlightDiscovery: Promise<DiscoveryResponse> | null = null;
 let propertyCatalogRequestGeneration = 0;
 const DEFAULT_API_TIMEOUT_MS = 4_000;
 const GET_ATTEMPT_COUNT = 2;
@@ -117,12 +128,18 @@ async function fetchJson<T>(path: string, options: ApiFetchOptions = {}): Promis
   throw new Error("API request failed");
 }
 
-async function postJson<T>(path: string, body: unknown): Promise<T> {
+async function postJson<T>(path: string, body: unknown, options: ApiFetchOptions = {}): Promise<T> {
+  if (ENABLE_DEV_FIXTURES) {
+    const { getFixtureSearchMutation } = await import("./dev-fixtures.ts");
+    const fixture = getFixtureSearchMutation(path, body);
+    if (options.signal?.aborted) throw new DOMException("Aborted", "AbortError");
+    if (fixture) return fixture as T;
+  }
   const res = await fetch(`${API_ORIGIN}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
-    signal: requestSignal({}),
+    signal: requestSignal(options),
   });
   if (!res.ok) {
     const fixture = await getDevFixture<T>(path);
@@ -218,7 +235,7 @@ export function propertyDetailPath(
   discoveryQueryFingerprint?: string | null,
 ): string {
   const params = new URLSearchParams();
-  if (focus) params.set("focus", JSON.stringify(focus));
+  if (focus?.proofToken) params.set("proofToken", focus.proofToken);
   if (discoveryContextId?.trim()) params.set("context", discoveryContextId);
   if (discoveryQueryFingerprint?.trim()) params.set("qf", discoveryQueryFingerprint);
   const suffix = params.size > 0 ? `?${params.toString()}` : "";
@@ -226,26 +243,8 @@ export function propertyDetailPath(
 }
 
 export function propertySurfacePath(id: string, surfaceId: string, focus?: ProofFocus): string {
-  const params = focus ? `?focus=${encodeURIComponent(JSON.stringify(focus))}` : "";
+  const params = focus?.proofToken ? `?proofToken=${encodeURIComponent(focus.proofToken)}` : "";
   return `/api/properties/${encodeURIComponent(id)}/surfaces/${encodeURIComponent(surfaceId)}${params}`;
-}
-
-export function parseProofFocusParam(value: string | null): ProofFocus | undefined {
-  if (!value) return undefined;
-  try {
-    const parsed = JSON.parse(value) as Partial<ProofFocus>;
-    if (
-      typeof parsed.surfaceId !== "string"
-      || typeof parsed.layerId !== "string"
-      || typeof parsed.factKey !== "string"
-      || typeof parsed.reason !== "string"
-    ) {
-      return undefined;
-    }
-    return parsed as ProofFocus;
-  } catch {
-    return undefined;
-  }
 }
 
 export function getPropertySurfaces(
@@ -261,11 +260,19 @@ export function getPropertySurfaces(
 export function getPropertySurfacesBatch(
   propertyIds: string[],
   surfaceIds: string[] = ["around_this_home"],
+  options?: ApiFetchOptions,
 ): Promise<SurfaceBatchResponse> {
-  return postJson("/api/properties/surfaces/batch", {
+  const key = JSON.stringify([propertyIds, surfaceIds]);
+  const existing = inFlightSurfaceBatches.get(key);
+  if (existing) return withCallerAbort(existing, options?.signal);
+  const request = postJson<SurfaceBatchResponse>("/api/properties/surfaces/batch", {
     propertyIds,
     surfaceIds,
+  }, { timeoutMs: options?.timeoutMs }).finally(() => {
+    if (inFlightSurfaceBatches.get(key) === request) inFlightSurfaceBatches.delete(key);
   });
+  inFlightSurfaceBatches.set(key, request);
+  return withCallerAbort(request, options?.signal);
 }
 
 export function getAreas(options?: ApiFetchOptions): Promise<AreaListItem[]> {
@@ -288,9 +295,10 @@ export function searchProperties(
   const existing = inFlightSearches.get(key);
   if (existing) return withCallerAbort(existing, options?.signal);
 
-  const request = fetchJson<SearchResponse>(`/api/search?q=${encodeURIComponent(query)}`, {
+  const request = fetchJson<SearchJourneyEnvelope>(`/api/search?q=${encodeURIComponent(query)}`, {
     timeoutMs: options?.timeoutMs,
   })
+    .then((journey) => projectSearchJourney(journey))
     .finally(() => {
       if (inFlightSearches.get(key) === request) {
         inFlightSearches.delete(key);
@@ -300,14 +308,72 @@ export function searchProperties(
   return withCallerAbort(request, options?.signal);
 }
 
+export async function reviseSearch(parent: SearchResponse, utterance: string, clientMutationId: string,
+  target?: SearchRevisionTarget, selectedPropertyId?: string, options?: ApiFetchOptions): Promise<SearchResponse> {
+  const journey = await postJson<SearchJourneyEnvelope>("/api/search/revisions", {
+    parentToken: parent.journey?.active.revision.stateToken,
+    parentResultIds: parent.orderedResultIds, utterance, clientMutationId, target,
+    selectedPropertyId: selectedPropertyId && parent.orderedResultIds.includes(selectedPropertyId) ? selectedPropertyId : undefined,
+  }, options);
+  return projectSearchJourney(journey, parent);
+}
+
+export async function resumeSearch(parent: SearchResponse, options?: ApiFetchOptions): Promise<SearchResponse> {
+  const journey = await resumeJourney({
+    token: parent.journey?.active.revision.stateToken ?? "",
+    ids: parent.orderedResultIds,
+  }, options);
+  return projectSearchJourney(journey, parent);
+}
+
+export async function resumeSearchCheckpoint(checkpoint: { token: string; ids: string[] }, options?: ApiFetchOptions): Promise<SearchResponse> {
+  const journey = await resumeJourney(checkpoint, options);
+  return projectSearchJourney(journey);
+}
+
+function resumeJourney(checkpoint: { token: string; ids: string[] }, options?: ApiFetchOptions): Promise<SearchJourneyEnvelope> {
+  const key = JSON.stringify([checkpoint.token, checkpoint.ids]);
+  const existing = inFlightResumes.get(key);
+  if (existing) return withCallerAbort(existing, options?.signal);
+  const request = postJson<SearchJourneyEnvelope>("/api/search/resume", {
+    parentToken: checkpoint.token,
+    knownResultIds: checkpoint.ids,
+  }, { timeoutMs: options?.timeoutMs }).finally(() => {
+    if (inFlightResumes.get(key) === request) inFlightResumes.delete(key);
+  });
+  inFlightResumes.set(key, request);
+  return withCallerAbort(request, options?.signal);
+}
+
+export function resolveSearchProof(proofToken: string, propertyId: string, options?: ApiFetchOptions): Promise<SearchProofResolution> {
+  return postJson("/api/search/proofs/resolve", { proofToken, propertyId }, options);
+}
+
 export function getDiscovery(options?: ApiFetchOptions): Promise<DiscoveryResponse> {
-  return fetchJson<DiscoveryResponse>("/api/discovery", options).then((response) => ({
+  const now = Date.now();
+  if (cachedDiscovery && now - cachedDiscovery.loadedAt < DISCOVERY_CACHE_MS) {
+    return withCallerAbort(Promise.resolve(cachedDiscovery.value), options?.signal);
+  }
+  const request = inFlightDiscovery ?? fetchJson<DiscoveryResponse>("/api/discovery", {
+    timeoutMs: options?.timeoutMs,
+  }).then((response) => ({
     ...response,
     shelves: response.shelves.map((shelf) => ({
       ...shelf,
       cards: shelf.cards.filter((card) => isListableProperty(card.property)),
     })),
-  }));
+  })).then((value) => {
+    cachedDiscovery = { loadedAt: Date.now(), value };
+    return value;
+  });
+  if (!inFlightDiscovery) {
+    inFlightDiscovery = request;
+    const clearRequest = () => {
+      if (inFlightDiscovery === request) inFlightDiscovery = null;
+    };
+    void request.then(clearRequest, clearRequest);
+  }
+  return withCallerAbort(request, options?.signal);
 }
 
 export type PlatformStats = {

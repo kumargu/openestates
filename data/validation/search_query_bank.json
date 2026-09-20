@@ -4,6 +4,11 @@
   "description": "Single source of truth for controlled and live search queries. Suites select compatible case groups without splitting cases across files.",
   "case_groups": [
     {
+      "id": "journey_api",
+      "kind": "controlled",
+      "purpose": "Multi-turn HTTP contracts using synthetic serving entities, observations, and homes. No production parser aliases."
+    },
+    {
       "id": "guardrails",
       "kind": "controlled",
       "purpose": "Early search guardrail suite for rejecting or clarifying bad, vague, unsupported, assistant-directed, or no-home-intent queries before ranking."
@@ -143,6 +148,7 @@
     }
   ],
   "suites": [
+    { "id": "journey_api", "runner": "rust_journey_api", "case_groups": ["journey_api"] },
     {
       "id": "controlled_product",
       "runner": "rust_controlled",
@@ -300,6 +306,55 @@
     }
   ],
   "cases": [
+    {
+      "id": "JA-005", "group": "journey_api", "query": "3BHK within 1 km of Fixture School 6 under 2.4 Cr",
+      "steps": [
+        { "utterance": "Under 2.5Cr", "outcome": "activated", "operation": "refine", "brief_contains": ["Fixture School 6", "2.5Cr"] },
+        { "utterance": "3BHK in Hoodi under 2.5Cr", "outcome": "activated", "operation": "replace", "brief_contains": ["Hoodi", "2.5Cr"], "brief_excludes": ["Fixture School 6"] },
+        { "resume": true, "outcome": "resumed", "brief_contains": ["Hoodi", "2.5Cr"], "brief_excludes": ["Fixture School 6"] }
+      ]
+    },
+    {
+      "id": "JA-006", "group": "journey_api", "query": "3BHK within 1 km of Fixture School 6 under 2.4 Cr",
+      "steps": [
+        { "utterance": "Keep the same search but 3BHK in Hoodi under 2.5Cr", "outcome": "activated", "operation": "refine", "brief_contains": ["Fixture School 6", "Hoodi", "2.5Cr"] }
+      ]
+    },
+    {
+      "id": "JA-007", "group": "journey_api", "query": "3BHK in Hoodi under 2.4 Cr or 3BHK in Sarjapur under 2.35 Cr",
+      "steps": [
+        { "utterance": "3BHK in Hoodi under 2.5Cr", "outcome": "activated", "operation": "replace", "brief_contains": ["Hoodi", "2.5Cr"], "brief_excludes": ["Sarjapur"] },
+        { "utterance": "Start over 3BHK", "outcome": "activated", "operation": "replace", "brief_contains": ["3 BHK"], "brief_excludes": ["Hoodi", "2.5Cr"] }
+      ]
+    },
+    {
+      "id": "JA-001", "group": "journey_api", "query": "3BHK in Hoodi under 2.4 Cr",
+      "steps": [
+        { "utterance": "Make it under 2.5Cr", "outcome": "activated", "brief_contains": ["3 BHK", "2.5Cr"] },
+        { "resume": true, "outcome": "resumed", "brief_contains": ["3 BHK", "2.5Cr"] }
+      ]
+    },
+    {
+      "id": "JA-002", "group": "journey_api", "query": "3BHK in Hoodi under 2.4 Cr",
+      "steps": [
+        { "utterance": "Only 4BHK", "outcome": "preservedParent", "same_results": true, "brief_contains": ["3 BHK", "2.4Cr"] },
+        { "utterance": "Make it under 2.5Cr", "outcome": "activated", "brief_contains": ["3 BHK", "2.5Cr"] }
+      ]
+    },
+    {
+      "id": "JA-003", "group": "journey_api", "query": "3BHK in Hoodi under 2.4 Cr",
+      "steps": [
+        { "utterance": "Make it a bit cheaper", "target_dimension": "price", "outcome": "clarificationRequired", "same_results": true, "brief_contains": ["2.4Cr"] },
+        { "utterance": "Under 2.5Cr", "target_dimension": "price", "outcome": "activated", "brief_contains": ["3 BHK", "2.5Cr"] },
+        { "resume": true, "outcome": "resumed", "brief_contains": ["2.5Cr"] }
+      ]
+    },
+    {
+      "id": "JA-004", "group": "journey_api", "query": "3BHK within 1 km of Fixture School 6 under 2.4 Cr",
+      "steps": [
+        { "resume": true, "outcome": "resumed", "same_results": true, "brief_contains": ["1 km", "Fixture School 6", "2.4Cr"] }
+      ]
+    },
     {
       "id": "GR-001",
       "mode": "search_guardrail",

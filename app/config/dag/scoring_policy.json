@@ -25,6 +25,7 @@
     "negative_no_data_penalty_multiplier": 1.2,
     "broad_local_recall_multiplier": 4,
     "broad_local_recall_min_extra": 64,
+    "lexical_recall_candidate_limit": 128,
     "positive_evidence_floor_ratio": 0.6,
     "no_positive_evidence_score_multiplier": 0.4,
     "nearby_area_score_penalty": -0.35,

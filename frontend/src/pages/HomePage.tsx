@@ -1,25 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import type { AreaTrackerResponse, PropertyCard } from "../lib/types.ts";
-import { getAreaTracker, getProperties } from "../lib/api.ts";
+import type { DiscoveryResponse } from "../lib/types.ts";
+import { getDiscovery } from "../lib/api.ts";
 import { getRecentSearches, addRecentSearch, clearRecentSearches } from "../lib/recent-searches.ts";
-import { AreaTrackerSection } from "../components/AreaTrackerSection.tsx";
 import { LandingStoryStage } from "../components/LandingStoryStage.tsx";
 import { BrandMark } from "../components/brand/BrandMark.tsx";
 import { PageTitle } from "../components/PageTitle.tsx";
 import {
   consumeDiscoveryReturn,
+  hrefWithSearchSpan,
   writeDiscoveryResultCount,
+  type SearchSpanReference,
 } from "../lib/navigationContext.ts";
 import { PUBLIC_BRAND_NAME } from "../lib/brand.ts";
 import { publicSiteUrl } from "../lib/runtimeConfig.ts";
-
-const SEARCH_SUGGESTIONS = [
-  { label: "Quiet near schools", query: "Quiet family home near good schools" },
-  { label: "Under ₹2.5Cr", query: "3BHK under 2.5Cr with listing price proof" },
-  { label: "Ready to move", query: "Ready-to-move homes with possession proof" },
-  { label: "Low commute", query: "Low commute-pain home near Whitefield tech parks" },
-];
+import { useSearchJourney } from "../hooks/useSearchJourney.ts";
+import { clearActiveJourney, journeySuggestions } from "../lib/search-journey.ts";
+import { SearchJourneyControls } from "../components/SearchJourneyControls.tsx";
 
 function useStickyComposer() {
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -59,7 +56,7 @@ function LandingLoadingState() {
   );
 }
 
-function HomeClosingFooter() {
+function HomeClosingFooter({ searchSpan }: { searchSpan?: SearchSpanReference }) {
   return (
     <footer className="home-closing">
       <div className="home-closing__inner">
@@ -73,8 +70,8 @@ function HomeClosingFooter() {
           </div>
         </div>
         <nav aria-label="Footer">
-          <a href="#home-search">Search homes</a>
-          <Link to="/workspace">Workspace</Link>
+          <button type="button" onClick={() => document.getElementById("home-search")?.scrollIntoView({ block: "start" })}>Search homes</button>
+          <Link to={hrefWithSearchSpan("/workspace", searchSpan)}>Workspace</Link>
         </nav>
       </div>
     </footer>
@@ -85,12 +82,22 @@ export function HomePage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeSearchQuery = searchParams.get("q") || "";
   const hasActiveSearch = activeSearchQuery.trim().length > 0;
-  const [properties, setProperties] = useState<PropertyCard[]>([]);
-  const [areaTracker, setAreaTracker] = useState<AreaTrackerResponse | null>(null);
+  const searchJourney = useSearchJourney();
+  const journey = searchJourney.response?.journey;
+  const composerKey = JSON.stringify([activeSearchQuery, journey?.active.revision.id]);
+  const [draft, setDraft] = useState({ key: composerKey, query: "" });
+  const [expandedComposer, setExpandedComposer] = useState({ key: "", open: false });
+  const inputRef = useRef<HTMLInputElement>(null);
+  const query = draft.key === composerKey ? draft.query : "";
+  const setQuery = useCallback((value: string) => setDraft(() => ({
+    key: composerKey, query: value,
+  })), [composerKey]);
+  const composerOpen = !journey
+    || (expandedComposer.key === composerKey && expandedComposer.open);
+  const [discovery, setDiscovery] = useState<DiscoveryResponse | null>(null);
   const [loadError, setLoadError] = useState(false);
-  const [propertiesLoading, setPropertiesLoading] = useState(true);
+  const [discoveryLoading, setDiscoveryLoading] = useState(true);
   const [retryKey, setRetryKey] = useState(0);
-  const [query, setQuery] = useState(activeSearchQuery);
   const [recents, setRecents] = useState<string[]>(() => getRecentSearches());
   const [searchFocused, setSearchFocused] = useState(false);
   const shouldSettleSearchRef = useRef(false);
@@ -108,22 +115,16 @@ export function HomePage() {
     const controller = new AbortController();
     let cancelled = false;
 
-    Promise.allSettled([
-      getProperties({ signal: controller.signal }),
-      getAreaTracker({ signal: controller.signal }),
-    ]).then(([propertyResult, trackerResult]) => {
+    getDiscovery({ signal: controller.signal }).then((nextDiscovery) => {
       if (cancelled) return;
-
-      if (propertyResult.status === "fulfilled") {
-        setProperties(propertyResult.value);
-      } else if (!(propertyResult.reason instanceof DOMException && propertyResult.reason.name === "AbortError")) {
+      setDiscovery(nextDiscovery);
+    }).catch((error: unknown) => {
+      if (!cancelled && !(error instanceof DOMException && error.name === "AbortError")) {
         setLoadError(true);
       }
-
-      if (trackerResult.status === "fulfilled") {
-        setAreaTracker(trackerResult.value);
-      }
-      setPropertiesLoading(false);
+    }).finally(() => {
+      if (cancelled) return;
+      setDiscoveryLoading(false);
     });
 
     return () => {
@@ -131,10 +132,6 @@ export function HomePage() {
       controller.abort();
     };
   }, [retryKey]);
-
-  useEffect(() => {
-    setQuery(activeSearchQuery);
-  }, [activeSearchQuery]);
 
   // Airbnb-style: settle at the compact search chrome, don't jump to a "new page".
   useEffect(() => {
@@ -149,25 +146,30 @@ export function HomePage() {
     const nextParams = new URLSearchParams();
     setQuery(q);
     if (q) {
-      sessionStorage.setItem("oe_search_query", q);
       addRecentSearch(q);
       setRecents(getRecentSearches());
       shouldSettleSearchRef.current = options.settle ?? true;
       nextParams.set("q", q);
       setSearchParams(nextParams);
     } else {
-      sessionStorage.removeItem("oe_search_query");
       shouldSettleSearchRef.current = false;
       setSearchParams(nextParams);
     }
-  }, [setSearchParams]);
+  }, [setSearchParams, setQuery]);
 
   const clearSearch = useCallback(() => {
+    clearActiveJourney();
+    setExpandedComposer({ key: "", open: false });
     commitSearch("", { settle: false });
   }, [commitSearch]);
 
+  const openComposer = () => {
+    setExpandedComposer({ key: composerKey, open: true });
+    window.requestAnimationFrame(() => inputRef.current?.focus());
+  };
+
   const restoreDiscoveryPosition = useCallback((resultCount?: number) => {
-    const url = `${window.location.pathname}${window.location.search}`;
+    const url = `${window.location.pathname}${window.location.search}${window.location.hash}`;
     if (resultCount !== undefined) writeDiscoveryResultCount(url, resultCount);
     const scrollY = consumeDiscoveryReturn(url);
     if (scrollY == null) return;
@@ -184,7 +186,13 @@ export function HomePage() {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    commitSearch(query);
+    if (journey) {
+      void searchJourney.refine(query).then((completed) => {
+        if (!completed) return;
+        setQuery("");
+        setExpandedComposer({ key: "", open: false });
+      });
+    } else commitSearch(query);
   };
 
   return (
@@ -225,18 +233,37 @@ export function HomePage() {
               <circle cx="11" cy="11" r="8" />
               <line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
-            <input
-              className="home-composer__input"
-              type="text"
-              placeholder="Quiet 3BHK near schools under 2.5Cr"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onFocus={() => setSearchFocused(true)}
-              onBlur={() => setSearchFocused(false)}
-              aria-label="Describe the life you want"
-              autoComplete="off"
-            />
-            {hasActiveSearch && query.trim() && (
+            {journey && !composerOpen ? (
+              <button
+                type="button"
+                className="home-composer__summary"
+                aria-label={`Change search. Current search: ${journey.active.buyerBrief}`}
+                onClick={openComposer}
+              >
+                <span>{journey.active.buyerBrief}</span>
+                <span aria-hidden="true">Change</span>
+              </button>
+            ) : (
+              <input
+                ref={inputRef}
+                className="home-composer__input"
+                type="text"
+                placeholder={journey ? "Change this search…" : "Quiet 3BHK near schools under 2.5Cr"}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onFocus={() => setSearchFocused(true)}
+                onBlur={() => setSearchFocused(false)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape" && journey) {
+                    setQuery("");
+                    setExpandedComposer({ key: "", open: false });
+                  }
+                }}
+                aria-label={journey ? "Change search" : "Describe the life you want"}
+                autoComplete="off"
+              />
+            )}
+            {hasActiveSearch && (
               <button
                 type="button"
                 className="home-composer__clear"
@@ -248,19 +275,36 @@ export function HomePage() {
                 </svg>
               </button>
             )}
-            <button type="submit" className="home-composer__submit" aria-label="Search">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M5 12h14M13 6l6 6-6 6" />
-              </svg>
-            </button>
+            {composerOpen && (
+              <button type="submit" className="home-composer__submit" aria-label={journey ? "Apply change" : "Search"} disabled={searchJourney.busy || !query.trim()}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M5 12h14M13 6l6 6-6 6" />
+                </svg>
+              </button>
+            )}
           </div>
         </form>
 
-        <div
+        {searchJourney.response && <SearchJourneyControls
+          key={journey?.active.revision.stateToken}
+          response={searchJourney.response} busy={searchJourney.busy} canUndo={searchJourney.canUndo}
+          onUndo={() => void searchJourney.undo()}
+          onRestore={(saved) => void searchJourney.restore(saved)}
+          onRefine={(utterance, target) => void searchJourney.refine(utterance, target)}
+        />}
+        {searchJourney.error && (
+          <div className="home-error-banner" role="alert">
+            <span>{searchJourney.error}</span>
+            <button type="button" onClick={searchJourney.retry}>Retry</button>
+            <button type="button" onClick={clearSearch}>New search</button>
+          </div>
+        )}
+
+        {!hasActiveSearch && <div
           className="home-search-suggestions fade-up fade-up-delay-2"
           aria-label="Suggested searches"
         >
-          {SEARCH_SUGGESTIONS.map((suggestion) => (
+          {journeySuggestions.map((suggestion) => (
             <button
               key={suggestion.label}
               type="button"
@@ -270,9 +314,9 @@ export function HomePage() {
               {suggestion.label}
             </button>
           ))}
-        </div>
+        </div>}
 
-        {loadError && (
+        {loadError && !hasActiveSearch && (
           <div className={`home-error-banner${hasActiveSearch ? "" : " fade-up fade-up-delay-2"}`}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#92400e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
@@ -284,7 +328,7 @@ export function HomePage() {
               type="button"
               onClick={() => {
                 setLoadError(false);
-                setPropertiesLoading(true);
+                setDiscoveryLoading(true);
                 setRetryKey((current) => current + 1);
               }}
               className="home-error-banner__retry"
@@ -320,23 +364,17 @@ export function HomePage() {
         )}
 
         <div className="home-body" aria-live="polite">
-          {properties.length > 0 || hasActiveSearch ? (
+          {discovery || hasActiveSearch ? (
             <>
-              <LandingStoryStage
-                properties={properties}
-                onSearch={commitSearch}
+              {(!searchJourney.error || searchJourney.response) && <LandingStoryStage
+                discovery={discovery}
                 searchQuery={activeSearchQuery}
+                searchResponse={searchJourney.response}
                 onSearchReady={restoreDiscoveryPosition}
-              />
-              <AreaTrackerSection
-                properties={properties}
-                areaTracker={areaTracker}
-                onSearch={commitSearch}
-                maxMarkets={6}
-              />
-              <HomeClosingFooter />
+              />}
+              <HomeClosingFooter searchSpan={searchJourney.response?.navigationContext} />
             </>
-          ) : propertiesLoading ? <LandingLoadingState /> : null}
+          ) : discoveryLoading ? <LandingLoadingState /> : null}
         </div>
       </div>
     </div>

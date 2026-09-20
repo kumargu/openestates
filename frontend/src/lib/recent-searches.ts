@@ -4,7 +4,8 @@ const MAX_ITEMS = 5;
 export function getRecentSearches(): string[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const saved: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(saved) ? saved.filter((value): value is string => typeof value === "string") : [];
   } catch {
     return [];
   }
@@ -15,9 +16,11 @@ export function addRecentSearch(query: string): void {
   if (!q) return;
   const list = getRecentSearches().filter((s) => s !== q);
   list.unshift(q);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(list.slice(0, MAX_ITEMS)));
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(list.slice(0, MAX_ITEMS))); }
+  catch { /* Search does not depend on browser persistence. */ }
 }
 
 export function clearRecentSearches(): void {
-  localStorage.removeItem(STORAGE_KEY);
+  try { localStorage.removeItem(STORAGE_KEY); }
+  catch { /* Storage is optional. */ }
 }

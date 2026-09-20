@@ -10,30 +10,7 @@ import {
   propertyProofMatch,
   propertySceneProofFocus,
 } from "../src/lib/proof-focus.ts";
-import type { ProofFocus, SearchResultItem } from "../src/lib/types.ts";
 
-function hospitalFocus(): ProofFocus {
-  return {
-    surfaceId: "around_this_home",
-    layerId: "hospitals",
-    factKey: "nearby_hospitals",
-    entityId: "place:manipal",
-    matchedLabel: "Manipal Hospital Whitefield",
-    requestedConstraint: "near Manipal Hospital Whitefield",
-    reason: "1.5 km from Manipal Hospital Whitefield",
-  };
-}
-
-function metroFocus(): ProofFocus {
-  return {
-    surfaceId: "around_this_home",
-    layerId: "metro",
-    factKey: "nearby_metro",
-    entityId: "place:whitefield-metro",
-    requestedConstraint: "near metro",
-    reason: "metro access",
-  };
-}
 
 test("formatListingPrice shows a band when min and max differ", () => {
   assert.equal(
@@ -70,40 +47,20 @@ test("listingSatisfiesBudget uses overlap, not the collapsed midpoint", () => {
   assert.equal(listingSatisfiesBudget({ price: 32_250_000 }, 40_000_000, null), false);
 });
 
-test("primaryProofFocus prefers the named place in the query, not array order", () => {
-  const result: Pick<SearchResultItem, "proof_focuses" | "match_reason" | "match_explanation"> = {
-    match_reason: "Near Aster Hospital Whitefield Bangalore, metro access",
-    match_explanation: {
-      reasons: [{
-        preference: "near metro",
-        fact_key: "nearby_metro",
-        display: "metro access",
-        score: 0.9,
-        confidence: 0.8,
-        source_type: "Google",
-        scoring_method: "geo",
-      }],
-      preference_coverage: [],
-      graph_driven_pct: 1,
-      total_facts_consulted: 1,
-    },
-    proof_focuses: [hospitalFocus(), metroFocus()],
+test("primaryProofFocus follows the backend card reason, not client claims or array position", () => {
+  const result = {
+    match_reason: "Near metro",
+    reasons: [
+      { branchId: "branch-1", predicateId: "metro", explanation: "Metro access", proofToken: "signed:metro", showOnCard: false },
+      { branchId: "branch-1", predicateId: "hospital", explanation: "Hospital access", proofToken: "signed:hospital", showOnCard: true },
+    ],
   };
-  assert.equal(
-    primaryProofFocus(result, "3BHK near metro in Whitefield")?.layerId,
-    "metro",
-  );
-  assert.equal(
-    primaryProofFocus(result, "3BHK near Manipal Hospital Whitefield")?.layerId,
-    "hospitals",
-  );
+  assert.equal(primaryProofFocus(result)?.proofToken, "signed:hospital");
 });
 
 test("primaryProofFocus is empty when search had no proof overlay", () => {
-  assert.equal(primaryProofFocus({
-    match_reason: "Matches 3 BHK",
-    proof_focuses: [],
-  }), undefined);
+  assert.equal(primaryProofFocus({ reasons: [] }), undefined);
+  assert.equal(primaryProofFocus({}), undefined);
 });
 
 test("property detail requests the proof focus's declared surface", () => {
@@ -135,4 +92,9 @@ test("section proof handoff keeps the map request on its default surface", () =>
       sourceUrl: "https://rera.example/record",
     },
   );
+});
+
+
+test("compact exact cards retain proof navigation when facts need no duplicate label", () => {
+  assert.equal(primaryProofFocus({ reasons: [{ branchId: "branch-1", predicateId: "budget", explanation: "Under budget", showOnCard: false, proofToken: "signed:budget" }] })?.proofToken, "signed:budget");
 });

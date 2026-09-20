@@ -14,7 +14,6 @@ pub mod local_env;
 pub mod models;
 pub(crate) mod parquet_data;
 pub mod plans;
-pub mod proof_focus;
 pub mod recommendations;
 pub mod related_societies;
 pub mod routes;

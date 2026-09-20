@@ -1,6 +1,64 @@
 {
-  "_comment": "LANDING PAGE — product promise, quotes, curated shelves. Each shelf has a search_query run against /api/search.",
+  "_comment": "LANDING PAGE — product promise and config-ranked DAG-backed shelves. Git owns shelf policy; the serving bundle owns property facts.",
+  "dedupe_across_shelves": true,
+  "collection_planner": {
+    "max_collections": 3,
+    "card_limit": 12,
+    "minimum_cards": 2,
+    "fallback_count": 3,
+    "budget_expansion_factor": 1.2,
+    "nearby_max_hops": 2,
+    "nearby_max_distance_km": 8.0,
+    "currency": "INR",
+    "price_unit": 10000000,
+    "price_suffix": "Cr",
+    "strategies": [
+      {
+        "id": "wider_budget",
+        "strategy": "same_geography_wider_budget",
+        "title_template": "More in {geography} — {note}",
+        "generic_title_template": "More homes — {note}",
+        "note": "Wider budget"
+      },
+      {
+        "id": "nearby_areas",
+        "strategy": "adjacent_areas",
+        "title_template": "Around {geography} — {note}",
+        "generic_title_template": "Nearby homes — {note}",
+        "note": "Nearby areas"
+      },
+      {
+        "id": "other_areas",
+        "strategy": "other_areas",
+        "title_template": "More to explore — {note}",
+        "generic_title_template": "More to explore — {note}",
+        "note": "Other areas"
+      }
+    ]
+  },
   "product_promise": "Tell us the life you want. We'll show homes with receipts.",
+  "card_signals": [
+    {
+      "id": "nearby_metro_count",
+      "fact_key": "nearby_metro_stations",
+      "projection": "count"
+    },
+    {
+      "id": "nearby_school_count",
+      "fact_key": "nearby_schools",
+      "projection": "count"
+    },
+    {
+      "id": "project_land_acres",
+      "fact_key": "project_land_area_acres",
+      "projection": "latest_numeric"
+    },
+    {
+      "id": "open_area_pct",
+      "fact_key": "project_open_area_pct",
+      "projection": "latest_numeric"
+    }
+  ],
   "quotes": [
     {
       "text": "Fewer homes. Better reasons.",
@@ -23,46 +81,136 @@
       "tone": "proof"
     }
   ],
+  "product_story": {
+    "title": "Why 80feet",
+    "items": [
+      {
+        "id": "proof",
+        "title": "See the receipts",
+        "description": "Open the facts behind every recommendation.",
+        "action_label": "Open a home",
+        "href": "/properties/{property_id}/rera",
+        "image_src": "/landing/tiles/04-rera-evidence.webp",
+        "image_src_narrow": "/landing/tiles/04-rera-evidence-960.webp",
+        "image_alt": "A property record showing registration, approvals and progress."
+      },
+      {
+        "id": "compare",
+        "title": "Compare before deciding",
+        "description": "Keep price, proof and tradeoffs side by side.",
+        "action_label": "Open workspace",
+        "href": "/workspace/compare",
+        "image_src": "/landing/tiles/06-tradeoffs.webp",
+        "image_src_narrow": "/landing/tiles/06-tradeoffs-960.webp",
+        "image_alt": "Two homes compared across commute, water, reviews and price."
+      }
+    ]
+  },
   "shelves": [
     {
-      "id": "verified_value",
-      "title": "Value with receipts",
-      "quote": "Good price, proof attached.",
-      "description": "Lower per-sqft options with visible source signals.",
-      "search_query": "good value with proof",
-      "receipt_copy": "Price + RERA + Google"
+      "id": "area_spotlight",
+      "title": "Explore an area",
+      "quote": "Find your part of Bengaluru.",
+      "description": "A deeper look at one well-covered area.",
+      "search_query": "homes in Bengaluru",
+      "receipt_copy": "Area inventory",
+      "card_limit": 8,
+      "minimum_cards": 6,
+      "require_image": true,
+      "show_card_area": false,
+      "group_by": {
+        "field": "area",
+        "limit": 1,
+        "title_template": "Explore {value}",
+        "description_template": "{count} societies",
+        "search_query_template": "homes in {value}"
+      },
+      "filters": [
+        { "field": "area", "operator": "exists" }
+      ],
+      "sort": [
+        { "field": "google_rating", "direction": "desc" },
+        { "field": "google_review_count", "direction": "desc" }
+      ]
     },
     {
-      "id": "low_commute_pain",
-      "title": "Low commute pain",
-      "quote": "Shorter commute, cleaner proof.",
-      "description": "Homes with closer metro access or stronger traffic signals.",
-      "search_query": "near metro low traffic",
-      "receipt_copy": "Metro + traffic signals"
+      "id": "metro_access",
+      "title": "Metro within reach",
+      "quote": "Move through the city with less friction.",
+      "description": "Homes with nearby metro connections.",
+      "search_query": "homes near metro",
+      "receipt_copy": "Nearby metro places",
+      "card_limit": 8,
+      "minimum_cards": 6,
+      "require_image": true,
+      "show_card_area": true,
+      "filters": [
+        { "field": "signals.nearby_metro_count", "operator": "gte", "value": 1 }
+      ],
+      "sort": [
+        { "field": "signals.nearby_metro_count", "direction": "desc" },
+        { "field": "google_rating", "direction": "desc" }
+      ]
     },
     {
-      "id": "family_ready",
-      "title": "Family-ready societies",
-      "quote": "More life-fit, less guesswork.",
-      "description": "3BHK+ homes with society, risk, and review signals.",
-      "search_query": "family friendly 3BHK",
-      "receipt_copy": "Society + risk + reviews"
+      "id": "nearby_schools",
+      "title": "Schools nearby",
+      "quote": "More of the week, closer to home.",
+      "description": "Homes with schools nearby.",
+      "search_query": "homes near schools",
+      "receipt_copy": "Nearby schools",
+      "card_limit": 8,
+      "minimum_cards": 6,
+      "require_image": true,
+      "show_card_area": true,
+      "filters": [
+        { "field": "signals.nearby_school_count", "operator": "gte", "value": 1 }
+      ],
+      "sort": [
+        { "field": "signals.nearby_school_count", "direction": "desc" },
+        { "field": "google_rating", "direction": "desc" },
+        { "field": "google_review_count", "direction": "desc" }
+      ]
     },
     {
-      "id": "premium_explainable",
-      "title": "Premium but explainable",
-      "quote": "If it's expensive, it should explain itself.",
-      "description": "Higher-ticket homes with stronger proof or brand signals.",
-      "search_query": "premium explainable homes",
-      "receipt_copy": "Builder + trust facts"
+      "id": "room_to_breathe",
+      "title": "Room to breathe",
+      "quote": "Look beyond the apartment walls.",
+      "description": "60%+ registered open area, with project scale in view.",
+      "search_query": "homes with large open space",
+      "receipt_copy": "Registered open area and project scale",
+      "card_limit": 8,
+      "minimum_cards": 6,
+      "require_image": true,
+      "show_card_area": true,
+      "filters": [
+        { "field": "signals.open_area_pct", "operator": "gte", "value": 60 },
+        { "field": "signals.project_land_acres", "operator": "exists" }
+      ],
+      "sort": [
+        { "field": "signals.project_land_acres", "direction": "desc" },
+        { "field": "signals.open_area_pct", "direction": "desc" }
+      ]
     },
     {
-      "id": "area_tracker_picks",
-      "title": "Area Tracker picks",
-      "quote": "Area signals first.",
-      "description": "Homes from active micro-markets with enough local context.",
-      "search_query": "area tracker picks",
-      "receipt_copy": "Area crawl + local context"
+      "id": "resident_favourites",
+      "title": "Places people rate highly",
+      "quote": "A useful signal, never the whole answer.",
+      "description": "Google 4.2+ with at least 100 reviews.",
+      "search_query": "best reviewed societies",
+      "receipt_copy": "Google rating and review count",
+      "card_limit": 8,
+      "minimum_cards": 4,
+      "require_image": true,
+      "show_card_area": true,
+      "filters": [
+        { "field": "google_rating", "operator": "gte", "value": 4.2 },
+        { "field": "google_review_count", "operator": "gte", "value": 100 }
+      ],
+      "sort": [
+        { "field": "google_rating", "direction": "desc" },
+        { "field": "google_review_count", "direction": "desc" }
+      ]
     }
   ]
 }

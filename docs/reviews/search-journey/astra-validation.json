@@ -1,0 +1,5346 @@
+{
+  "bundle": {
+    "service": "openestates-api",
+    "status": "ok",
+    "process_started_at": "2026-09-20T19:13:31.369353+00:00",
+    "scoring_policy_version": 3,
+    "recommendation_engine_version": "recommendations-v2",
+    "serving_bundle_version": "catalog-71-299c3135-23aa-4945-8f26-2cf2fc775eaa"
+  },
+  "backend_build": "debug (unoptimized + debuginfo)",
+  "frontend_build": "Vite production",
+  "timeout_ms": 3000,
+  "queries": [
+    {
+      "query": "homes in Whitefield",
+      "run": "cold",
+      "seconds": 0.862,
+      "status": 200,
+      "bytes": 37769,
+      "bundle": "catalog-71-299c3135-23aa-4945-8f26-2cf2fc775eaa",
+      "error": null,
+      "ids": [
+        "discovered-sumadhura-capitol-residences-3bhk",
+        "discovered-sumadhura-nandanam-2bhk",
+        "discovered-sumadhura-capitol-residences-4bhk",
+        "discovered-prestige-waterford-1bhk",
+        "discovered-godrej-air-2bhk",
+        "discovered-prestige-waterford-3bhk",
+        "discovered-godrej-air-3bhk",
+        "discovered-prestige-waterford-4bhk",
+        "discovered-ruchira-lilium-3bhk",
+        "discovered-spectra-raaya-2bhk",
+        "discovered-sumadhura-soham-2bhk",
+        "discovered-spectra-raaya-3bhk",
+        "discovered-sumadhura-soham-3bhk",
+        "discovered-gopalan-aqua-2bhk",
+        "discovered-umiya-woods-2bhk",
+        "discovered-gopalan-aqua-3bhk",
+        "discovered-vaswani-exquisite-4bhk",
+        "discovered-disha-courtyard-1bhk",
+        "discovered-amrutha-platinum-towers-2bhk",
+        "discovered-brigade-lakefront-crimson-2bhk",
+        "discovered-amrutha-platinum-towers-3bhk",
+        "discovered-brigade-lakefront-crimson-3bhk",
+        "discovered-prestige-lakeside-habitat-2bhk",
+        "discovered-brigade-lakefront-crimson-4bhk",
+        "discovered-prestige-lakeside-habitat-3bhk",
+        "discovered-narya-5-elements-2bhk",
+        "discovered-prestige-lakeside-habitat-5bhk",
+        "discovered-the-residences-at-brigade-tech-gardens-3bhk",
+        "discovered-vaswani-starlight-3bhk",
+        "discovered-the-residences-at-brigade-tech-gardens-4bhk",
+        "discovered-vaswani-starlight-4bhk",
+        "discovered-mahaveer-promenade-2bhk"
+      ],
+      "intent": {
+        "root": {
+          "op": "leaf",
+          "value": "branch-1"
+        },
+        "branches": [
+          {
+            "id": "branch-1",
+            "constraints": {
+              "kind": "predicate",
+              "predicate": {
+                "id": "predicate:root:branch-1:",
+                "dimension": "area",
+                "label": "Area",
+                "polarity": "positive",
+                "operator": "inside",
+                "value": "Whitefield",
+                "resolvedLabel": "Whitefield",
+                "required": true
+              }
+            },
+            "preferences": []
+          }
+        ]
+      },
+      "proof_keys": [
+        [
+          "discovered-sumadhura-capitol-residences-3bhk",
+          []
+        ],
+        [
+          "discovered-sumadhura-nandanam-2bhk",
+          []
+        ],
+        [
+          "discovered-sumadhura-capitol-residences-4bhk",
+          []
+        ],
+        [
+          "discovered-prestige-waterford-1bhk",
+          []
+        ],
+        [
+          "discovered-godrej-air-2bhk",
+          []
+        ],
+        [
+          "discovered-prestige-waterford-3bhk",
+          []
+        ],
+        [
+          "discovered-godrej-air-3bhk",
+          []
+        ],
+        [
+          "discovered-prestige-waterford-4bhk",
+          []
+        ],
+        [
+          "discovered-ruchira-lilium-3bhk",
+          []
+        ],
+        [
+          "discovered-spectra-raaya-2bhk",
+          []
+        ],
+        [
+          "discovered-sumadhura-soham-2bhk",
+          []
+        ],
+        [
+          "discovered-spectra-raaya-3bhk",
+          []
+        ],
+        [
+          "discovered-sumadhura-soham-3bhk",
+          []
+        ],
+        [
+          "discovered-gopalan-aqua-2bhk",
+          []
+        ],
+        [
+          "discovered-umiya-woods-2bhk",
+          []
+        ],
+        [
+          "discovered-gopalan-aqua-3bhk",
+          []
+        ],
+        [
+          "discovered-vaswani-exquisite-4bhk",
+          []
+        ],
+        [
+          "discovered-disha-courtyard-1bhk",
+          []
+        ],
+        [
+          "discovered-amrutha-platinum-towers-2bhk",
+          []
+        ],
+        [
+          "discovered-brigade-lakefront-crimson-2bhk",
+          []
+        ],
+        [
+          "discovered-amrutha-platinum-towers-3bhk",
+          []
+        ],
+        [
+          "discovered-brigade-lakefront-crimson-3bhk",
+          []
+        ],
+        [
+          "discovered-prestige-lakeside-habitat-2bhk",
+          []
+        ],
+        [
+          "discovered-brigade-lakefront-crimson-4bhk",
+          []
+        ],
+        [
+          "discovered-prestige-lakeside-habitat-3bhk",
+          []
+        ],
+        [
+          "discovered-narya-5-elements-2bhk",
+          []
+        ],
+        [
+          "discovered-prestige-lakeside-habitat-5bhk",
+          []
+        ],
+        [
+          "discovered-the-residences-at-brigade-tech-gardens-3bhk",
+          []
+        ],
+        [
+          "discovered-vaswani-starlight-3bhk",
+          []
+        ],
+        [
+          "discovered-the-residences-at-brigade-tech-gardens-4bhk",
+          []
+        ],
+        [
+          "discovered-vaswani-starlight-4bhk",
+          []
+        ],
+        [
+          "discovered-mahaveer-promenade-2bhk",
+          []
+        ]
+      ],
+      "collections_bytes": 14864,
+      "collections": [
+        [
+          "other_areas",
+          [
+            "discovered-mantri-tranquil-2bhk",
+            "discovered-purva-westend-2bhk",
+            "discovered-snn-clermont-3bhk",
+            "discovered-century-central-2bhk",
+            "discovered-sobha-indraprastha-3bhk",
+            "discovered-renaissance-reserva-2bhk",
+            "discovered-prestige-fairfield-3bhk",
+            "discovered-salarpuria-sattva-misty-charm-1bhk",
+            "discovered-sobha-forest-edge-3bhk",
+            "discovered-prestige-elysian-2bhk",
+            "discovered-century-ethos-1bhk",
+            "discovered-snn-raj-spiritua-3bhk"
+          ],
+          [
+            1,
+            2,
+            3
+          ]
+        ],
+        [
+          "fallback:metro_access",
+          [
+            "discovered-prestige-botanique-2bhk",
+            "discovered-birla-tisya-2bhk",
+            "discovered-tower-7-one-bangalore-west-3bhk",
+            "discovered-sobha-clovelly-3bhk",
+            "discovered-renaissance-bellevue-5bhk",
+            "discovered-shriram-southern-crest-2bhk",
+            "discovered-snn-raj-grandeur-2bhk",
+            "discovered-the-presidential-tower-3bhk"
+          ],
+          [
+            2,
+            3,
+            5
+          ]
+        ],
+        [
+          "fallback:nearby_schools",
+          [
+            "discovered-godrej-splendour-1bhk",
+            "discovered-brigade-7-gardens-2bhk",
+            "discovered-prestige-southern-star-1bhk",
+            "discovered-godrej-united-2bhk",
+            "discovered-mirabelle-3bhk",
+            "discovered-brigade-laguna-2bhk",
+            "discovered-godrej-lakeside-orchard-2bhk",
+            "discovered-prestige-song-of-the-south-2bhk"
+          ],
+          [
+            1,
+            2,
+            3
+          ]
+        ]
+      ]
+    },
+    {
+      "query": "homes in Whitefield",
+      "run": "warm",
+      "seconds": 0.014,
+      "status": 200,
+      "bytes": 37769,
+      "bundle": "catalog-71-299c3135-23aa-4945-8f26-2cf2fc775eaa",
+      "error": null,
+      "ids": [
+        "discovered-sumadhura-capitol-residences-3bhk",
+        "discovered-sumadhura-nandanam-2bhk",
+        "discovered-sumadhura-capitol-residences-4bhk",
+        "discovered-prestige-waterford-1bhk",
+        "discovered-godrej-air-2bhk",
+        "discovered-prestige-waterford-3bhk",
+        "discovered-godrej-air-3bhk",
+        "discovered-prestige-waterford-4bhk",
+        "discovered-ruchira-lilium-3bhk",
+        "discovered-spectra-raaya-2bhk",
+        "discovered-sumadhura-soham-2bhk",
+        "discovered-spectra-raaya-3bhk",
+        "discovered-sumadhura-soham-3bhk",
+        "discovered-gopalan-aqua-2bhk",
+        "discovered-umiya-woods-2bhk",
+        "discovered-gopalan-aqua-3bhk",
+        "discovered-vaswani-exquisite-4bhk",
+        "discovered-disha-courtyard-1bhk",
+        "discovered-amrutha-platinum-towers-2bhk",
+        "discovered-brigade-lakefront-crimson-2bhk",
+        "discovered-amrutha-platinum-towers-3bhk",
+        "discovered-brigade-lakefront-crimson-3bhk",
+        "discovered-prestige-lakeside-habitat-2bhk",
+        "discovered-brigade-lakefront-crimson-4bhk",
+        "discovered-prestige-lakeside-habitat-3bhk",
+        "discovered-narya-5-elements-2bhk",
+        "discovered-prestige-lakeside-habitat-5bhk",
+        "discovered-the-residences-at-brigade-tech-gardens-3bhk",
+        "discovered-vaswani-starlight-3bhk",
+        "discovered-the-residences-at-brigade-tech-gardens-4bhk",
+        "discovered-vaswani-starlight-4bhk",
+        "discovered-mahaveer-promenade-2bhk"
+      ],
+      "intent": {
+        "root": {
+          "op": "leaf",
+          "value": "branch-1"
+        },
+        "branches": [
+          {
+            "id": "branch-1",
+            "constraints": {
+              "kind": "predicate",
+              "predicate": {
+                "id": "predicate:root:branch-1:",
+                "dimension": "area",
+                "label": "Area",
+                "polarity": "positive",
+                "operator": "inside",
+                "value": "Whitefield",
+                "resolvedLabel": "Whitefield",
+                "required": true
+              }
+            },
+            "preferences": []
+          }
+        ]
+      },
+      "proof_keys": [
+        [
+          "discovered-sumadhura-capitol-residences-3bhk",
+          []
+        ],
+        [
+          "discovered-sumadhura-nandanam-2bhk",
+          []
+        ],
+        [
+          "discovered-sumadhura-capitol-residences-4bhk",
+          []
+        ],
+        [
+          "discovered-prestige-waterford-1bhk",
+          []
+        ],
+        [
+          "discovered-godrej-air-2bhk",
+          []
+        ],
+        [
+          "discovered-prestige-waterford-3bhk",
+          []
+        ],
+        [
+          "discovered-godrej-air-3bhk",
+          []
+        ],
+        [
+          "discovered-prestige-waterford-4bhk",
+          []
+        ],
+        [
+          "discovered-ruchira-lilium-3bhk",
+          []
+        ],
+        [
+          "discovered-spectra-raaya-2bhk",
+          []
+        ],
+        [
+          "discovered-sumadhura-soham-2bhk",
+          []
+        ],
+        [
+          "discovered-spectra-raaya-3bhk",
+          []
+        ],
+        [
+          "discovered-sumadhura-soham-3bhk",
+          []
+        ],
+        [
+          "discovered-gopalan-aqua-2bhk",
+          []
+        ],
+        [
+          "discovered-umiya-woods-2bhk",
+          []
+        ],
+        [
+          "discovered-gopalan-aqua-3bhk",
+          []
+        ],
+        [
+          "discovered-vaswani-exquisite-4bhk",
+          []
+        ],
+        [
+          "discovered-disha-courtyard-1bhk",
+          []
+        ],
+        [
+          "discovered-amrutha-platinum-towers-2bhk",
+          []
+        ],
+        [
+          "discovered-brigade-lakefront-crimson-2bhk",
+          []
+        ],
+        [
+          "discovered-amrutha-platinum-towers-3bhk",
+          []
+        ],
+        [
+          "discovered-brigade-lakefront-crimson-3bhk",
+          []
+        ],
+        [
+          "discovered-prestige-lakeside-habitat-2bhk",
+          []
+        ],
+        [
+          "discovered-brigade-lakefront-crimson-4bhk",
+          []
+        ],
+        [
+          "discovered-prestige-lakeside-habitat-3bhk",
+          []
+        ],
+        [
+          "discovered-narya-5-elements-2bhk",
+          []
+        ],
+        [
+          "discovered-prestige-lakeside-habitat-5bhk",
+          []
+        ],
+        [
+          "discovered-the-residences-at-brigade-tech-gardens-3bhk",
+          []
+        ],
+        [
+          "discovered-vaswani-starlight-3bhk",
+          []
+        ],
+        [
+          "discovered-the-residences-at-brigade-tech-gardens-4bhk",
+          []
+        ],
+        [
+          "discovered-vaswani-starlight-4bhk",
+          []
+        ],
+        [
+          "discovered-mahaveer-promenade-2bhk",
+          []
+        ]
+      ],
+      "collections_bytes": 14864,
+      "collections": [
+        [
+          "other_areas",
+          [
+            "discovered-mantri-tranquil-2bhk",
+            "discovered-purva-westend-2bhk",
+            "discovered-snn-clermont-3bhk",
+            "discovered-century-central-2bhk",
+            "discovered-sobha-indraprastha-3bhk",
+            "discovered-renaissance-reserva-2bhk",
+            "discovered-prestige-fairfield-3bhk",
+            "discovered-salarpuria-sattva-misty-charm-1bhk",
+            "discovered-sobha-forest-edge-3bhk",
+            "discovered-prestige-elysian-2bhk",
+            "discovered-century-ethos-1bhk",
+            "discovered-snn-raj-spiritua-3bhk"
+          ],
+          [
+            1,
+            2,
+            3
+          ]
+        ],
+        [
+          "fallback:metro_access",
+          [
+            "discovered-prestige-botanique-2bhk",
+            "discovered-birla-tisya-2bhk",
+            "discovered-tower-7-one-bangalore-west-3bhk",
+            "discovered-sobha-clovelly-3bhk",
+            "discovered-renaissance-bellevue-5bhk",
+            "discovered-shriram-southern-crest-2bhk",
+            "discovered-snn-raj-grandeur-2bhk",
+            "discovered-the-presidential-tower-3bhk"
+          ],
+          [
+            2,
+            3,
+            5
+          ]
+        ],
+        [
+          "fallback:nearby_schools",
+          [
+            "discovered-godrej-splendour-1bhk",
+            "discovered-brigade-7-gardens-2bhk",
+            "discovered-prestige-southern-star-1bhk",
+            "discovered-godrej-united-2bhk",
+            "discovered-mirabelle-3bhk",
+            "discovered-brigade-laguna-2bhk",
+            "discovered-godrej-lakeside-orchard-2bhk",
+            "discovered-prestige-song-of-the-south-2bhk"
+          ],
+          [
+            1,
+            2,
+            3
+          ]
+        ]
+      ]
+    },
+    {
+      "query": "3BHK in Whitefield",
+      "run": "cold",
+      "seconds": 0.855,
+      "status": 200,
+      "bytes": 75591,
+      "bundle": "catalog-71-299c3135-23aa-4945-8f26-2cf2fc775eaa",
+      "error": null,
+      "ids": [
+        "discovered-sumadhura-capitol-residences-3bhk",
+        "discovered-prestige-waterford-3bhk",
+        "discovered-godrej-air-3bhk",
+        "discovered-ruchira-lilium-3bhk",
+        "discovered-spectra-raaya-3bhk",
+        "discovered-sumadhura-soham-3bhk",
+        "discovered-gopalan-aqua-3bhk",
+        "discovered-amrutha-platinum-towers-3bhk",
+        "discovered-brigade-lakefront-crimson-3bhk",
+        "discovered-prestige-lakeside-habitat-3bhk",
+        "discovered-the-residences-at-brigade-tech-gardens-3bhk",
+        "discovered-vaswani-starlight-3bhk",
+        "discovered-mahaveer-promenade-3bhk",
+        "discovered-prestige-boulevard-3bhk",
+        "discovered-prestige-lavender-fields-3bhk",
+        "discovered-desai-grandeur-3bhk",
+        "discovered-godrej-splendour-3bhk",
+        "discovered-habitat-eden-heights-3bhk",
+        "discovered-pavani-divine-3bhk",
+        "discovered-brigade-woods-3bhk",
+        "discovered-godrej-united-3bhk",
+        "discovered-mahaveer-tranquil-3bhk",
+        "discovered-the-marquis-3bhk",
+        "discovered-prestige-green-gables-3bhk"
+      ],
+      "intent": {
+        "root": {
+          "op": "leaf",
+          "value": "branch-1"
+        },
+        "branches": [
+          {
+            "id": "branch-1",
+            "constraints": {
+              "kind": "all",
+              "clauses": [
+                {
+                  "kind": "predicate",
+                  "predicate": {
+                    "id": "predicate:root:branch-1:0",
+                    "dimension": "bhk",
+                    "label": "BHK",
+                    "polarity": "positive",
+                    "operator": "equals",
+                    "value": 3,
+                    "required": true
+                  }
+                },
+                {
+                  "kind": "predicate",
+                  "predicate": {
+                    "id": "predicate:root:branch-1:1",
+                    "dimension": "area",
+                    "label": "Area",
+                    "polarity": "positive",
+                    "operator": "inside",
+                    "value": "Whitefield",
+                    "resolvedLabel": "Whitefield",
+                    "required": true
+                  }
+                }
+              ]
+            },
+            "preferences": []
+          }
+        ]
+      },
+      "proof_keys": [
+        [
+          "discovered-sumadhura-capitol-residences-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-waterford-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-godrej-air-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-ruchira-lilium-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-spectra-raaya-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-sumadhura-soham-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-gopalan-aqua-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-amrutha-platinum-towers-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-brigade-lakefront-crimson-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-lakeside-habitat-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-the-residences-at-brigade-tech-gardens-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-vaswani-starlight-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-mahaveer-promenade-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-boulevard-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-lavender-fields-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-desai-grandeur-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-godrej-splendour-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-habitat-eden-heights-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-pavani-divine-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-brigade-woods-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-godrej-united-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-mahaveer-tranquil-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-the-marquis-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-green-gables-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ]
+      ],
+      "collections_bytes": 14989,
+      "collections": [
+        [
+          "other_areas",
+          [
+            "discovered-mantri-tranquil-3bhk",
+            "discovered-purva-westend-3bhk",
+            "discovered-snn-clermont-3bhk",
+            "discovered-century-central-3bhk",
+            "discovered-sobha-indraprastha-3bhk",
+            "discovered-renaissance-reserva-3bhk",
+            "discovered-prestige-fairfield-3bhk",
+            "discovered-salarpuria-sattva-misty-charm-3bhk",
+            "discovered-sobha-forest-edge-3bhk",
+            "discovered-prestige-elysian-3bhk",
+            "discovered-century-ethos-3bhk",
+            "discovered-snn-raj-spiritua-3bhk"
+          ],
+          [
+            3
+          ]
+        ],
+        [
+          "fallback:metro_access",
+          [
+            "discovered-prestige-botanique-3bhk",
+            "discovered-birla-tisya-3bhk",
+            "discovered-tower-7-one-bangalore-west-3bhk",
+            "discovered-sobha-clovelly-3bhk",
+            "discovered-shriram-southern-crest-3bhk",
+            "discovered-snn-raj-grandeur-3bhk",
+            "discovered-the-presidential-tower-3bhk",
+            "discovered-brigade-7-gardens-3bhk"
+          ],
+          [
+            3
+          ]
+        ],
+        [
+          "fallback:nearby_schools",
+          [
+            "discovered-prestige-southern-star-3bhk",
+            "discovered-mirabelle-3bhk",
+            "discovered-brigade-laguna-3bhk",
+            "discovered-godrej-lakeside-orchard-3bhk",
+            "discovered-snn-raj-serenity-3bhk",
+            "discovered-snn-raj-greenbay-3bhk",
+            "discovered-prestige-falcon-city-3bhk",
+            "discovered-prestige-park-square-3bhk"
+          ],
+          [
+            3
+          ]
+        ]
+      ]
+    },
+    {
+      "query": "3BHK in Whitefield",
+      "run": "warm",
+      "seconds": 0.029,
+      "status": 200,
+      "bytes": 75591,
+      "bundle": "catalog-71-299c3135-23aa-4945-8f26-2cf2fc775eaa",
+      "error": null,
+      "ids": [
+        "discovered-sumadhura-capitol-residences-3bhk",
+        "discovered-prestige-waterford-3bhk",
+        "discovered-godrej-air-3bhk",
+        "discovered-ruchira-lilium-3bhk",
+        "discovered-spectra-raaya-3bhk",
+        "discovered-sumadhura-soham-3bhk",
+        "discovered-gopalan-aqua-3bhk",
+        "discovered-amrutha-platinum-towers-3bhk",
+        "discovered-brigade-lakefront-crimson-3bhk",
+        "discovered-prestige-lakeside-habitat-3bhk",
+        "discovered-the-residences-at-brigade-tech-gardens-3bhk",
+        "discovered-vaswani-starlight-3bhk",
+        "discovered-mahaveer-promenade-3bhk",
+        "discovered-prestige-boulevard-3bhk",
+        "discovered-prestige-lavender-fields-3bhk",
+        "discovered-desai-grandeur-3bhk",
+        "discovered-godrej-splendour-3bhk",
+        "discovered-habitat-eden-heights-3bhk",
+        "discovered-pavani-divine-3bhk",
+        "discovered-brigade-woods-3bhk",
+        "discovered-godrej-united-3bhk",
+        "discovered-mahaveer-tranquil-3bhk",
+        "discovered-the-marquis-3bhk",
+        "discovered-prestige-green-gables-3bhk"
+      ],
+      "intent": {
+        "root": {
+          "op": "leaf",
+          "value": "branch-1"
+        },
+        "branches": [
+          {
+            "id": "branch-1",
+            "constraints": {
+              "kind": "all",
+              "clauses": [
+                {
+                  "kind": "predicate",
+                  "predicate": {
+                    "id": "predicate:root:branch-1:0",
+                    "dimension": "bhk",
+                    "label": "BHK",
+                    "polarity": "positive",
+                    "operator": "equals",
+                    "value": 3,
+                    "required": true
+                  }
+                },
+                {
+                  "kind": "predicate",
+                  "predicate": {
+                    "id": "predicate:root:branch-1:1",
+                    "dimension": "area",
+                    "label": "Area",
+                    "polarity": "positive",
+                    "operator": "inside",
+                    "value": "Whitefield",
+                    "resolvedLabel": "Whitefield",
+                    "required": true
+                  }
+                }
+              ]
+            },
+            "preferences": []
+          }
+        ]
+      },
+      "proof_keys": [
+        [
+          "discovered-sumadhura-capitol-residences-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-waterford-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-godrej-air-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-ruchira-lilium-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-spectra-raaya-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-sumadhura-soham-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-gopalan-aqua-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-amrutha-platinum-towers-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-brigade-lakefront-crimson-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-lakeside-habitat-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-the-residences-at-brigade-tech-gardens-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-vaswani-starlight-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-mahaveer-promenade-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-boulevard-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-lavender-fields-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-desai-grandeur-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-godrej-splendour-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-habitat-eden-heights-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-pavani-divine-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-brigade-woods-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-godrej-united-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-mahaveer-tranquil-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-the-marquis-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-green-gables-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ]
+      ],
+      "collections_bytes": 14989,
+      "collections": [
+        [
+          "other_areas",
+          [
+            "discovered-mantri-tranquil-3bhk",
+            "discovered-purva-westend-3bhk",
+            "discovered-snn-clermont-3bhk",
+            "discovered-century-central-3bhk",
+            "discovered-sobha-indraprastha-3bhk",
+            "discovered-renaissance-reserva-3bhk",
+            "discovered-prestige-fairfield-3bhk",
+            "discovered-salarpuria-sattva-misty-charm-3bhk",
+            "discovered-sobha-forest-edge-3bhk",
+            "discovered-prestige-elysian-3bhk",
+            "discovered-century-ethos-3bhk",
+            "discovered-snn-raj-spiritua-3bhk"
+          ],
+          [
+            3
+          ]
+        ],
+        [
+          "fallback:metro_access",
+          [
+            "discovered-prestige-botanique-3bhk",
+            "discovered-birla-tisya-3bhk",
+            "discovered-tower-7-one-bangalore-west-3bhk",
+            "discovered-sobha-clovelly-3bhk",
+            "discovered-shriram-southern-crest-3bhk",
+            "discovered-snn-raj-grandeur-3bhk",
+            "discovered-the-presidential-tower-3bhk",
+            "discovered-brigade-7-gardens-3bhk"
+          ],
+          [
+            3
+          ]
+        ],
+        [
+          "fallback:nearby_schools",
+          [
+            "discovered-prestige-southern-star-3bhk",
+            "discovered-mirabelle-3bhk",
+            "discovered-brigade-laguna-3bhk",
+            "discovered-godrej-lakeside-orchard-3bhk",
+            "discovered-snn-raj-serenity-3bhk",
+            "discovered-snn-raj-greenbay-3bhk",
+            "discovered-prestige-falcon-city-3bhk",
+            "discovered-prestige-park-square-3bhk"
+          ],
+          [
+            3
+          ]
+        ]
+      ]
+    },
+    {
+      "query": "3BHK",
+      "run": "cold",
+      "seconds": 0.107,
+      "status": 200,
+      "bytes": 82916,
+      "bundle": "catalog-71-299c3135-23aa-4945-8f26-2cf2fc775eaa",
+      "error": null,
+      "ids": [
+        "discovered-snn-raj-greenbay-3bhk",
+        "discovered-mantri-tranquil-3bhk",
+        "discovered-purva-westend-3bhk",
+        "discovered-sumadhura-capitol-residences-3bhk",
+        "discovered-snn-clermont-3bhk",
+        "discovered-sumadhura-eden-garden-3bhk",
+        "discovered-prestige-waterford-3bhk",
+        "discovered-century-central-3bhk",
+        "discovered-sobha-indraprastha-3bhk",
+        "discovered-renaissance-reserva-3bhk",
+        "discovered-godrej-air-3bhk",
+        "discovered-prestige-fairfield-3bhk",
+        "discovered-salarpuria-sattva-misty-charm-3bhk",
+        "discovered-ruchira-lilium-3bhk",
+        "discovered-sobha-forest-edge-3bhk",
+        "discovered-spectra-raaya-3bhk",
+        "discovered-sumadhura-soham-3bhk",
+        "discovered-prestige-elysian-3bhk",
+        "discovered-gopalan-aqua-3bhk",
+        "discovered-century-ethos-3bhk",
+        "discovered-snn-raj-spiritua-3bhk",
+        "discovered-snn-raj-grandeur-3bhk",
+        "discovered-birla-tisya-3bhk",
+        "discovered-amrutha-platinum-towers-3bhk",
+        "discovered-brigade-lakefront-crimson-3bhk",
+        "discovered-prestige-lakeside-habitat-3bhk",
+        "discovered-the-residences-at-brigade-tech-gardens-3bhk",
+        "discovered-vaswani-starlight-3bhk",
+        "discovered-tower-7-one-bangalore-west-3bhk",
+        "discovered-the-presidential-tower-3bhk",
+        "discovered-mahaveer-promenade-3bhk",
+        "discovered-prestige-boulevard-3bhk"
+      ],
+      "intent": {
+        "root": {
+          "op": "leaf",
+          "value": "branch-1"
+        },
+        "branches": [
+          {
+            "id": "branch-1",
+            "constraints": {
+              "kind": "predicate",
+              "predicate": {
+                "id": "predicate:root:branch-1:",
+                "dimension": "bhk",
+                "label": "BHK",
+                "polarity": "positive",
+                "operator": "equals",
+                "value": 3,
+                "required": true
+              }
+            },
+            "preferences": []
+          }
+        ]
+      },
+      "proof_keys": [
+        [
+          "discovered-snn-raj-greenbay-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-mantri-tranquil-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-purva-westend-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-sumadhura-capitol-residences-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-snn-clermont-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-sumadhura-eden-garden-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-waterford-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-century-central-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-sobha-indraprastha-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-renaissance-reserva-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-godrej-air-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-fairfield-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-salarpuria-sattva-misty-charm-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-ruchira-lilium-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-sobha-forest-edge-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-spectra-raaya-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-sumadhura-soham-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-elysian-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-gopalan-aqua-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-century-ethos-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-snn-raj-spiritua-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-snn-raj-grandeur-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-birla-tisya-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-amrutha-platinum-towers-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-brigade-lakefront-crimson-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-lakeside-habitat-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-the-residences-at-brigade-tech-gardens-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-vaswani-starlight-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-tower-7-one-bangalore-west-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-the-presidential-tower-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-mahaveer-promenade-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-boulevard-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ]
+      ],
+      "collections_bytes": 4242,
+      "collections": [
+        [
+          "fallback:metro_access",
+          [
+            "discovered-prestige-botanique-3bhk",
+            "discovered-sobha-clovelly-3bhk",
+            "discovered-shriram-southern-crest-3bhk",
+            "discovered-godrej-united-3bhk",
+            "discovered-brigade-7-gardens-3bhk",
+            "discovered-godrej-splendour-3bhk",
+            "discovered-prestige-southern-star-3bhk",
+            "discovered-mirabelle-3bhk"
+          ],
+          [
+            3
+          ]
+        ]
+      ]
+    },
+    {
+      "query": "3BHK",
+      "run": "warm",
+      "seconds": 0.047,
+      "status": 200,
+      "bytes": 82916,
+      "bundle": "catalog-71-299c3135-23aa-4945-8f26-2cf2fc775eaa",
+      "error": null,
+      "ids": [
+        "discovered-snn-raj-greenbay-3bhk",
+        "discovered-mantri-tranquil-3bhk",
+        "discovered-purva-westend-3bhk",
+        "discovered-sumadhura-capitol-residences-3bhk",
+        "discovered-snn-clermont-3bhk",
+        "discovered-sumadhura-eden-garden-3bhk",
+        "discovered-prestige-waterford-3bhk",
+        "discovered-century-central-3bhk",
+        "discovered-sobha-indraprastha-3bhk",
+        "discovered-renaissance-reserva-3bhk",
+        "discovered-godrej-air-3bhk",
+        "discovered-prestige-fairfield-3bhk",
+        "discovered-salarpuria-sattva-misty-charm-3bhk",
+        "discovered-ruchira-lilium-3bhk",
+        "discovered-sobha-forest-edge-3bhk",
+        "discovered-spectra-raaya-3bhk",
+        "discovered-sumadhura-soham-3bhk",
+        "discovered-prestige-elysian-3bhk",
+        "discovered-gopalan-aqua-3bhk",
+        "discovered-century-ethos-3bhk",
+        "discovered-snn-raj-spiritua-3bhk",
+        "discovered-snn-raj-grandeur-3bhk",
+        "discovered-birla-tisya-3bhk",
+        "discovered-amrutha-platinum-towers-3bhk",
+        "discovered-brigade-lakefront-crimson-3bhk",
+        "discovered-prestige-lakeside-habitat-3bhk",
+        "discovered-the-residences-at-brigade-tech-gardens-3bhk",
+        "discovered-vaswani-starlight-3bhk",
+        "discovered-tower-7-one-bangalore-west-3bhk",
+        "discovered-the-presidential-tower-3bhk",
+        "discovered-mahaveer-promenade-3bhk",
+        "discovered-prestige-boulevard-3bhk"
+      ],
+      "intent": {
+        "root": {
+          "op": "leaf",
+          "value": "branch-1"
+        },
+        "branches": [
+          {
+            "id": "branch-1",
+            "constraints": {
+              "kind": "predicate",
+              "predicate": {
+                "id": "predicate:root:branch-1:",
+                "dimension": "bhk",
+                "label": "BHK",
+                "polarity": "positive",
+                "operator": "equals",
+                "value": 3,
+                "required": true
+              }
+            },
+            "preferences": []
+          }
+        ]
+      },
+      "proof_keys": [
+        [
+          "discovered-snn-raj-greenbay-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-mantri-tranquil-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-purva-westend-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-sumadhura-capitol-residences-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-snn-clermont-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-sumadhura-eden-garden-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-waterford-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-century-central-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-sobha-indraprastha-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-renaissance-reserva-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-godrej-air-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-fairfield-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-salarpuria-sattva-misty-charm-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-ruchira-lilium-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-sobha-forest-edge-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-spectra-raaya-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-sumadhura-soham-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-elysian-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-gopalan-aqua-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-century-ethos-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-snn-raj-spiritua-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-snn-raj-grandeur-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-birla-tisya-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-amrutha-platinum-towers-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-brigade-lakefront-crimson-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-lakeside-habitat-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-the-residences-at-brigade-tech-gardens-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-vaswani-starlight-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-tower-7-one-bangalore-west-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-the-presidential-tower-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-mahaveer-promenade-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-boulevard-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:"
+            ]
+          ]
+        ]
+      ],
+      "collections_bytes": 4242,
+      "collections": [
+        [
+          "fallback:metro_access",
+          [
+            "discovered-prestige-botanique-3bhk",
+            "discovered-sobha-clovelly-3bhk",
+            "discovered-shriram-southern-crest-3bhk",
+            "discovered-godrej-united-3bhk",
+            "discovered-brigade-7-gardens-3bhk",
+            "discovered-godrej-splendour-3bhk",
+            "discovered-prestige-southern-star-3bhk",
+            "discovered-mirabelle-3bhk"
+          ],
+          [
+            3
+          ]
+        ]
+      ]
+    },
+    {
+      "query": "2BHK in Whitefield under 2 Cr or 3BHK in Sarjapur Road under 2.5 Cr",
+      "run": "cold",
+      "seconds": 1.36,
+      "status": 200,
+      "bytes": 100468,
+      "bundle": "catalog-71-299c3135-23aa-4945-8f26-2cf2fc775eaa",
+      "error": null,
+      "ids": [
+        "discovered-sumadhura-nandanam-2bhk",
+        "discovered-spectra-raaya-2bhk",
+        "discovered-sumadhura-soham-2bhk",
+        "discovered-gopalan-aqua-2bhk",
+        "discovered-umiya-woods-2bhk",
+        "discovered-amrutha-platinum-towers-2bhk",
+        "discovered-brigade-lakefront-crimson-2bhk",
+        "discovered-prestige-lakeside-habitat-2bhk",
+        "discovered-narya-5-elements-2bhk",
+        "discovered-mahaveer-promenade-2bhk",
+        "discovered-prestige-boulevard-2bhk",
+        "discovered-prestige-lavender-fields-2bhk",
+        "discovered-prestige-fontaine-bleau-2bhk",
+        "discovered-godrej-splendour-2bhk",
+        "discovered-habitat-eden-heights-2bhk",
+        "discovered-pavani-divine-2bhk",
+        "discovered-desai-radiant-2bhk",
+        "discovered-godrej-united-2bhk",
+        "discovered-parimala-skyview-2bhk",
+        "discovered-prestige-green-gables-2bhk"
+      ],
+      "intent": {
+        "root": {
+          "op": "any",
+          "value": [
+            {
+              "op": "leaf",
+              "value": "branch-1"
+            },
+            {
+              "op": "leaf",
+              "value": "branch-2"
+            }
+          ]
+        },
+        "branches": [
+          {
+            "id": "branch-1",
+            "constraints": {
+              "kind": "all",
+              "clauses": [
+                {
+                  "kind": "predicate",
+                  "predicate": {
+                    "id": "predicate:root:branch-1:0",
+                    "dimension": "bhk",
+                    "label": "BHK",
+                    "polarity": "positive",
+                    "operator": "equals",
+                    "value": 2,
+                    "required": true
+                  }
+                },
+                {
+                  "kind": "predicate",
+                  "predicate": {
+                    "id": "predicate:root:branch-1:1",
+                    "dimension": "area",
+                    "label": "Area",
+                    "polarity": "positive",
+                    "operator": "inside",
+                    "value": "Whitefield",
+                    "resolvedLabel": "Whitefield",
+                    "required": true
+                  }
+                },
+                {
+                  "kind": "predicate",
+                  "predicate": {
+                    "id": "predicate:root:branch-1:2",
+                    "dimension": "price",
+                    "label": "Price",
+                    "polarity": "positive",
+                    "operator": "atMost",
+                    "value": {
+                      "max": 20000000,
+                      "min": null
+                    },
+                    "unit": "INR",
+                    "required": true
+                  }
+                }
+              ]
+            },
+            "preferences": []
+          },
+          {
+            "id": "branch-2",
+            "constraints": {
+              "kind": "all",
+              "clauses": [
+                {
+                  "kind": "predicate",
+                  "predicate": {
+                    "id": "predicate:root:branch-2:0",
+                    "dimension": "bhk",
+                    "label": "BHK",
+                    "polarity": "positive",
+                    "operator": "equals",
+                    "value": 3,
+                    "required": true
+                  }
+                },
+                {
+                  "kind": "predicate",
+                  "predicate": {
+                    "id": "predicate:root:branch-2:1",
+                    "dimension": "price",
+                    "label": "Price",
+                    "polarity": "positive",
+                    "operator": "atMost",
+                    "value": {
+                      "max": 25000000,
+                      "min": null
+                    },
+                    "unit": "INR",
+                    "required": true
+                  }
+                }
+              ]
+            },
+            "unresolvedRequirements": [
+              "Sarjapur Road"
+            ],
+            "preferences": []
+          }
+        ]
+      },
+      "proof_keys": [
+        [
+          "discovered-sumadhura-nandanam-2bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:2"
+            ]
+          ]
+        ],
+        [
+          "discovered-spectra-raaya-2bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:2"
+            ]
+          ]
+        ],
+        [
+          "discovered-sumadhura-soham-2bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:2"
+            ]
+          ]
+        ],
+        [
+          "discovered-gopalan-aqua-2bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:2"
+            ]
+          ]
+        ],
+        [
+          "discovered-umiya-woods-2bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:2"
+            ]
+          ]
+        ],
+        [
+          "discovered-amrutha-platinum-towers-2bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:2"
+            ]
+          ]
+        ],
+        [
+          "discovered-brigade-lakefront-crimson-2bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:2"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-lakeside-habitat-2bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:2"
+            ]
+          ]
+        ],
+        [
+          "discovered-narya-5-elements-2bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:2"
+            ]
+          ]
+        ],
+        [
+          "discovered-mahaveer-promenade-2bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:2"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-boulevard-2bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:2"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-lavender-fields-2bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:2"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-fontaine-bleau-2bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:2"
+            ]
+          ]
+        ],
+        [
+          "discovered-godrej-splendour-2bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:2"
+            ]
+          ]
+        ],
+        [
+          "discovered-habitat-eden-heights-2bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:2"
+            ]
+          ]
+        ],
+        [
+          "discovered-pavani-divine-2bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:2"
+            ]
+          ]
+        ],
+        [
+          "discovered-desai-radiant-2bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:2"
+            ]
+          ]
+        ],
+        [
+          "discovered-godrej-united-2bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:2"
+            ]
+          ]
+        ],
+        [
+          "discovered-parimala-skyview-2bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:2"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-green-gables-2bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:2"
+            ]
+          ]
+        ]
+      ],
+      "collections_bytes": 9618,
+      "collections": [
+        [
+          "other_areas",
+          [
+            "discovered-mantri-tranquil-2bhk",
+            "discovered-purva-westend-2bhk",
+            "discovered-century-central-2bhk",
+            "discovered-renaissance-reserva-2bhk",
+            "discovered-salarpuria-sattva-misty-charm-2bhk",
+            "discovered-prestige-elysian-2bhk",
+            "discovered-snn-raj-grandeur-2bhk",
+            "discovered-birla-tisya-2bhk",
+            "discovered-brigade-7-gardens-2bhk",
+            "discovered-prestige-botanique-2bhk",
+            "discovered-brigade-laguna-2bhk",
+            "discovered-shriram-southern-crest-2bhk"
+          ],
+          [
+            2
+          ]
+        ],
+        [
+          "fallback:nearby_schools",
+          [
+            "discovered-prestige-southern-star-2bhk",
+            "discovered-godrej-lakeside-orchard-2bhk",
+            "discovered-snn-raj-serenity-2bhk",
+            "discovered-snn-raj-greenbay-2bhk",
+            "discovered-prestige-falcon-city-2bhk",
+            "discovered-prestige-park-square-2bhk"
+          ],
+          [
+            2
+          ]
+        ]
+      ]
+    },
+    {
+      "query": "2BHK in Whitefield under 2 Cr or 3BHK in Sarjapur Road under 2.5 Cr",
+      "run": "warm",
+      "seconds": 0.058,
+      "status": 200,
+      "bytes": 100468,
+      "bundle": "catalog-71-299c3135-23aa-4945-8f26-2cf2fc775eaa",
+      "error": null,
+      "ids": [
+        "discovered-sumadhura-nandanam-2bhk",
+        "discovered-spectra-raaya-2bhk",
+        "discovered-sumadhura-soham-2bhk",
+        "discovered-gopalan-aqua-2bhk",
+        "discovered-umiya-woods-2bhk",
+        "discovered-amrutha-platinum-towers-2bhk",
+        "discovered-brigade-lakefront-crimson-2bhk",
+        "discovered-prestige-lakeside-habitat-2bhk",
+        "discovered-narya-5-elements-2bhk",
+        "discovered-mahaveer-promenade-2bhk",
+        "discovered-prestige-boulevard-2bhk",
+        "discovered-prestige-lavender-fields-2bhk",
+        "discovered-prestige-fontaine-bleau-2bhk",
+        "discovered-godrej-splendour-2bhk",
+        "discovered-habitat-eden-heights-2bhk",
+        "discovered-pavani-divine-2bhk",
+        "discovered-desai-radiant-2bhk",
+        "discovered-godrej-united-2bhk",
+        "discovered-parimala-skyview-2bhk",
+        "discovered-prestige-green-gables-2bhk"
+      ],
+      "intent": {
+        "root": {
+          "op": "any",
+          "value": [
+            {
+              "op": "leaf",
+              "value": "branch-1"
+            },
+            {
+              "op": "leaf",
+              "value": "branch-2"
+            }
+          ]
+        },
+        "branches": [
+          {
+            "id": "branch-1",
+            "constraints": {
+              "kind": "all",
+              "clauses": [
+                {
+                  "kind": "predicate",
+                  "predicate": {
+                    "id": "predicate:root:branch-1:0",
+                    "dimension": "bhk",
+                    "label": "BHK",
+                    "polarity": "positive",
+                    "operator": "equals",
+                    "value": 2,
+                    "required": true
+                  }
+                },
+                {
+                  "kind": "predicate",
+                  "predicate": {
+                    "id": "predicate:root:branch-1:1",
+                    "dimension": "area",
+                    "label": "Area",
+                    "polarity": "positive",
+                    "operator": "inside",
+                    "value": "Whitefield",
+                    "resolvedLabel": "Whitefield",
+                    "required": true
+                  }
+                },
+                {
+                  "kind": "predicate",
+                  "predicate": {
+                    "id": "predicate:root:branch-1:2",
+                    "dimension": "price",
+                    "label": "Price",
+                    "polarity": "positive",
+                    "operator": "atMost",
+                    "value": {
+                      "max": 20000000,
+                      "min": null
+                    },
+                    "unit": "INR",
+                    "required": true
+                  }
+                }
+              ]
+            },
+            "preferences": []
+          },
+          {
+            "id": "branch-2",
+            "constraints": {
+              "kind": "all",
+              "clauses": [
+                {
+                  "kind": "predicate",
+                  "predicate": {
+                    "id": "predicate:root:branch-2:0",
+                    "dimension": "bhk",
+                    "label": "BHK",
+                    "polarity": "positive",
+                    "operator": "equals",
+                    "value": 3,
+                    "required": true
+                  }
+                },
+                {
+                  "kind": "predicate",
+                  "predicate": {
+                    "id": "predicate:root:branch-2:1",
+                    "dimension": "price",
+                    "label": "Price",
+                    "polarity": "positive",
+                    "operator": "atMost",
+                    "value": {
+                      "max": 25000000,
+                      "min": null
+                    },
+                    "unit": "INR",
+                    "required": true
+                  }
+                }
+              ]
+            },
+            "unresolvedRequirements": [
+              "Sarjapur Road"
+            ],
+            "preferences": []
+          }
+        ]
+      },
+      "proof_keys": [
+        [
+          "discovered-sumadhura-nandanam-2bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:2"
+            ]
+          ]
+        ],
+        [
+          "discovered-spectra-raaya-2bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:2"
+            ]
+          ]
+        ],
+        [
+          "discovered-sumadhura-soham-2bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:2"
+            ]
+          ]
+        ],
+        [
+          "discovered-gopalan-aqua-2bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:2"
+            ]
+          ]
+        ],
+        [
+          "discovered-umiya-woods-2bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:2"
+            ]
+          ]
+        ],
+        [
+          "discovered-amrutha-platinum-towers-2bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:2"
+            ]
+          ]
+        ],
+        [
+          "discovered-brigade-lakefront-crimson-2bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:2"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-lakeside-habitat-2bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:2"
+            ]
+          ]
+        ],
+        [
+          "discovered-narya-5-elements-2bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:2"
+            ]
+          ]
+        ],
+        [
+          "discovered-mahaveer-promenade-2bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:2"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-boulevard-2bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:2"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-lavender-fields-2bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:2"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-fontaine-bleau-2bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:2"
+            ]
+          ]
+        ],
+        [
+          "discovered-godrej-splendour-2bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:2"
+            ]
+          ]
+        ],
+        [
+          "discovered-habitat-eden-heights-2bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:2"
+            ]
+          ]
+        ],
+        [
+          "discovered-pavani-divine-2bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:2"
+            ]
+          ]
+        ],
+        [
+          "discovered-desai-radiant-2bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:2"
+            ]
+          ]
+        ],
+        [
+          "discovered-godrej-united-2bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:2"
+            ]
+          ]
+        ],
+        [
+          "discovered-parimala-skyview-2bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:2"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-green-gables-2bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:2"
+            ]
+          ]
+        ]
+      ],
+      "collections_bytes": 9618,
+      "collections": [
+        [
+          "other_areas",
+          [
+            "discovered-mantri-tranquil-2bhk",
+            "discovered-purva-westend-2bhk",
+            "discovered-century-central-2bhk",
+            "discovered-renaissance-reserva-2bhk",
+            "discovered-salarpuria-sattva-misty-charm-2bhk",
+            "discovered-prestige-elysian-2bhk",
+            "discovered-snn-raj-grandeur-2bhk",
+            "discovered-birla-tisya-2bhk",
+            "discovered-brigade-7-gardens-2bhk",
+            "discovered-prestige-botanique-2bhk",
+            "discovered-brigade-laguna-2bhk",
+            "discovered-shriram-southern-crest-2bhk"
+          ],
+          [
+            2
+          ]
+        ],
+        [
+          "fallback:nearby_schools",
+          [
+            "discovered-prestige-southern-star-2bhk",
+            "discovered-godrej-lakeside-orchard-2bhk",
+            "discovered-snn-raj-serenity-2bhk",
+            "discovered-snn-raj-greenbay-2bhk",
+            "discovered-prestige-falcon-city-2bhk",
+            "discovered-prestige-park-square-2bhk"
+          ],
+          [
+            2
+          ]
+        ]
+      ]
+    },
+    {
+      "query": "quiet 3BHK near schools under 2.5 Cr",
+      "run": "cold",
+      "seconds": 0.882,
+      "status": 200,
+      "bytes": 207366,
+      "bundle": "catalog-71-299c3135-23aa-4945-8f26-2cf2fc775eaa",
+      "error": null,
+      "ids": [
+        "discovered-ruchira-lilium-3bhk",
+        "discovered-spectra-raaya-3bhk",
+        "discovered-sumadhura-soham-3bhk",
+        "discovered-gopalan-aqua-3bhk",
+        "discovered-amrutha-platinum-towers-3bhk",
+        "discovered-mahaveer-promenade-3bhk",
+        "discovered-desai-grandeur-3bhk",
+        "discovered-habitat-eden-heights-3bhk",
+        "discovered-pavani-divine-3bhk",
+        "discovered-mahaveer-tranquil-3bhk",
+        "discovered-prestige-green-gables-3bhk",
+        "discovered-the-marquis-3bhk",
+        "discovered-sumadhura-eden-garden-3bhk",
+        "discovered-mantri-tranquil-3bhk",
+        "discovered-sumadhura-capitol-residences-3bhk",
+        "discovered-century-central-3bhk",
+        "discovered-renaissance-reserva-3bhk",
+        "discovered-salarpuria-sattva-misty-charm-3bhk",
+        "discovered-sobha-forest-edge-3bhk",
+        "discovered-prestige-elysian-3bhk",
+        "discovered-snn-raj-spiritua-3bhk",
+        "discovered-the-presidential-tower-3bhk",
+        "discovered-mirabelle-3bhk",
+        "discovered-brigade-7-gardens-3bhk",
+        "discovered-prestige-botanique-3bhk",
+        "discovered-brigade-laguna-3bhk",
+        "discovered-shriram-southern-crest-3bhk",
+        "discovered-prestige-falcon-city-3bhk",
+        "discovered-prestige-park-square-3bhk",
+        "discovered-prestige-southern-star-3bhk",
+        "discovered-snn-raj-serenity-3bhk",
+        "discovered-snn-raj-greenbay-3bhk"
+      ],
+      "intent": {
+        "root": {
+          "op": "leaf",
+          "value": "branch-1"
+        },
+        "branches": [
+          {
+            "id": "branch-1",
+            "constraints": {
+              "kind": "all",
+              "clauses": [
+                {
+                  "kind": "all",
+                  "clauses": [
+                    {
+                      "kind": "predicate",
+                      "predicate": {
+                        "id": "predicate:root:branch-1:0.0",
+                        "dimension": "bhk",
+                        "label": "BHK",
+                        "polarity": "positive",
+                        "operator": "equals",
+                        "value": 3,
+                        "required": true
+                      }
+                    },
+                    {
+                      "kind": "predicate",
+                      "predicate": {
+                        "id": "predicate:root:branch-1:0.1",
+                        "dimension": "price",
+                        "label": "Price",
+                        "polarity": "positive",
+                        "operator": "atMost",
+                        "value": {
+                          "max": 25000000,
+                          "min": null
+                        },
+                        "unit": "INR",
+                        "required": true
+                      }
+                    }
+                  ]
+                },
+                {
+                  "kind": "predicate",
+                  "predicate": {
+                    "id": "predicate:root:branch-1:1",
+                    "dimension": "geography",
+                    "label": "Location",
+                    "polarity": "positive",
+                    "operator": "near",
+                    "value": "schools",
+                    "resolvedLabel": "schools",
+                    "required": false
+                  }
+                }
+              ]
+            },
+            "preferences": [
+              {
+                "id": "preference:branch-1:352825715cca941f3394bcc8",
+                "label": "social infrastructure",
+                "polarity": "positive",
+                "weight": 0.8,
+                "required": false
+              },
+              {
+                "id": "preference:branch-1:5d6c3bb56d6a455a7203f685",
+                "label": "quiet neighborhood",
+                "polarity": "positive",
+                "weight": 1.1,
+                "required": false
+              }
+            ]
+          }
+        ]
+      },
+      "proof_keys": [
+        [
+          "discovered-ruchira-lilium-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ]
+          ]
+        ],
+        [
+          "discovered-spectra-raaya-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ]
+          ]
+        ],
+        [
+          "discovered-sumadhura-soham-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ]
+          ]
+        ],
+        [
+          "discovered-gopalan-aqua-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ]
+          ]
+        ],
+        [
+          "discovered-amrutha-platinum-towers-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ]
+          ]
+        ],
+        [
+          "discovered-mahaveer-promenade-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ]
+          ]
+        ],
+        [
+          "discovered-desai-grandeur-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ]
+          ]
+        ],
+        [
+          "discovered-habitat-eden-heights-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ]
+          ]
+        ],
+        [
+          "discovered-pavani-divine-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ]
+          ]
+        ],
+        [
+          "discovered-mahaveer-tranquil-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-green-gables-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ]
+          ]
+        ],
+        [
+          "discovered-the-marquis-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ]
+          ]
+        ],
+        [
+          "discovered-sumadhura-eden-garden-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ]
+          ]
+        ],
+        [
+          "discovered-mantri-tranquil-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:1"
+            ]
+          ]
+        ],
+        [
+          "discovered-sumadhura-capitol-residences-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ]
+          ]
+        ],
+        [
+          "discovered-century-central-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ],
+            [
+              "branch-1",
+              "preference:branch-1:352825715cca941f3394bcc8"
+            ]
+          ]
+        ],
+        [
+          "discovered-renaissance-reserva-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:1"
+            ],
+            [
+              "branch-1",
+              "preference:branch-1:352825715cca941f3394bcc8"
+            ]
+          ]
+        ],
+        [
+          "discovered-salarpuria-sattva-misty-charm-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:1"
+            ],
+            [
+              "branch-1",
+              "preference:branch-1:352825715cca941f3394bcc8"
+            ]
+          ]
+        ],
+        [
+          "discovered-sobha-forest-edge-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:1"
+            ],
+            [
+              "branch-1",
+              "preference:branch-1:352825715cca941f3394bcc8"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-elysian-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:1"
+            ],
+            [
+              "branch-1",
+              "preference:branch-1:352825715cca941f3394bcc8"
+            ]
+          ]
+        ],
+        [
+          "discovered-snn-raj-spiritua-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:1"
+            ],
+            [
+              "branch-1",
+              "preference:branch-1:352825715cca941f3394bcc8"
+            ]
+          ]
+        ],
+        [
+          "discovered-the-presidential-tower-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:1"
+            ],
+            [
+              "branch-1",
+              "preference:branch-1:352825715cca941f3394bcc8"
+            ]
+          ]
+        ],
+        [
+          "discovered-mirabelle-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:1"
+            ],
+            [
+              "branch-1",
+              "preference:branch-1:352825715cca941f3394bcc8"
+            ]
+          ]
+        ],
+        [
+          "discovered-brigade-7-gardens-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:1"
+            ],
+            [
+              "branch-1",
+              "preference:branch-1:352825715cca941f3394bcc8"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-botanique-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:1"
+            ],
+            [
+              "branch-1",
+              "preference:branch-1:352825715cca941f3394bcc8"
+            ]
+          ]
+        ],
+        [
+          "discovered-brigade-laguna-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:1"
+            ],
+            [
+              "branch-1",
+              "preference:branch-1:352825715cca941f3394bcc8"
+            ]
+          ]
+        ],
+        [
+          "discovered-shriram-southern-crest-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-falcon-city-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:1"
+            ],
+            [
+              "branch-1",
+              "preference:branch-1:352825715cca941f3394bcc8"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-park-square-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:1"
+            ],
+            [
+              "branch-1",
+              "preference:branch-1:352825715cca941f3394bcc8"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-southern-star-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:1"
+            ],
+            [
+              "branch-1",
+              "preference:branch-1:352825715cca941f3394bcc8"
+            ]
+          ]
+        ],
+        [
+          "discovered-snn-raj-serenity-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:1"
+            ],
+            [
+              "branch-1",
+              "preference:branch-1:352825715cca941f3394bcc8"
+            ]
+          ]
+        ],
+        [
+          "discovered-snn-raj-greenbay-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:1"
+            ],
+            [
+              "branch-1",
+              "preference:branch-1:352825715cca941f3394bcc8"
+            ]
+          ]
+        ]
+      ],
+      "collections_bytes": 6309,
+      "collections": [
+        [
+          "wider_budget",
+          [
+            "discovered-the-residences-at-brigade-tech-gardens-3bhk",
+            "discovered-prestige-boulevard-3bhk",
+            "discovered-prestige-waterford-3bhk",
+            "discovered-godrej-air-3bhk",
+            "discovered-snn-raj-grandeur-3bhk",
+            "discovered-brigade-lakefront-crimson-3bhk",
+            "discovered-vaswani-starlight-3bhk",
+            "discovered-sobha-clovelly-3bhk",
+            "discovered-godrej-lakeside-orchard-3bhk",
+            "discovered-godrej-united-3bhk",
+            "discovered-purva-westend-3bhk",
+            "discovered-godrej-splendour-3bhk"
+          ],
+          [
+            3
+          ]
+        ]
+      ]
+    },
+    {
+      "query": "quiet 3BHK near schools under 2.5 Cr",
+      "run": "warm",
+      "seconds": 0.07,
+      "status": 200,
+      "bytes": 207366,
+      "bundle": "catalog-71-299c3135-23aa-4945-8f26-2cf2fc775eaa",
+      "error": null,
+      "ids": [
+        "discovered-ruchira-lilium-3bhk",
+        "discovered-spectra-raaya-3bhk",
+        "discovered-sumadhura-soham-3bhk",
+        "discovered-gopalan-aqua-3bhk",
+        "discovered-amrutha-platinum-towers-3bhk",
+        "discovered-mahaveer-promenade-3bhk",
+        "discovered-desai-grandeur-3bhk",
+        "discovered-habitat-eden-heights-3bhk",
+        "discovered-pavani-divine-3bhk",
+        "discovered-mahaveer-tranquil-3bhk",
+        "discovered-prestige-green-gables-3bhk",
+        "discovered-the-marquis-3bhk",
+        "discovered-sumadhura-eden-garden-3bhk",
+        "discovered-mantri-tranquil-3bhk",
+        "discovered-sumadhura-capitol-residences-3bhk",
+        "discovered-century-central-3bhk",
+        "discovered-renaissance-reserva-3bhk",
+        "discovered-salarpuria-sattva-misty-charm-3bhk",
+        "discovered-sobha-forest-edge-3bhk",
+        "discovered-prestige-elysian-3bhk",
+        "discovered-snn-raj-spiritua-3bhk",
+        "discovered-the-presidential-tower-3bhk",
+        "discovered-mirabelle-3bhk",
+        "discovered-brigade-7-gardens-3bhk",
+        "discovered-prestige-botanique-3bhk",
+        "discovered-brigade-laguna-3bhk",
+        "discovered-shriram-southern-crest-3bhk",
+        "discovered-prestige-falcon-city-3bhk",
+        "discovered-prestige-park-square-3bhk",
+        "discovered-prestige-southern-star-3bhk",
+        "discovered-snn-raj-serenity-3bhk",
+        "discovered-snn-raj-greenbay-3bhk"
+      ],
+      "intent": {
+        "root": {
+          "op": "leaf",
+          "value": "branch-1"
+        },
+        "branches": [
+          {
+            "id": "branch-1",
+            "constraints": {
+              "kind": "all",
+              "clauses": [
+                {
+                  "kind": "all",
+                  "clauses": [
+                    {
+                      "kind": "predicate",
+                      "predicate": {
+                        "id": "predicate:root:branch-1:0.0",
+                        "dimension": "bhk",
+                        "label": "BHK",
+                        "polarity": "positive",
+                        "operator": "equals",
+                        "value": 3,
+                        "required": true
+                      }
+                    },
+                    {
+                      "kind": "predicate",
+                      "predicate": {
+                        "id": "predicate:root:branch-1:0.1",
+                        "dimension": "price",
+                        "label": "Price",
+                        "polarity": "positive",
+                        "operator": "atMost",
+                        "value": {
+                          "max": 25000000,
+                          "min": null
+                        },
+                        "unit": "INR",
+                        "required": true
+                      }
+                    }
+                  ]
+                },
+                {
+                  "kind": "predicate",
+                  "predicate": {
+                    "id": "predicate:root:branch-1:1",
+                    "dimension": "geography",
+                    "label": "Location",
+                    "polarity": "positive",
+                    "operator": "near",
+                    "value": "schools",
+                    "resolvedLabel": "schools",
+                    "required": false
+                  }
+                }
+              ]
+            },
+            "preferences": [
+              {
+                "id": "preference:branch-1:352825715cca941f3394bcc8",
+                "label": "social infrastructure",
+                "polarity": "positive",
+                "weight": 0.8,
+                "required": false
+              },
+              {
+                "id": "preference:branch-1:5d6c3bb56d6a455a7203f685",
+                "label": "quiet neighborhood",
+                "polarity": "positive",
+                "weight": 1.1,
+                "required": false
+              }
+            ]
+          }
+        ]
+      },
+      "proof_keys": [
+        [
+          "discovered-ruchira-lilium-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ]
+          ]
+        ],
+        [
+          "discovered-spectra-raaya-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ]
+          ]
+        ],
+        [
+          "discovered-sumadhura-soham-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ]
+          ]
+        ],
+        [
+          "discovered-gopalan-aqua-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ]
+          ]
+        ],
+        [
+          "discovered-amrutha-platinum-towers-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ]
+          ]
+        ],
+        [
+          "discovered-mahaveer-promenade-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ]
+          ]
+        ],
+        [
+          "discovered-desai-grandeur-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ]
+          ]
+        ],
+        [
+          "discovered-habitat-eden-heights-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ]
+          ]
+        ],
+        [
+          "discovered-pavani-divine-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ]
+          ]
+        ],
+        [
+          "discovered-mahaveer-tranquil-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-green-gables-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ]
+          ]
+        ],
+        [
+          "discovered-the-marquis-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ]
+          ]
+        ],
+        [
+          "discovered-sumadhura-eden-garden-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ]
+          ]
+        ],
+        [
+          "discovered-mantri-tranquil-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:1"
+            ]
+          ]
+        ],
+        [
+          "discovered-sumadhura-capitol-residences-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ]
+          ]
+        ],
+        [
+          "discovered-century-central-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ],
+            [
+              "branch-1",
+              "preference:branch-1:352825715cca941f3394bcc8"
+            ]
+          ]
+        ],
+        [
+          "discovered-renaissance-reserva-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:1"
+            ],
+            [
+              "branch-1",
+              "preference:branch-1:352825715cca941f3394bcc8"
+            ]
+          ]
+        ],
+        [
+          "discovered-salarpuria-sattva-misty-charm-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:1"
+            ],
+            [
+              "branch-1",
+              "preference:branch-1:352825715cca941f3394bcc8"
+            ]
+          ]
+        ],
+        [
+          "discovered-sobha-forest-edge-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:1"
+            ],
+            [
+              "branch-1",
+              "preference:branch-1:352825715cca941f3394bcc8"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-elysian-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:1"
+            ],
+            [
+              "branch-1",
+              "preference:branch-1:352825715cca941f3394bcc8"
+            ]
+          ]
+        ],
+        [
+          "discovered-snn-raj-spiritua-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:1"
+            ],
+            [
+              "branch-1",
+              "preference:branch-1:352825715cca941f3394bcc8"
+            ]
+          ]
+        ],
+        [
+          "discovered-the-presidential-tower-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:1"
+            ],
+            [
+              "branch-1",
+              "preference:branch-1:352825715cca941f3394bcc8"
+            ]
+          ]
+        ],
+        [
+          "discovered-mirabelle-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:1"
+            ],
+            [
+              "branch-1",
+              "preference:branch-1:352825715cca941f3394bcc8"
+            ]
+          ]
+        ],
+        [
+          "discovered-brigade-7-gardens-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:1"
+            ],
+            [
+              "branch-1",
+              "preference:branch-1:352825715cca941f3394bcc8"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-botanique-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:1"
+            ],
+            [
+              "branch-1",
+              "preference:branch-1:352825715cca941f3394bcc8"
+            ]
+          ]
+        ],
+        [
+          "discovered-brigade-laguna-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:1"
+            ],
+            [
+              "branch-1",
+              "preference:branch-1:352825715cca941f3394bcc8"
+            ]
+          ]
+        ],
+        [
+          "discovered-shriram-southern-crest-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-falcon-city-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:1"
+            ],
+            [
+              "branch-1",
+              "preference:branch-1:352825715cca941f3394bcc8"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-park-square-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:1"
+            ],
+            [
+              "branch-1",
+              "preference:branch-1:352825715cca941f3394bcc8"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-southern-star-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:1"
+            ],
+            [
+              "branch-1",
+              "preference:branch-1:352825715cca941f3394bcc8"
+            ]
+          ]
+        ],
+        [
+          "discovered-snn-raj-serenity-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:1"
+            ],
+            [
+              "branch-1",
+              "preference:branch-1:352825715cca941f3394bcc8"
+            ]
+          ]
+        ],
+        [
+          "discovered-snn-raj-greenbay-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.0"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:0.1"
+            ],
+            [
+              "branch-1",
+              "predicate:root:branch-1:1"
+            ],
+            [
+              "branch-1",
+              "preference:branch-1:352825715cca941f3394bcc8"
+            ]
+          ]
+        ]
+      ],
+      "collections_bytes": 6309,
+      "collections": [
+        [
+          "wider_budget",
+          [
+            "discovered-the-residences-at-brigade-tech-gardens-3bhk",
+            "discovered-prestige-boulevard-3bhk",
+            "discovered-prestige-waterford-3bhk",
+            "discovered-godrej-air-3bhk",
+            "discovered-snn-raj-grandeur-3bhk",
+            "discovered-brigade-lakefront-crimson-3bhk",
+            "discovered-vaswani-starlight-3bhk",
+            "discovered-sobha-clovelly-3bhk",
+            "discovered-godrej-lakeside-orchard-3bhk",
+            "discovered-godrej-united-3bhk",
+            "discovered-purva-westend-3bhk",
+            "discovered-godrej-splendour-3bhk"
+          ],
+          [
+            3
+          ]
+        ]
+      ]
+    },
+    {
+      "query": "3BHK near ITPL with schools nearby under 3 Cr",
+      "run": "cold",
+      "seconds": 0.166,
+      "status": 200,
+      "bytes": 7467,
+      "bundle": "catalog-71-299c3135-23aa-4945-8f26-2cf2fc775eaa",
+      "error": null,
+      "ids": [],
+      "intent": {
+        "root": {
+          "op": "leaf",
+          "value": "branch-1"
+        },
+        "branches": [
+          {
+            "id": "branch-1",
+            "constraints": {
+              "kind": "all",
+              "clauses": [
+                {
+                  "kind": "predicate",
+                  "predicate": {
+                    "id": "predicate:root:branch-1:0",
+                    "dimension": "bhk",
+                    "label": "BHK",
+                    "polarity": "positive",
+                    "operator": "equals",
+                    "value": 3,
+                    "required": true
+                  }
+                },
+                {
+                  "kind": "predicate",
+                  "predicate": {
+                    "id": "predicate:root:branch-1:1",
+                    "dimension": "price",
+                    "label": "Price",
+                    "polarity": "positive",
+                    "operator": "atMost",
+                    "value": {
+                      "max": 30000000,
+                      "min": null
+                    },
+                    "unit": "INR",
+                    "required": true
+                  }
+                }
+              ]
+            },
+            "unresolvedRequirements": [
+              "itpl with schools"
+            ],
+            "preferences": [
+              {
+                "id": "preference:branch-1:352825715cca941f3394bcc8",
+                "label": "social infrastructure",
+                "polarity": "positive",
+                "weight": 0.8,
+                "required": false
+              }
+            ]
+          }
+        ]
+      },
+      "proof_keys": [],
+      "collections_bytes": 2,
+      "collections": []
+    },
+    {
+      "query": "3BHK near ITPL with schools nearby under 3 Cr",
+      "run": "warm",
+      "seconds": 0.018,
+      "status": 200,
+      "bytes": 7467,
+      "bundle": "catalog-71-299c3135-23aa-4945-8f26-2cf2fc775eaa",
+      "error": null,
+      "ids": [],
+      "intent": {
+        "root": {
+          "op": "leaf",
+          "value": "branch-1"
+        },
+        "branches": [
+          {
+            "id": "branch-1",
+            "constraints": {
+              "kind": "all",
+              "clauses": [
+                {
+                  "kind": "predicate",
+                  "predicate": {
+                    "id": "predicate:root:branch-1:0",
+                    "dimension": "bhk",
+                    "label": "BHK",
+                    "polarity": "positive",
+                    "operator": "equals",
+                    "value": 3,
+                    "required": true
+                  }
+                },
+                {
+                  "kind": "predicate",
+                  "predicate": {
+                    "id": "predicate:root:branch-1:1",
+                    "dimension": "price",
+                    "label": "Price",
+                    "polarity": "positive",
+                    "operator": "atMost",
+                    "value": {
+                      "max": 30000000,
+                      "min": null
+                    },
+                    "unit": "INR",
+                    "required": true
+                  }
+                }
+              ]
+            },
+            "unresolvedRequirements": [
+              "itpl with schools"
+            ],
+            "preferences": [
+              {
+                "id": "preference:branch-1:352825715cca941f3394bcc8",
+                "label": "social infrastructure",
+                "polarity": "positive",
+                "weight": 0.8,
+                "required": false
+              }
+            ]
+          }
+        ]
+      },
+      "proof_keys": [],
+      "collections_bytes": 2,
+      "collections": []
+    },
+    {
+      "query": "3BHK not in Whitefield",
+      "run": "cold",
+      "seconds": 0.131,
+      "status": 200,
+      "bytes": 79126,
+      "bundle": "catalog-71-299c3135-23aa-4945-8f26-2cf2fc775eaa",
+      "error": null,
+      "ids": [
+        "discovered-sumadhura-eden-garden-3bhk",
+        "discovered-prestige-green-gables-3bhk",
+        "discovered-snn-raj-greenbay-3bhk",
+        "discovered-mantri-tranquil-3bhk",
+        "discovered-purva-westend-3bhk",
+        "discovered-snn-clermont-3bhk",
+        "discovered-century-central-3bhk",
+        "discovered-sobha-indraprastha-3bhk",
+        "discovered-renaissance-reserva-3bhk",
+        "discovered-prestige-fairfield-3bhk",
+        "discovered-salarpuria-sattva-misty-charm-3bhk",
+        "discovered-sobha-forest-edge-3bhk",
+        "discovered-prestige-elysian-3bhk",
+        "discovered-century-ethos-3bhk",
+        "discovered-snn-raj-spiritua-3bhk",
+        "discovered-snn-raj-grandeur-3bhk",
+        "discovered-birla-tisya-3bhk",
+        "discovered-tower-7-one-bangalore-west-3bhk",
+        "discovered-the-presidential-tower-3bhk",
+        "discovered-sobha-clovelly-3bhk",
+        "discovered-mirabelle-3bhk",
+        "discovered-brigade-7-gardens-3bhk",
+        "discovered-prestige-botanique-3bhk",
+        "discovered-brigade-laguna-3bhk",
+        "discovered-shriram-southern-crest-3bhk",
+        "discovered-godrej-lakeside-orchard-3bhk",
+        "discovered-prestige-falcon-city-3bhk",
+        "discovered-prestige-park-square-3bhk",
+        "discovered-prestige-southern-star-3bhk",
+        "discovered-snn-raj-serenity-3bhk",
+        "discovered-sobha-25-richmond-3bhk"
+      ],
+      "intent": {
+        "root": {
+          "op": "leaf",
+          "value": "branch-1"
+        },
+        "branches": [
+          {
+            "id": "branch-1",
+            "constraints": {
+              "kind": "all",
+              "clauses": [
+                {
+                  "kind": "predicate",
+                  "predicate": {
+                    "id": "predicate:root:branch-1:0",
+                    "dimension": "bhk",
+                    "label": "BHK",
+                    "polarity": "positive",
+                    "operator": "equals",
+                    "value": 3,
+                    "required": true
+                  }
+                },
+                {
+                  "kind": "not",
+                  "clause": {
+                    "kind": "predicate",
+                    "predicate": {
+                      "id": "predicate:root:branch-1:1.0",
+                      "dimension": "area",
+                      "label": "Area",
+                      "polarity": "negative",
+                      "operator": "inside",
+                      "value": "Whitefield",
+                      "resolvedLabel": "Whitefield",
+                      "required": true
+                    }
+                  }
+                }
+              ]
+            },
+            "preferences": []
+          }
+        ]
+      },
+      "proof_keys": [
+        [
+          "discovered-sumadhura-eden-garden-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-green-gables-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-snn-raj-greenbay-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-mantri-tranquil-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-purva-westend-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-snn-clermont-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-century-central-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-sobha-indraprastha-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-renaissance-reserva-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-fairfield-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-salarpuria-sattva-misty-charm-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-sobha-forest-edge-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-elysian-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-century-ethos-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-snn-raj-spiritua-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-snn-raj-grandeur-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-birla-tisya-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-tower-7-one-bangalore-west-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-the-presidential-tower-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-sobha-clovelly-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-mirabelle-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-brigade-7-gardens-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-botanique-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-brigade-laguna-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-shriram-southern-crest-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-godrej-lakeside-orchard-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-falcon-city-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-park-square-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-southern-star-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-snn-raj-serenity-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-sobha-25-richmond-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ]
+      ],
+      "collections_bytes": 2,
+      "collections": []
+    },
+    {
+      "query": "3BHK not in Whitefield",
+      "run": "warm",
+      "seconds": 0.054,
+      "status": 200,
+      "bytes": 79126,
+      "bundle": "catalog-71-299c3135-23aa-4945-8f26-2cf2fc775eaa",
+      "error": null,
+      "ids": [
+        "discovered-sumadhura-eden-garden-3bhk",
+        "discovered-prestige-green-gables-3bhk",
+        "discovered-snn-raj-greenbay-3bhk",
+        "discovered-mantri-tranquil-3bhk",
+        "discovered-purva-westend-3bhk",
+        "discovered-snn-clermont-3bhk",
+        "discovered-century-central-3bhk",
+        "discovered-sobha-indraprastha-3bhk",
+        "discovered-renaissance-reserva-3bhk",
+        "discovered-prestige-fairfield-3bhk",
+        "discovered-salarpuria-sattva-misty-charm-3bhk",
+        "discovered-sobha-forest-edge-3bhk",
+        "discovered-prestige-elysian-3bhk",
+        "discovered-century-ethos-3bhk",
+        "discovered-snn-raj-spiritua-3bhk",
+        "discovered-snn-raj-grandeur-3bhk",
+        "discovered-birla-tisya-3bhk",
+        "discovered-tower-7-one-bangalore-west-3bhk",
+        "discovered-the-presidential-tower-3bhk",
+        "discovered-sobha-clovelly-3bhk",
+        "discovered-mirabelle-3bhk",
+        "discovered-brigade-7-gardens-3bhk",
+        "discovered-prestige-botanique-3bhk",
+        "discovered-brigade-laguna-3bhk",
+        "discovered-shriram-southern-crest-3bhk",
+        "discovered-godrej-lakeside-orchard-3bhk",
+        "discovered-prestige-falcon-city-3bhk",
+        "discovered-prestige-park-square-3bhk",
+        "discovered-prestige-southern-star-3bhk",
+        "discovered-snn-raj-serenity-3bhk",
+        "discovered-sobha-25-richmond-3bhk"
+      ],
+      "intent": {
+        "root": {
+          "op": "leaf",
+          "value": "branch-1"
+        },
+        "branches": [
+          {
+            "id": "branch-1",
+            "constraints": {
+              "kind": "all",
+              "clauses": [
+                {
+                  "kind": "predicate",
+                  "predicate": {
+                    "id": "predicate:root:branch-1:0",
+                    "dimension": "bhk",
+                    "label": "BHK",
+                    "polarity": "positive",
+                    "operator": "equals",
+                    "value": 3,
+                    "required": true
+                  }
+                },
+                {
+                  "kind": "not",
+                  "clause": {
+                    "kind": "predicate",
+                    "predicate": {
+                      "id": "predicate:root:branch-1:1.0",
+                      "dimension": "area",
+                      "label": "Area",
+                      "polarity": "negative",
+                      "operator": "inside",
+                      "value": "Whitefield",
+                      "resolvedLabel": "Whitefield",
+                      "required": true
+                    }
+                  }
+                }
+              ]
+            },
+            "preferences": []
+          }
+        ]
+      },
+      "proof_keys": [
+        [
+          "discovered-sumadhura-eden-garden-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-green-gables-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-snn-raj-greenbay-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-mantri-tranquil-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-purva-westend-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-snn-clermont-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-century-central-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-sobha-indraprastha-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-renaissance-reserva-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-fairfield-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-salarpuria-sattva-misty-charm-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-sobha-forest-edge-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-elysian-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-century-ethos-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-snn-raj-spiritua-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-snn-raj-grandeur-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-birla-tisya-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-tower-7-one-bangalore-west-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-the-presidential-tower-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-sobha-clovelly-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-mirabelle-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-brigade-7-gardens-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-botanique-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-brigade-laguna-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-shriram-southern-crest-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-godrej-lakeside-orchard-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-falcon-city-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-park-square-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-prestige-southern-star-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-snn-raj-serenity-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ],
+        [
+          "discovered-sobha-25-richmond-3bhk",
+          [
+            [
+              "branch-1",
+              "predicate:root:branch-1:0"
+            ]
+          ]
+        ]
+      ],
+      "collections_bytes": 2,
+      "collections": []
+    },
+    {
+      "query": "3BHK in Zzyzx Gardens",
+      "run": "cold",
+      "seconds": 0.074,
+      "status": 200,
+      "bytes": 4848,
+      "bundle": "catalog-71-299c3135-23aa-4945-8f26-2cf2fc775eaa",
+      "error": null,
+      "ids": [],
+      "intent": {
+        "root": {
+          "op": "leaf",
+          "value": "branch-1"
+        },
+        "branches": [
+          {
+            "id": "branch-1",
+            "constraints": {
+              "kind": "predicate",
+              "predicate": {
+                "id": "predicate:root:branch-1:",
+                "dimension": "bhk",
+                "label": "BHK",
+                "polarity": "positive",
+                "operator": "equals",
+                "value": 3,
+                "required": true
+              }
+            },
+            "unresolvedRequirements": [
+              "Zzyzx Gardens"
+            ],
+            "preferences": []
+          }
+        ]
+      },
+      "proof_keys": [],
+      "collections_bytes": 2,
+      "collections": []
+    },
+    {
+      "query": "3BHK in Zzyzx Gardens",
+      "run": "warm",
+      "seconds": 0.04,
+      "status": 200,
+      "bytes": 4848,
+      "bundle": "catalog-71-299c3135-23aa-4945-8f26-2cf2fc775eaa",
+      "error": null,
+      "ids": [],
+      "intent": {
+        "root": {
+          "op": "leaf",
+          "value": "branch-1"
+        },
+        "branches": [
+          {
+            "id": "branch-1",
+            "constraints": {
+              "kind": "predicate",
+              "predicate": {
+                "id": "predicate:root:branch-1:",
+                "dimension": "bhk",
+                "label": "BHK",
+                "polarity": "positive",
+                "operator": "equals",
+                "value": 3,
+                "required": true
+              }
+            },
+            "unresolvedRequirements": [
+              "Zzyzx Gardens"
+            ],
+            "preferences": []
+          }
+        ]
+      },
+      "proof_keys": [],
+      "collections_bytes": 2,
+      "collections": []
+    },
+    {
+      "query": "3BHK under 1 lakh",
+      "run": "cold",
+      "seconds": 0.07,
+      "status": 200,
+      "bytes": 5968,
+      "bundle": "catalog-71-299c3135-23aa-4945-8f26-2cf2fc775eaa",
+      "error": null,
+      "ids": [],
+      "intent": {
+        "root": {
+          "op": "leaf",
+          "value": "branch-1"
+        },
+        "branches": [
+          {
+            "id": "branch-1",
+            "constraints": {
+              "kind": "all",
+              "clauses": [
+                {
+                  "kind": "predicate",
+                  "predicate": {
+                    "id": "predicate:root:branch-1:0",
+                    "dimension": "bhk",
+                    "label": "BHK",
+                    "polarity": "positive",
+                    "operator": "equals",
+                    "value": 3,
+                    "required": true
+                  }
+                },
+                {
+                  "kind": "predicate",
+                  "predicate": {
+                    "id": "predicate:root:branch-1:1",
+                    "dimension": "price",
+                    "label": "Price",
+                    "polarity": "positive",
+                    "operator": "atMost",
+                    "value": {
+                      "max": 100000,
+                      "min": null
+                    },
+                    "unit": "INR",
+                    "required": true
+                  }
+                }
+              ]
+            },
+            "preferences": []
+          }
+        ]
+      },
+      "proof_keys": [],
+      "collections_bytes": 2,
+      "collections": []
+    },
+    {
+      "query": "3BHK under 1 lakh",
+      "run": "warm",
+      "seconds": 0.04,
+      "status": 200,
+      "bytes": 5968,
+      "bundle": "catalog-71-299c3135-23aa-4945-8f26-2cf2fc775eaa",
+      "error": null,
+      "ids": [],
+      "intent": {
+        "root": {
+          "op": "leaf",
+          "value": "branch-1"
+        },
+        "branches": [
+          {
+            "id": "branch-1",
+            "constraints": {
+              "kind": "all",
+              "clauses": [
+                {
+                  "kind": "predicate",
+                  "predicate": {
+                    "id": "predicate:root:branch-1:0",
+                    "dimension": "bhk",
+                    "label": "BHK",
+                    "polarity": "positive",
+                    "operator": "equals",
+                    "value": 3,
+                    "required": true
+                  }
+                },
+                {
+                  "kind": "predicate",
+                  "predicate": {
+                    "id": "predicate:root:branch-1:1",
+                    "dimension": "price",
+                    "label": "Price",
+                    "polarity": "positive",
+                    "operator": "atMost",
+                    "value": {
+                      "max": 100000,
+                      "min": null
+                    },
+                    "unit": "INR",
+                    "required": true
+                  }
+                }
+              ]
+            },
+            "preferences": []
+          }
+        ]
+      },
+      "proof_keys": [],
+      "collections_bytes": 2,
+      "collections": []
+    }
+  ],
+  "discovery_bytes": 20008,
+  "baseline_broad_bytes": 375244,
+  "three_ui_research": "Network blocked; retained existing native scrolling pattern; no external code copied.",
+  "performance": [
+    {
+      "mode": "desktop",
+      "scenario": "landing",
+      "fcp": 348,
+      "shifts": [],
+      "cls": 0
+    },
+    {
+      "mode": "desktop",
+      "scenario": "search",
+      "fcp": 380,
+      "shifts": [],
+      "cls": 0
+    },
+    {
+      "mode": "mobile",
+      "scenario": "landing",
+      "fcp": 348,
+      "shifts": [],
+      "cls": 0
+    },
+    {
+      "mode": "mobile",
+      "scenario": "search",
+      "fcp": 360,
+      "shifts": [],
+      "cls": 0
+    }
+  ]
+}

@@ -229,6 +229,8 @@ pub struct SearchRankingPolicy {
     pub broad_local_recall_multiplier: usize,
     #[serde(default = "default_broad_local_recall_min_extra")]
     pub broad_local_recall_min_extra: usize,
+    #[serde(default = "default_lexical_recall_candidate_limit")]
+    pub lexical_recall_candidate_limit: usize,
     #[serde(default = "default_positive_evidence_floor_ratio")]
     pub positive_evidence_floor_ratio: f64,
     #[serde(default = "default_no_positive_evidence_score_multiplier")]
@@ -303,6 +305,7 @@ impl Default for SearchRankingPolicy {
             negative_no_data_penalty_multiplier: default_negative_no_data_penalty_multiplier(),
             broad_local_recall_multiplier: default_broad_local_recall_multiplier(),
             broad_local_recall_min_extra: default_broad_local_recall_min_extra(),
+            lexical_recall_candidate_limit: default_lexical_recall_candidate_limit(),
             positive_evidence_floor_ratio: default_positive_evidence_floor_ratio(),
             no_positive_evidence_score_multiplier: default_no_positive_evidence_score_multiplier(),
             nearby_area_score_penalty: default_nearby_area_score_penalty(),
@@ -685,7 +688,8 @@ fn validate_policy(policy: &ScoringPolicyFile) -> Result<(), DagConfigError> {
             "named-place token policies must be configured".to_string(),
         ));
     }
-    if policy.search_ranking.named_place_candidate_limit == 0
+    if policy.search_ranking.lexical_recall_candidate_limit == 0
+        || policy.search_ranking.named_place_candidate_limit == 0
         || !policy
             .search_ranking
             .named_place_relative_distance_multiplier
@@ -696,7 +700,7 @@ fn validate_policy(policy: &ScoringPolicyFile) -> Result<(), DagConfigError> {
             < 1.0
     {
         return Err(DagConfigError::InvalidConfig(
-            "named-place recall requires a positive candidate limit and relative distance multiplier >= 1"
+            "lexical and named-place recall require positive candidate limits and a relative distance multiplier >= 1"
                 .to_string(),
         ));
     }
@@ -950,6 +954,9 @@ fn default_broad_local_recall_multiplier() -> usize {
 }
 fn default_broad_local_recall_min_extra() -> usize {
     64
+}
+fn default_lexical_recall_candidate_limit() -> usize {
+    128
 }
 fn default_positive_evidence_floor_ratio() -> f64 {
     0.60

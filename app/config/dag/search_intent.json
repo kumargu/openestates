@@ -2,6 +2,58 @@
   "_comment": "Search intent config. Keep parser vocabulary generic: broad Bengaluru regions and place families only. Named localities, roads, societies, schools, hospitals, tech parks, malls, and landmarks belong in DAG/serving entities and facts.",
   "version": 1,
   "description": "NL search parsing helpers. Broad region aliases are loaded from this file via dag_config; named places resolve through DAG/serving facts.",
+  "intent_presentation": {
+    "card_hidden_dimensions": ["bhk", "price", "area", "society", "builder"],
+    "dimension_labels": {
+      "bhk": "BHK",
+      "area": "Area",
+      "society": "Society",
+      "builder": "Builder",
+      "price": "Price",
+      "geography": "Location"
+    },
+    "budget_unit": "INR",
+    "brief": {
+      "predicate_templates": {
+        "default": "{operator} {value}",
+        "equals": "{label} {value}",
+        "inside": "in {value}",
+        "atMost": "{label} at most {max}",
+        "atLeast": "{label} at least {min}",
+        "between": "{label} {min}–{max}",
+        "bhk.equals": "{value} BHK",
+        "price.atMost": "under {max}",
+        "price.atLeast": "from {min}",
+        "price.between": "{min}–{max}",
+        "near.distance": "within {distance} of {value}"
+      },
+      "unit_formats": {
+        "INR": { "prefix": "₹", "scales": [
+          { "divisor": 10000000, "suffix": "Cr" },
+          { "divisor": 100000, "suffix": "L" },
+          { "divisor": 1, "suffix": "" }
+        ] }
+      },
+      "positive_preference_prefix": "prefer ",
+      "negative_preference_prefix": "avoid ",
+      "all_separator": " and ",
+      "any_separator": " or ",
+      "not_prefix": "not ",
+      "branch_separator": " | ",
+      "constraint_preference_separator": "; ",
+      "fallback": "Any available home"
+    },
+    "journey_messages": {
+      "targeted_value_required": "Your search is unchanged. Give a specific replacement value for the selected condition.",
+      "catalog_movement": "Rank changed after the catalog refreshed.",
+      "intent_movement": "Rank changed under your latest refinement.",
+      "selected_retained": "This home remains in your active search.",
+      "selected_rejected_change": "This home stays in your previous results, but does not match the requested change.",
+      "selected_excluded_catalog": "This home is no longer available in the refreshed catalog.",
+      "selected_excluded_intent": "This home is no longer in your refined results.",
+      "failed_conditions_prefix": "Conditions not met: "
+    }
+  },
   "buyer_archetypes": [
     {
       "id": "family",
@@ -372,7 +424,13 @@
       "revision_switch_prefixes": [
         "start over",
         "forget that",
+        "new search",
         "instead"
+      ],
+      "revision_standalone_family_sets": [
+        ["bhk", "budget", "area"],
+        ["bhk", "budget", "society"],
+        ["bhk", "budget", "spatial"]
       ],
       "revision_replace_markers": [
         "matter more",

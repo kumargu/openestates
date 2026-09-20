@@ -90,7 +90,7 @@ export function PropertySearchPanel({
   return (
     <div className="property-search-panel">
       <header className="property-search-panel__header">
-        <strong>{context.queryLabel}</strong>
+        <strong>{cursor.selectedResult.collectionTitle ?? context.queryLabel}</strong>
         <span>{selectedPosition} of {total} {total === 1 ? "home" : "homes"}</span>
       </header>
       <ol
@@ -111,13 +111,13 @@ export function PropertySearchPanel({
                 className="workspace-sidebar__home-open property-search-panel__result-open"
                 aria-current={selected ? "page" : undefined}
                 aria-label={selected
-                  ? `Current home, ${resultName(result)}, result ${position} of ${total}`
-                  : `${resultName(result)}, result ${position} of ${total}`}
+                  ? `Current home, ${resultName(result)}, home ${position} of ${total}`
+                  : `${resultName(result)}, home ${position} of ${total}`}
                 onClick={() => onSelect(result.propertyId)}
               >
                 <strong>{resultName(result)}</strong>
                 <span>{resultCompactMeta(result)}</span>
-                {result.stateDisplay ? <em>{result.stateDisplay}</em> : null}
+                {result.collectionTitle ? (!selected ? <em>{result.collectionTitle}</em> : null) : result.stateDisplay ? <em>{result.stateDisplay}</em> : null}
               </button>
               {!selected ? (
                 <button
@@ -182,7 +182,7 @@ export function PropertySearchStrip({ context }: Props) {
         <button type="button" aria-label="No previous result" disabled>←</button>
       )}
       <div className="property-search-strip__summary">
-        <strong>{context.queryLabel}</strong>
+        <strong>{cursor.selectedResult.collectionTitle ?? context.queryLabel}</strong>
         <span>{position} of {total} {total === 1 ? "home" : "homes"}</span>
       </div>
       {nextResult ? (

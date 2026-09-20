@@ -10,8 +10,8 @@ use super::{
     read_facts_parquet, read_rera_evidence_parquet, read_search_metadata_parquet,
     validate_serving_edge_evidence, validate_society_aliases, ParquetReadError, ReraEvidenceIndex,
     ServingBundleManifest, ServingEdgeRecord, ServingEntityAliasIndex, ServingEntityAliasRecord,
-    ServingEntityRecord, ServingFactIndex, SpatialServingIndex, TantivyIndexError,
-    TantivyRecallIndex,
+    ServingEntityRecord, ServingEvidenceIndex, ServingFactIndex, SpatialServingIndex,
+    TantivyIndexError, TantivyRecallIndex,
 };
 use crate::graph::GraphIndex;
 use crate::search::geo::SpatialEntityIndex;
@@ -30,6 +30,7 @@ pub struct LoadedServingBundle {
     pub graph_index: GraphIndex,
     pub recall_index: TantivyRecallIndex,
     pub fact_index: ServingFactIndex,
+    pub evidence_index: ServingEvidenceIndex,
     pub rera_evidence_index: ReraEvidenceIndex,
     pub entity_index: SpatialEntityIndex,
     pub spatial_index: SpatialServingIndex,
@@ -83,14 +84,20 @@ impl ServingBundleLoader {
         let edges = load_edges(&self.lake, &manifest).await?;
         let aliases = super::types::unique_society_aliases(&entities);
         let mut fact_index = load_fact_index(&self.lake, &manifest).await?;
-        validate_serving_edge_evidence(&edges, fact_index.all_facts(), &manifest.bundle_version)
+        validate_serving_edge_evidence(
+            &edges,
+            fact_index.all_facts(),
+            manifest.proof_snapshot_identity(),
+        )
+        .map_err(ServingBundleLoadError::Configuration)?;
+        let evidence_index = ServingEvidenceIndex::from_records(fact_index.all_facts(), &edges)
             .map_err(ServingBundleLoadError::Configuration)?;
         fact_index.add_society_aliases(&entities);
         fact_index.add_canonical_spatial_bindings(&edges);
         let mut rera_evidence_index = load_rera_evidence_index(&self.lake, &manifest).await?;
         rera_evidence_index.add_aliases(&aliases);
         let mut graph_index =
-            GraphIndex::from_serving_bundle(&entities, &edges, &manifest.bundle_version);
+            GraphIndex::from_serving_bundle(&entities, &edges, manifest.proof_snapshot_identity());
         graph_index.add_entity_aliases(&aliases);
         let entity_index =
             SpatialEntityIndex::from_serving_bundle_with_edges(&entities, &fact_index, &edges);
@@ -106,6 +113,7 @@ impl ServingBundleLoader {
             graph_index,
             recall_index,
             fact_index,
+            evidence_index,
             rera_evidence_index,
             entity_index,
             spatial_index,

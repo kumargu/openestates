@@ -505,6 +505,13 @@ mod tests {
 #[serde(deny_unknown_fields)]
 pub struct ServingBundleManifest {
     pub bundle_version: String,
+    /// Stable identity of the immutable inputs used to derive proof rows.
+    ///
+    /// Older format-12 bundles used `bundle_version` for this purpose. The
+    /// default keeps those bundles readable while new builds pin a content
+    /// identity that survives an offline rebuild.
+    #[serde(default)]
+    pub proof_snapshot_identity: String,
     pub format_version: u32,
     pub created_at: DateTime<Utc>,
     pub entity_count: u64,
@@ -529,4 +536,14 @@ pub struct ServingBundleManifest {
     pub schema_key: String,
     pub tantivy_index_prefix: String,
     pub artifacts: Vec<BundleArtifact>,
+}
+
+impl ServingBundleManifest {
+    pub fn proof_snapshot_identity(&self) -> &str {
+        if self.proof_snapshot_identity.is_empty() {
+            &self.bundle_version
+        } else {
+            &self.proof_snapshot_identity
+        }
+    }
 }

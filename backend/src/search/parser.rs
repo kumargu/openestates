@@ -47,6 +47,7 @@ pub(crate) struct MoneyConstraint {
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct ParsedBudgetConstraint {
+    pub polarity: SlotPolarity,
     pub min: Option<MoneyConstraint>,
     pub max: Option<MoneyConstraint>,
     pub start: usize,
@@ -161,6 +162,7 @@ fn parse_budget_constraints(
                 (right, left)
             };
             budgets.push(ParsedBudgetConstraint {
+                polarity: budget_polarity(tokens, start, config),
                 min: money_constraint_from_amount(min_amount, spanned_tokens),
                 max: money_constraint_from_amount(max_amount, spanned_tokens),
                 start: spanned_tokens.get(start).map_or(0, |token| token.start),
@@ -177,11 +179,13 @@ fn parse_budget_constraints(
             index += 1;
             continue;
         };
-        let (min, max) = match nearest_budget_bound(tokens, amount.start, config) {
+        let (bound, polarity) = nearest_budget_bound(tokens, amount.start, config);
+        let (min, max) = match bound {
             Some(BudgetBound::Min) => (Some(constraint.clone()), None),
             Some(BudgetBound::Max) | None => (None, Some(constraint.clone())),
         };
         budgets.push(ParsedBudgetConstraint {
+            polarity,
             min,
             max,
             start: constraint.start,
@@ -190,9 +194,38 @@ fn parse_budget_constraints(
         index += 1;
     }
 
-    let budget_min = budgets.first().and_then(|budget| budget.min.clone());
-    let budget_max = budgets.first().and_then(|budget| budget.max.clone());
+    let included = budgets
+        .iter()
+        .find(|budget| budget.polarity == SlotPolarity::Include);
+    let budget_min = included.and_then(|budget| budget.min.clone());
+    let budget_max = included.and_then(|budget| budget.max.clone());
     (budget_min, budget_max, budgets)
+}
+
+fn budget_polarity(
+    tokens: &[String],
+    amount_start: usize,
+    config: &UnitValueParserConfig,
+) -> SlotPolarity {
+    let prefix = &tokens[..amount_start];
+    let operator_len = config
+        .operators
+        .iter()
+        .chain(&config.min_operators)
+        .filter(|operator| phrase_matches_suffix(prefix, operator))
+        .map(|operator| query_tokens(operator).len())
+        .max()
+        .unwrap_or(0);
+    let before_operator = &prefix[..prefix.len().saturating_sub(operator_len)];
+    if search_resolution_config()
+        .exclusion_prefixes
+        .iter()
+        .any(|phrase| phrase_matches_suffix(before_operator, phrase))
+    {
+        SlotPolarity::Exclude
+    } else {
+        SlotPolarity::Include
+    }
 }
 
 fn amounts_form_budget_range(
@@ -337,7 +370,7 @@ fn nearest_budget_bound(
     tokens: &[String],
     value_index: usize,
     config: &UnitValueParserConfig,
-) -> Option<BudgetBound> {
+) -> (Option<BudgetBound>, SlotPolarity) {
     let start = 0;
     let window = &tokens[start..value_index];
     let min_match = config
@@ -395,11 +428,12 @@ fn nearest_budget_bound(
                             })
                 });
             if immediate_exclusion || scoped_exclusion {
-                return Some(BudgetBound::Max);
+                // The configured negated minimum is already normalized to an inclusive ceiling.
+                return (Some(BudgetBound::Max), SlotPolarity::Include);
             }
         }
     }
-    bound
+    (bound, budget_polarity(tokens, value_index, config))
 }
 
 fn is_range_connector(token: &str, config: &UnitValueParserConfig) -> bool {

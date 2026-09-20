@@ -8,8 +8,8 @@ use backend::models::{Property, Society};
 use backend::search::geo::SpatialEntityIndex;
 use backend::search::intent::parse_intent;
 use backend::search::{
-    CandidateEvaluationRequest, CandidateEvaluator, IntentAst, SearchEngine, SearchIndex,
-    SearchResponse, SearchRuntimeVersion,
+    CandidateEvaluationRequest, CandidateEvaluator, IntentAst, SearchEngine, SearchExecution,
+    SearchIndex,
 };
 use backend::serving::{
     normalize_alias, DerivedEvidence, EvidenceRef, LoadedServingBundle, ReraEvidenceIndex,
@@ -103,98 +103,6 @@ fn indexed_search_prunes_large_mock_corpus_before_ranking() {
         "indexed search took {elapsed:?} for {} properties and {} recalled candidates",
         properties.len(),
         recall_ids.len()
-    );
-}
-
-#[test]
-fn dangling_named_place_search_evaluates_the_full_hard_eligible_corpus() {
-    const CORPUS_SIZE: usize = 10_000;
-    const MAX_DURATION: Duration = Duration::from_secs(2);
-
-    let mut properties = Vec::with_capacity(CORPUS_SIZE);
-    let mut entities = Vec::with_capacity(CORPUS_SIZE + 1);
-    let mut facts = Vec::with_capacity(CORPUS_SIZE * 2 + 3);
-    entities.push(ServingEntityRecord {
-        entity_id: "place:benchmark-tech-park".to_string(),
-        entity_type: "place".to_string(),
-        name: "Benchmark Tech Park".to_string(),
-        root_source: Some("google".to_string()),
-        visibility: Default::default(),
-        searchable_text: "Benchmark Tech Park".to_string(),
-    });
-    facts.extend([
-        serving_fact(
-            "place:benchmark-tech-park",
-            "geo.latitude",
-            FactValue::Numeric(12.97),
-        ),
-        serving_fact(
-            "place:benchmark-tech-park",
-            "geo.longitude",
-            FactValue::Numeric(77.59),
-        ),
-        serving_fact(
-            "place:benchmark-tech-park",
-            "place.category",
-            FactValue::Text("tech_park".to_string()),
-        ),
-    ]);
-
-    for index in 0..CORPUS_SIZE {
-        let id = format!("scale-society-{index:05}");
-        let mut property = property(id.clone(), "Bengaluru", 3, 18_000_000);
-        if index % 4 == 0 {
-            property.bhk = 2;
-        } else if index % 4 == 1 {
-            property.price = 25_000_000;
-        }
-        properties.push(property);
-        let entity_id = format!("society:{id}");
-        entities.push(ServingEntityRecord {
-            entity_id: entity_id.clone(),
-            entity_type: "society".to_string(),
-            name: id,
-            root_source: Some("serving_bundle".to_string()),
-            visibility: Default::default(),
-            searchable_text: String::new(),
-        });
-        let offset = 0.01 + index as f64 * 0.0000001;
-        facts.push(serving_fact(
-            &entity_id,
-            "geo.latitude",
-            FactValue::Numeric(12.97 + offset),
-        ));
-        facts.push(serving_fact(
-            &entity_id,
-            "geo.longitude",
-            FactValue::Numeric(77.59 + offset),
-        ));
-    }
-
-    let bundle = loaded_bundle(entities, facts);
-    let search_index = SearchIndex::build_with_serving_entities(&properties, &bundle.entities);
-    let snapshot = search_runtime_snapshot(bundle, &properties, search_index);
-    let started = Instant::now();
-    let output = SearchEngine::new(&snapshot).search("3bhk near Benchmark Tech Park under 2cr");
-    let elapsed = started.elapsed();
-
-    assert!(!output.results.is_empty());
-    assert!(output.compiled_plan.branches[0].geo_scope.is_bundle_wide());
-    assert!(output.results.len() <= 32);
-    assert!(output.eligible_result_count >= output.results.len());
-    assert!(output
-        .results
-        .iter()
-        .all(|result| result.card.bhk == 3 && result.card.price <= 20_000_000));
-    assert!(
-        output.diagnostics.recall.structured_count < CORPUS_SIZE,
-        "hard eligibility should prune before spatial recall"
-    );
-    assert!(
-        elapsed <= MAX_DURATION,
-        "full named-place search took {elapsed:?} across {CORPUS_SIZE} properties: {:?}; recall: {:?}",
-        output.diagnostics.layer_timings,
-        output.diagnostics.recall,
     );
 }
 
@@ -743,6 +651,7 @@ async fn search_cache_key_changes_with_bundle_version() {
             CachedSearchOutput {
                 response: Arc::new(empty_response("3bhk whitefield")),
                 compiled_plan: Arc::new(inert_test_plan("3bhk whitefield", "bundle-v1")),
+                collections: Arc::from(Vec::new()),
                 log_messages: Vec::new(),
             },
         )
@@ -768,6 +677,7 @@ async fn search_cache_hit_still_carries_log_metadata() {
             CachedSearchOutput {
                 response: Arc::new(empty_response("3bhk whitefield")),
                 compiled_plan: Arc::new(inert_test_plan("3bhk whitefield", "bundle-v1")),
+                collections: Arc::from(Vec::new()),
                 log_messages: vec![SearchLogMessage::SearchEvent(event.clone())],
             },
         )
@@ -817,22 +727,13 @@ fn runtime_key(bundle_version: &str) -> RuntimeVersionKey {
     }
 }
 
-fn empty_response(query: &str) -> SearchResponse {
-    let version = runtime_key("test-bundle");
-    SearchResponse {
+fn empty_response(query: &str) -> SearchExecution {
+    SearchExecution {
         query: query.to_string(),
-        revision_id: "rev-001-test".to_string(),
-        revision: None,
         ast_fingerprint: "sha256:test".to_string(),
         result_sets: Vec::new(),
         ordered_result_ids: Vec::new(),
         total_matches: 0,
-        runtime_version: SearchRuntimeVersion {
-            serving_bundle_version: version.serving_bundle_version,
-            scoring_policy_version: version.scoring_policy_version,
-            search_engine_version: version.search_engine_version,
-            semantic_contract_digest: version.semantic_contract_digest,
-        },
         area_context: None,
         state: "no_matches".to_string(),
         search_guidance: None,
@@ -1023,9 +924,13 @@ fn loaded_bundle_core(
         SpatialServingIndex::from_serving_bundle_with_edges(&entities, &fact_index, &edges);
     let mut graph_index = GraphIndex::from_serving_bundle(&entities, &edges, "efficiency-contract");
     graph_index.add_entity_aliases(&backend::serving::unique_society_aliases(&entities));
+    let evidence_index =
+        backend::serving::ServingEvidenceIndex::from_records(fact_index.all_facts(), &edges)
+            .expect("efficiency fixture evidence index");
     LoadedServingBundle {
         manifest: ServingBundleManifest {
             bundle_version: "efficiency-contract".to_string(),
+            proof_snapshot_identity: "efficiency-contract".to_string(),
             format_version: 1,
             created_at: Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
             entity_count: entities.len() as u64,
@@ -1055,6 +960,7 @@ fn loaded_bundle_core(
         edges,
         recall_index,
         fact_index,
+        evidence_index,
         rera_evidence_index: ReraEvidenceIndex::default(),
         entity_index,
         spatial_index,

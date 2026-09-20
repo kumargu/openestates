@@ -3,6 +3,9 @@ import type {
   SearchResultItem,
   SearchRuntimeVersion,
 } from "./types.ts";
+import { journeyNavigationCache, journeyUrl, readSavedJourney } from "./search-journey.ts";
+import { journeyNavigationResults } from "./landing-search-rails.ts";
+import { primaryProofFocus } from "./proof-focus.ts";
 
 export type NavigationMode = "landing" | "discovery" | "property-context" | "workspace";
 
@@ -20,9 +23,9 @@ const DISCOVERY_MAP_CONTEXT_LATEST_KEY = "openestates:discovery-map-context:late
 const PROPERTY_SEARCH_CONTEXT_KEY = "openestates:property-search-context:v1";
 const SEARCH_SPAN_INDEX_KEY = "openestates:search-span-index:v1";
 const SEARCH_JOURNEY_PREFERENCE_KEY = "openestates:search-journey-preferences:v1";
-const DISCOVERY_MAP_CANDIDATE_LIMIT = 24;
-const SEARCH_SPAN_HISTORY_LIMIT = 6;
-export const SEARCH_SPAN_TTL_MS = 4 * 60 * 60 * 1_000;
+const DISCOVERY_MAP_CANDIDATE_LIMIT = journeyNavigationCache.mapCandidateLimit;
+const SEARCH_SPAN_HISTORY_LIMIT = journeyNavigationCache.historyLimit;
+export const SEARCH_SPAN_TTL_MS = journeyNavigationCache.ttlMs;
 export const SEARCH_JOURNEY_PREFERENCES_CHANGED_EVENT =
   "openestates:search-journey-preferences-changed";
 const SEARCH_SPAN_URL_PARAMS = ["context", "qf", "searchHome"] as const;
@@ -36,6 +39,7 @@ export type PropertySearchResult = {
   bhk?: number;
   sqft?: number;
   stateDisplay?: string;
+  collectionTitle?: string;
   proofFocus?: ProofFocus;
 };
 
@@ -298,7 +302,8 @@ export function writeDiscoveryContext(url: string, scrollY = 0): void {
     scrollY: Math.max(0, Math.round(scrollY)),
     resultCount: previous?.url === url ? previous.resultCount : undefined,
   };
-  window.sessionStorage.setItem(DISCOVERY_STORAGE_KEY, JSON.stringify(context));
+  try { window.sessionStorage.setItem(DISCOVERY_STORAGE_KEY, JSON.stringify(context)); }
+  catch { /* Navigation persistence is optional. */ }
 }
 
 export function writeDiscoveryResultCount(url: string, resultCount: number): void {
@@ -312,7 +317,8 @@ export function writeDiscoveryResultCount(url: string, resultCount: number): voi
     scrollY: previous?.url === url ? previous.scrollY : Math.max(0, Math.round(window.scrollY)),
     resultCount,
   };
-  window.sessionStorage.setItem(DISCOVERY_STORAGE_KEY, JSON.stringify(context));
+  try { window.sessionStorage.setItem(DISCOVERY_STORAGE_KEY, JSON.stringify(context)); }
+  catch { /* Navigation persistence is optional. */ }
 }
 
 export function discoveryReturnHref(): string {
@@ -334,33 +340,39 @@ export function requestDiscoveryReturn(url: string): void {
   if (typeof window === "undefined") return;
   const context = readDiscoveryContext();
   if (!context || context.url !== url) return;
-  window.sessionStorage.setItem(DISCOVERY_RETURN_INTENT_KEY, JSON.stringify(context));
+  try { window.sessionStorage.setItem(DISCOVERY_RETURN_INTENT_KEY, JSON.stringify(context)); }
+  catch { /* Navigation persistence is optional. */ }
 }
 
-export function captureDiscoveryDeparture(url: string, scrollY: number): void {
+export function captureDiscoveryDeparture(url: string, scrollY: number, returnHistoryIndex = currentHistoryIndex()): void {
   writeDiscoveryContext(url, scrollY);
   if (typeof window === "undefined") return;
-  const contextId = window.sessionStorage.getItem(DISCOVERY_MAP_CONTEXT_LATEST_KEY);
-  const searchContext = readPropertySearchContext(contextId);
-  if (contextId && searchContext?.returnUrl === url) {
-    window.sessionStorage.setItem(
-      propertySearchContextStorageKey(contextId),
-      JSON.stringify({
-        ...searchContext,
-        returnScrollY: Math.max(0, Math.round(scrollY)),
-      }),
-    );
-  }
+  try {
+    const contextId = window.sessionStorage.getItem(DISCOVERY_MAP_CONTEXT_LATEST_KEY);
+    const searchContext = readPropertySearchContext(contextId);
+    if (contextId && searchContext?.returnUrl === url) {
+      window.sessionStorage.setItem(
+        propertySearchContextStorageKey(contextId),
+        JSON.stringify({
+          ...searchContext,
+          returnScrollY: Math.max(0, Math.round(scrollY)),
+          returnHistoryIndex,
+        }),
+      );
+    }
+  } catch { /* The destination remains usable without a scroll checkpoint. */ }
   requestDiscoveryReturn(url);
 }
 
 export function clearDiscoveryContext(): void {
   if (typeof window === "undefined") return;
-  window.sessionStorage.removeItem(DISCOVERY_STORAGE_KEY);
-  window.sessionStorage.removeItem(DISCOVERY_RETURN_INTENT_KEY);
-  for (const entry of readSearchSpanIndex()) removeSearchSpanStorage(entry.id);
-  window.sessionStorage.removeItem(SEARCH_SPAN_INDEX_KEY);
-  window.sessionStorage.removeItem(DISCOVERY_MAP_CONTEXT_LATEST_KEY);
+  try {
+    window.sessionStorage.removeItem(DISCOVERY_STORAGE_KEY);
+    window.sessionStorage.removeItem(DISCOVERY_RETURN_INTENT_KEY);
+    for (const entry of readSearchSpanIndex()) removeSearchSpanStorage(entry.id);
+    window.sessionStorage.removeItem(SEARCH_SPAN_INDEX_KEY);
+    window.sessionStorage.removeItem(DISCOVERY_MAP_CONTEXT_LATEST_KEY);
+  } catch { /* An unavailable navigation cache must not block a new search. */ }
 }
 
 export function writeDiscoveryMapContext(
@@ -369,14 +381,14 @@ export function writeDiscoveryMapContext(
   focusOrOptions: ((result: SearchResultItem) => ProofFocus | undefined) | {
     id?: string;
     now?: number;
-  } = (result) => result.proof_focuses?.[0],
+  } = primaryProofFocus,
   options: { id?: string; now?: number } = {},
 ): string | null {
   const fingerprint = queryFingerprint(query);
   if (typeof window === "undefined" || !fingerprint) return null;
   const focusForResult = typeof focusOrOptions === "function"
     ? focusOrOptions
-    : (result: SearchResultItem) => result.proof_focuses?.[0];
+    : primaryProofFocus;
   const contextOptions = typeof focusOrOptions === "function" ? options : focusOrOptions;
   const societies = new Map<string, DiscoveryMapCandidate>();
   const candidates: DiscoveryMapCandidate[] = [];
@@ -385,7 +397,7 @@ export function writeDiscoveryMapContext(
   )];
   for (const [rank, result] of results.entries()) {
     const societyName = result.society_name.trim() || result.title.trim();
-    const societyId = result.kg_entity_refs?.society_entity_id?.trim();
+    const societyId = result.society_id?.trim();
     if (!societyName || !societyId) continue;
     const existing = societies.get(societyId);
     if (existing) {
@@ -413,7 +425,7 @@ export function writeDiscoveryMapContext(
   const now = contextOptions.now ?? Date.now();
   try {
     const previousId = window.sessionStorage.getItem(DISCOVERY_MAP_CONTEXT_LATEST_KEY);
-    const previous = readDiscoveryMapContext(previousId, now);
+    const previous = contextOptions.id ? null : readDiscoveryMapContext(previousId, now);
     const id = contextOptions.id
       ?? (previous?.queryFingerprint === fingerprint ? previous.id : newContextId());
     const context: DiscoveryMapContext = {
@@ -472,10 +484,11 @@ export function writePropertySearchContext(
   results: SearchResultItem[],
   runtimeVersion: SearchRuntimeVersion | null | undefined,
   focusForResult: (result: SearchResultItem) => ProofFocus | undefined =
-    (result) => result.proof_focuses?.[0],
+    primaryProofFocus,
   now = Date.now(),
   returnScrollY = typeof window === "undefined" ? 0 : window.scrollY,
   returnHistoryIndex = currentHistoryIndex(),
+  buyerBrief = query,
 ): boolean {
   const fingerprint = queryFingerprint(query);
   if (
@@ -498,9 +511,8 @@ export function writePropertySearchContext(
       price: knownPositiveNumber(result.price),
       bhk: knownPositiveNumber(result.bhk),
       sqft: knownPositiveNumber(result.sqft),
-      stateDisplay: result.home_state_display?.trim()
-        || result.project_status_display?.trim()
-        || undefined,
+      stateDisplay: result.homeStateDisplay?.trim() || undefined,
+      collectionTitle: result.collectionTitle,
       proofFocus: isProofFocus(proofFocus) ? proofFocus : undefined,
     } satisfies PropertySearchResult];
   }).filter((result, index, allResults) =>
@@ -510,7 +522,7 @@ export function writePropertySearchContext(
     version: 1,
     id,
     queryFingerprint: fingerprint,
-    queryLabel: query.trim(),
+    queryLabel: buyerBrief.trim(),
     returnUrl,
     returnScrollY: Number.isFinite(returnScrollY)
       ? Math.max(0, Math.round(returnScrollY))
@@ -539,11 +551,12 @@ export function writeSearchJourneyContext(
   results: SearchResultItem[],
   runtimeVersion: SearchRuntimeVersion | null | undefined,
   focusForResult: (result: SearchResultItem) => ProofFocus | undefined =
-    (result) => result.proof_focuses?.[0],
+    primaryProofFocus,
   now = Date.now(),
+  buyerBrief = query,
+  revisionId?: string,
 ): SearchSpanReference | null {
-  if (results.length === 0) return null;
-  const journeyId = newContextId();
+  const journeyId = revisionId ?? newContextId();
   const id = writeDiscoveryMapContext(query, results, focusForResult, {
     id: journeyId,
     now,
@@ -560,6 +573,9 @@ export function writeSearchJourneyContext(
       runtimeVersion,
       focusForResult,
       now,
+      typeof window === "undefined" ? 0 : window.scrollY,
+      currentHistoryIndex(),
+      buyerBrief,
     )
   ) {
     if (id && typeof window !== "undefined") forgetSearchSpan(id);
@@ -568,15 +584,33 @@ export function writeSearchJourneyContext(
   return { id, queryFingerprint: fingerprint };
 }
 
+/** Navigation is a rebuildable projection of the persisted backend journey.
+ * Returning to results still resumes the signed intent against the current catalog. */
+function restoreJourneyNavigation(id: string, now: number): void {
+  const saved = readSavedJourney(id);
+  if (!saved) return;
+  const response = saved.response;
+  const results = journeyNavigationResults(response);
+  writeDiscoveryMapContext(saved.query, results, primaryProofFocus, { id, now });
+  writePropertySearchContext(id, saved.query, journeyUrl(saved.query, response), results,
+    response.runtimeVersion, primaryProofFocus, now, 0, undefined,
+    response.journey?.active.buyerBrief ?? saved.query);
+}
+
 export function readPropertySearchContext(
   contextId: string | null,
   now = Date.now(),
 ): StoredPropertySearchContext | null {
   if (typeof window === "undefined" || !contextId?.trim()) return null;
   try {
-    const parsed: unknown = JSON.parse(
+    let parsed: unknown = JSON.parse(
       window.sessionStorage.getItem(propertySearchContextStorageKey(contextId)) ?? "null",
     );
+    if (!parsed || (typeof parsed === "object" && "createdAt" in parsed
+      && typeof parsed.createdAt === "number" && now - parsed.createdAt > SEARCH_SPAN_TTL_MS)) {
+      restoreJourneyNavigation(contextId, now);
+      parsed = JSON.parse(window.sessionStorage.getItem(propertySearchContextStorageKey(contextId)) ?? "null");
+    }
     if (!parsed || typeof parsed !== "object") return null;
     const candidate = parsed as Partial<StoredPropertySearchContext>;
     if (
@@ -743,10 +777,10 @@ export function propertyHrefWithSearchSpan(
     `/property/${encodeURIComponent(propertyId)}${suffix}`,
     searchSpanReferenceForTarget(context, propertyId),
   );
-  if (suffix || !result?.proofFocus) return href;
+  if (suffix || !result?.proofFocus?.proofToken) return href;
   const [pathname, search = ""] = href.split("?", 2);
   const params = new URLSearchParams(search);
-  params.set("focus", JSON.stringify(result.proofFocus));
+  params.set("proofToken", result.proofFocus.proofToken);
   return `${pathname}?${params.toString()}`;
 }
 
@@ -836,9 +870,14 @@ export function readDiscoveryMapContext(
 ): DiscoveryMapContext | null {
   if (typeof window === "undefined" || !contextId?.trim()) return null;
   try {
-    const parsed: unknown = JSON.parse(
+    let parsed: unknown = JSON.parse(
       window.sessionStorage.getItem(contextStorageKey(contextId)) ?? "null",
     );
+    if (!parsed || (typeof parsed === "object" && "createdAt" in parsed
+      && typeof parsed.createdAt === "number" && now - parsed.createdAt > SEARCH_SPAN_TTL_MS)) {
+      restoreJourneyNavigation(contextId, now);
+      parsed = JSON.parse(window.sessionStorage.getItem(contextStorageKey(contextId)) ?? "null");
+    }
     if (!parsed || typeof parsed !== "object") return null;
     const candidate = parsed as Partial<DiscoveryMapContext>;
     if (
@@ -932,7 +971,6 @@ export function consumeDiscoveryReturn(url: string): number | null {
     ) return null;
     return candidate.scrollY;
   } catch {
-    window.sessionStorage.removeItem(DISCOVERY_RETURN_INTENT_KEY);
     return null;
   }
 }

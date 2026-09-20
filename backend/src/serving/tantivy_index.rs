@@ -202,10 +202,13 @@ fn has_token_overlap(query_terms: &[String], text: &str) -> bool {
     if query_terms.is_empty() {
         return false;
     }
-    let tokens = tokenize_for_diagnostics(text);
-    query_terms
-        .iter()
-        .any(|query_term| tokens.iter().any(|token| token == query_term))
+    text.split(|ch: char| !ch.is_ascii_alphanumeric())
+        .filter(|token| token.len() >= 3)
+        .any(|token| {
+            query_terms
+                .iter()
+                .any(|query| token.eq_ignore_ascii_case(query))
+        })
 }
 
 fn tokenize_for_diagnostics(value: &str) -> Vec<String> {

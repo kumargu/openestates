@@ -111,6 +111,14 @@ pub fn build_app_router_with_lake(state: Arc<AppState>, lake: LakeStore) -> Rout
         .route(
             "/api/search/revisions",
             security.protect_search(post(routes::search_revisions::revise_search)),
+        )
+        .route(
+            "/api/search/resume",
+            security.protect_search(post(routes::search_revisions::resume_search)),
+        )
+        .route(
+            "/api/search/proofs/resolve",
+            security.protect_search(post(routes::search_revisions::resolve_search_proof)),
         );
 
     let batch_routes = security.protect_batch_reads(

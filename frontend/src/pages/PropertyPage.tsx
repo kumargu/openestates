@@ -15,8 +15,8 @@ import {
   getProperty,
   getPropertySurface,
   getPropertySurfacesBatch,
-  parseProofFocusParam,
   propertyDetailPath,
+  resolveSearchProof,
 } from "../lib/api.ts";
 import { PageState } from "../components/PageState.tsx";
 import { PageTitle } from "../components/PageTitle.tsx";
@@ -54,9 +54,11 @@ import {
   initialPropertySurfaceId,
   propertyProofMatch,
   propertySceneProofFocus,
+  resolvedProofFocus,
 } from "../lib/proof-focus.ts";
 import { backendUrl, publicSiteUrl } from "../lib/runtimeConfig.ts";
 import { useSearchSpan } from "../components/workspace/SearchSpanContext.ts";
+import { selectJourneyProperty } from "../lib/search-journey.ts";
 
 function hasKnownNumber(value: number | null | undefined): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
@@ -65,6 +67,7 @@ function hasKnownNumber(value: number | null | undefined): value is number {
 const ARRIVAL_STORY_SURFACE_ID = "arrival_story";
 
 function focusedEvidenceSource(data: PropertyDetailResponse, focus: ProofFocus) {
+  if (focus.proofToken) return focus.sourceUrl;
   for (const section of data.evidence?.sections ?? []) {
     const item = section.items.find((candidate) =>
       candidate.key?.toLocaleLowerCase("en-IN")
@@ -156,7 +159,7 @@ export function PropertyPage() {
       />
     );
 
-  const focusParam = searchParams.get("focus");
+  const focusParam = searchParams.get("proofToken");
   const contextId = searchParams.get("context");
   const contextQueryFingerprint = searchParams.get("qf");
   return (
@@ -185,16 +188,28 @@ function PropertyPageBody({
   const propertySearchContext = useSearchSpan();
   const [storyPlaying, setStoryPlaying] = useState(true);
   const [data, setData] = useState<PropertyDetailResponse | null>(null);
-  const proofFocus = useMemo(() => {
-    const focus = parseProofFocusParam(focusParam);
-    const detailBundleVersion = data?.evidence?.serving_bundle_version;
-    if (
-      detailBundleVersion
-      && propertySearchContext
-      && detailBundleVersion !== propertySearchContext.runtimeVersion.servingBundleVersion
-    ) return undefined;
-    return focus;
-  }, [data?.evidence?.serving_bundle_version, focusParam, propertySearchContext]);
+  const [resolvedFocus, setResolvedFocus] = useState<ProofFocus>();
+  const [proofUnavailable, setProofUnavailable] = useState(false);
+  const proofFocus = resolvedFocus;
+
+  useEffect(() => {
+    const token = focusParam;
+    if (!token) return;
+    const controller = new AbortController();
+    void resolveSearchProof(token, id, { signal: controller.signal }).then((proof) => {
+      if (controller.signal.aborted) return;
+      const focus = resolvedProofFocus(proof, token);
+      setResolvedFocus(focus);
+      setProofUnavailable(!focus);
+    }).catch(() => {
+      if (!controller.signal.aborted) setProofUnavailable(true);
+    });
+    return () => controller.abort();
+  }, [id, focusParam]);
+
+  useEffect(() => {
+    if (propertySearchContext) selectJourneyProperty(propertySearchContext.returnUrl, id);
+  }, [id, propertySearchContext]);
   const [aroundThisHomeScene, setAroundThisHomeScene] =
     useState<SurfaceSceneResponse | null>(null);
   const [arrivalScene, setArrivalScene] =
@@ -324,7 +339,10 @@ function PropertyPageBody({
       propertySceneProofFocus(proofFocus),
     )
       .then((scene) => {
-        if (!cancelled) setAroundThisHomeScene(scene);
+        if (!cancelled) {
+          setAroundThisHomeScene(scene);
+          if (propertySceneProofFocus(proofFocus)?.proofToken && scene.proofFocusStatus && scene.proofFocusStatus !== "applied") setProofUnavailable(true);
+        }
       })
       .catch(() => {
         if (!cancelled) setAroundThisHomeScene(null);
@@ -535,6 +553,7 @@ function PropertyPageBody({
             ),
           }}
         />
+        {proofUnavailable && <p className="property-atlas-proof-status" role="status">This search receipt is no longer available. You can still explore the home.</p>}
         {hasGoogleReviews && <section id="resident-voice" className="property-atlas-reviews" aria-labelledby="atlas-reviews-title" tabIndex={-1}>
           <header>
             <h2 id="atlas-reviews-title">What residents say</h2>
@@ -621,6 +640,7 @@ function PropertyPageBody({
           />
 
           <main className="property-clean-flow">
+            {proofUnavailable && <p role="status">This search receipt is no longer available. You can still explore the home.</p>}
             <PropertySearchMatch data={data} focus={proofFocus} />
 
             {story.map.available && aroundThisHomeContext && (
