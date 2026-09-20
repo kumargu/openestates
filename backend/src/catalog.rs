@@ -224,8 +224,9 @@ impl CatalogRecords {
         })
     }
 
-    /// Extract one society and its property rows. Support entities referenced by
-    /// its direct relations are retained so the snapshot remains self-contained.
+    /// Extract one society, its properties, and the support entities collected
+    /// for that society. Nearby-place edges are derived only after snapshots are
+    /// assembled, so unlinked support entities must survive this partitioning.
     fn for_society(&self, seed: &SourceEntitySeed) -> Result<Self, CatalogError> {
         validate_seed(seed)?;
         let identities = seed_identities(seed);
@@ -256,20 +257,23 @@ impl CatalogRecords {
                 .map(|edge| edge.from_entity_id.clone()),
         );
 
-        let incident_edges = self
+        let mut retained_ids = primary_ids.clone();
+        retained_ids.extend(
+            self.entities
+                .iter()
+                .filter(|entity| !matches!(entity.entity_type.as_str(), "society" | "property"))
+                .map(|entity| entity.entity_id.clone()),
+        );
+
+        let retained_edges = self
             .edges
             .iter()
             .filter(|edge| {
-                primary_ids.contains(&edge.from_entity_id)
-                    || primary_ids.contains(&edge.to_entity_id)
+                retained_ids.contains(&edge.from_entity_id)
+                    && retained_ids.contains(&edge.to_entity_id)
             })
             .cloned()
             .collect::<Vec<_>>();
-        let mut retained_ids = primary_ids.clone();
-        for edge in &incident_edges {
-            retained_ids.insert(edge.from_entity_id.clone());
-            retained_ids.insert(edge.to_entity_id.clone());
-        }
         let records = Self {
             entities: self
                 .entities
@@ -289,7 +293,7 @@ impl CatalogRecords {
                 .filter(|row| retained_ids.contains(&row.entity_id))
                 .cloned()
                 .collect(),
-            edges: incident_edges,
+            edges: retained_edges,
             rera_evidence: self
                 .rera_evidence
                 .iter()
@@ -1815,5 +1819,35 @@ mod tests {
                 .unwrap(),
             ),
         }
+    }
+
+    #[test]
+    fn society_partition_retains_unlinked_places_for_proximity_derivation() {
+        let seed = seed("waterford");
+        let mut records = records("waterford", "WATERFORD", 1_500.0);
+        records.entities.push(ServingEntityRecord {
+            entity_id: "place:school-near-waterford".to_string(),
+            entity_type: "place".to_string(),
+            name: "Neighbourhood School".to_string(),
+            root_source: Some("google".to_string()),
+            visibility: ServingEntityVisibility::Searchable,
+            searchable_text: "Neighbourhood School".to_string(),
+        });
+        records.facts.push(fact(
+            "place:school-near-waterford",
+            "geo.latitude",
+            FactValue::Numeric(12.982),
+            Utc::now(),
+        ));
+
+        let scoped = records.for_society(&seed).unwrap();
+
+        assert!(scoped
+            .entities
+            .iter()
+            .any(|entity| entity.entity_id == "place:school-near-waterford"));
+        assert!(scoped.facts.iter().any(|fact| {
+            fact.entity_id == "place:school-near-waterford" && fact.fact_key == "geo.latitude"
+        }));
     }
 }
