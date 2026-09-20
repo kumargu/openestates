@@ -17,6 +17,8 @@ pub struct InventoryOption {
     pub size_sqft: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub evidence_reference: Option<EvidenceRef>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence_fact_key: Option<String>,
 }
 
 impl InventoryOption {
@@ -43,17 +45,23 @@ impl InventoryOption {
                 };
                 let value = serde_json::from_str::<InventoryObservationValue>(encoded).ok()?;
                 let option = value.into_option(property, society_entity_id)?;
-                Some((observation.observation_id.as_str(), observation, option))
+                Some((
+                    observation.observation_id.as_str(),
+                    observation,
+                    fact.fact_key.as_str(),
+                    option,
+                ))
             })
             .collect::<Vec<_>>();
         candidates.sort_by(|left, right| left.0.cmp(right.0));
         candidates.dedup_by(|left, right| left.0 == right.0);
-        let (_, observation, mut option) = candidates.into_iter().next()?;
+        let (_, observation, fact_key, mut option) = candidates.into_iter().next()?;
         let evidence_reference = EvidenceRef::for_observation(snapshot_identity, observation);
         evidence_reference
             .validate_for(society_entity_id, snapshot_identity)
             .ok()?;
         option.evidence_reference = Some(evidence_reference);
+        option.evidence_fact_key = Some(fact_key.to_string());
         Some(option)
     }
 
@@ -170,6 +178,7 @@ impl InventoryOption {
             unit: Some(unit.to_string()),
             observation_ids: Vec::new(),
             evidence_refs: vec![evidence_reference.clone()],
+            fact_key: self.evidence_fact_key.clone(),
             derived_evidence: None,
             algorithm_version: "inventory-option-evaluator-v2".to_string(),
             confidence: 1.0,
@@ -208,6 +217,7 @@ impl InventoryObservationValue {
             price_max,
             size_sqft: self.area_sqft.filter(|value| *value > 0),
             evidence_reference: None,
+            evidence_fact_key: None,
         };
         let property_price = (property.price > 0).then_some(property.price);
         let property_min = property.price_min.or(property_price);
@@ -247,6 +257,8 @@ pub struct VerifiedMatch {
     pub observation_ids: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub evidence_refs: Vec<EvidenceRef>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fact_key: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub derived_evidence: Option<DerivedEvidence>,
     pub algorithm_version: String,
@@ -539,6 +551,15 @@ mod inventory_tests {
                 .unwrap();
 
         assert_eq!(forward_option, reverse_option);
+        assert_eq!(
+            forward_option.evidence_fact_key.as_deref(),
+            Some("fixture_inventory")
+        );
+        let evaluation = forward_option.evaluate_bhk("property:one", subject, 3, "bundle:v9");
+        assert_eq!(
+            evaluation.verified_matches[0].fact_key.as_deref(),
+            Some("fixture_inventory")
+        );
         let evidence = forward_option.evidence_reference.unwrap();
         assert!(evidence.validate_for(subject, "bundle:v9").is_ok());
     }

@@ -124,8 +124,13 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
 
   const searchCatalogVersion = storedPropertySearchContext
     ?.runtimeVersion.servingBundleVersion ?? null;
+  const shouldLoadPropertyCatalog = shellMode === "workspace"
+    || shellMode === "property-context"
+    || shortlistIds.length > 0
+    || queryIds.length > 0;
 
   useEffect(() => {
+    if (!shouldLoadPropertyCatalog) return undefined;
     const controller = new AbortController();
     const refresh = searchCatalogVersion !== null
       && loadedCatalogBundleVersion !== searchCatalogVersion;
@@ -140,7 +145,7 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
         if (!refresh) setProperties([]);
       });
     return () => controller.abort();
-  }, [loadedCatalogBundleVersion, searchCatalogVersion]);
+  }, [loadedCatalogBundleVersion, searchCatalogVersion, shouldLoadPropertyCatalog]);
 
   useEffect(() => {
     function refresh() {
@@ -200,15 +205,16 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
       return undefined;
     }
     if (shellMode !== "discovery") return undefined;
-    const url = `${location.pathname}${location.search}`;
+    const url = `${location.pathname}${location.search}${location.hash}`;
 
+    const returnHistoryIndex: number | undefined = window.history.state?.idx;
     let latestScrollY = window.scrollY;
     const trackScroll = () => {
       latestScrollY = window.scrollY;
     };
     const captureHistoryDeparture = () => {
       latestScrollY = window.scrollY;
-      captureDiscoveryDeparture(url, latestScrollY);
+      captureDiscoveryDeparture(url, latestScrollY, returnHistoryIndex);
     };
     const captureLinkDeparture = (event: MouseEvent) => {
       const target = event.target instanceof Element ? event.target : null;
@@ -216,7 +222,7 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
       if (!anchor) return;
       const destination = new URL(anchor.href, window.location.href);
       if (destination.origin !== window.location.origin) return;
-      if (`${destination.pathname}${destination.search}` === url) return;
+      if (`${destination.pathname}${destination.search}${destination.hash}` === url) return;
       captureHistoryDeparture();
     };
 
@@ -231,7 +237,7 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
       writeDiscoveryContext(url, latestScrollY);
       requestDiscoveryReturn(url);
     };
-  }, [location.pathname, location.search, shellMode]);
+  }, [location.pathname, location.search, location.hash, shellMode]);
 
   const activeView = activeWorkspaceView(location.pathname);
   const compareFocusIds = queryIds.filter((id) => catalogPropertyIds.has(id));

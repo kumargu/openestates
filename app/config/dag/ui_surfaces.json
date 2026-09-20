@@ -1,6 +1,12 @@
 {
   "version": 1,
   "description": "Buyer-facing surfaces map to leaf sets. One signal, one primary surface.",
+  "proofFocusMessages": {
+    "stale": "This evidence changed since your search.",
+    "retired": "This evidence is no longer available.",
+    "mismatch": "This proof belongs to a different home or surface.",
+    "unavailable": "This evidence cannot be focused on this surface."
+  },
   "surfaces": [
     {
       "id": "around_this_home",

@@ -264,7 +264,12 @@ async fn three_societies_reach_serving_with_listing_and_builder_evidence() {
         execution: backend::security::ExecutionLanes::current(),
         search_runtime: ArcSwap::from_pointee(runtime),
         search_cache: SearchResponseCache::new(8),
-        search_revision_caches: backend::state::SearchRevisionCaches::new(8, 8),
+        search_revision_caches: backend::state::SearchRevisionCaches::new(
+            8,
+            8 * 1024 * 1024,
+            8,
+            8 * 1024 * 1024,
+        ),
         property_catalog_cache: tokio::sync::Mutex::new(None),
         search_event_tx,
         search_log_dropped_count: AtomicU64::new(0),
@@ -298,8 +303,14 @@ async fn three_societies_reach_serving_with_listing_and_builder_evidence() {
             .unwrap(),
     )
     .unwrap();
-    assert_eq!(body["totalMatches"], 3);
-    assert_eq!(body["orderedResultIds"].as_array().unwrap().len(), 3);
+    assert_eq!(body["active"]["results"]["totalMatches"], 3);
+    assert_eq!(
+        body["active"]["results"]["orderedResultIds"]
+            .as_array()
+            .unwrap()
+            .len(),
+        3
+    );
 }
 
 struct ProjectFixture {

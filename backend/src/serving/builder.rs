@@ -3,6 +3,8 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 
 use chrono::Utc;
+use serde::Serialize;
+use sha2::{Digest, Sha256};
 
 use crate::assets::{
     AssetPathBuilder, SocietyGoldEdgeRecord, SocietyGoldFactAnnotationRecord,
@@ -83,6 +85,8 @@ impl ServingBundleBuilder {
         bundle_version: impl Into<String>,
     ) -> Result<ServingBundleManifest, ServingBundleError> {
         let bundle_version = bundle_version.into();
+        let proof_snapshot_identity =
+            serving_snapshot_identity(&entities, &facts, &search_metadata, &edges, &rera_evidence)?;
         let mut artifacts = Vec::new();
         remove_canonical_spatial_identities(&mut entities, &mut edges);
         let identity_index =
@@ -91,7 +95,7 @@ impl ServingBundleBuilder {
             &entities,
             &identity_index,
             &edges,
-            &bundle_version,
+            &proof_snapshot_identity,
         )
         .map_err(ServingBundleError::InvalidRecords)?;
         let identity_gap_key = AssetPathBuilder::serving_bundle_key(
@@ -129,7 +133,7 @@ impl ServingBundleBuilder {
             &topology_index,
             &edges,
             topology_policy,
-            &bundle_version,
+            &proof_snapshot_identity,
         );
         let area_entity_count = entities
             .iter()
@@ -181,11 +185,11 @@ impl ServingBundleBuilder {
             &facts,
             &resolution_policies.market_locality,
             topology_policy,
-            &bundle_version,
+            &proof_snapshot_identity,
         )
         .map_err(|error| ServingBundleError::InvalidRecords(error.to_string()))?;
         let market_geo_evidence_error =
-            validate_serving_edge_evidence(&market_geo_edges, &facts, &bundle_version)
+            validate_serving_edge_evidence(&market_geo_edges, &facts, &proof_snapshot_identity)
                 .err()
                 .map(|error| error.to_string());
         let adjacency_degree =
@@ -234,7 +238,8 @@ impl ServingBundleBuilder {
         merge_spatial_topology_edges(&mut edges, market_geo_edges);
         let base_index =
             super::ServingFactIndex::from_records(facts.clone(), search_metadata.clone());
-        let derived = derive_proximity_records(&entities, &base_index, &edges, &bundle_version)?;
+        let derived =
+            derive_proximity_records(&entities, &base_index, &edges, &proof_snapshot_identity)?;
         facts.extend(derived.facts);
         search_metadata.extend(derived.search_metadata);
         edges.extend(derived.edges);
@@ -257,7 +262,13 @@ impl ServingBundleBuilder {
             catalog_scoped_rera_evidence(&entities, rera_evidence);
         excluded_rera_evidence_society_ids.sort();
         excluded_rera_evidence_society_ids.dedup();
-        validate_serving_records(&entities, &facts, &search_metadata, &edges, &bundle_version)?;
+        validate_serving_records(
+            &entities,
+            &facts,
+            &search_metadata,
+            &edges,
+            &proof_snapshot_identity,
+        )?;
         let entity_aliases = materialize_society_aliases(&entities, &edges)
             .map_err(|err| ServingBundleError::InvalidRecords(err.to_string()))?;
         let entity_key =
@@ -373,6 +384,7 @@ impl ServingBundleBuilder {
 
         let manifest = ServingBundleManifest {
             bundle_version,
+            proof_snapshot_identity,
             format_version: SERVING_BUNDLE_FORMAT_VERSION,
             created_at: Utc::now(),
             entity_count: entities.len() as u64,
@@ -402,6 +414,69 @@ impl ServingBundleBuilder {
         self.lake.put_json(&manifest_key, &manifest).await?;
         Ok(manifest)
     }
+}
+
+#[derive(Serialize)]
+struct FactSnapshotIdentity<'a> {
+    entity_id: &'a str,
+    fact_key: &'a str,
+    value_type: &'a str,
+    value_text: &'a Option<String>,
+    value: &'a FactValue,
+    confidence: f32,
+    source_type: &'a str,
+    source_url: &'a Option<String>,
+    model: &'a Option<String>,
+    skill_id: &'a Option<String>,
+    observation: &'a Option<SourceObservation>,
+}
+
+fn serving_snapshot_identity(
+    entities: &[ServingEntityRecord],
+    facts: &[ServingFactRecord],
+    search_metadata: &[ServingSearchMetadataRecord],
+    edges: &[ServingEdgeRecord],
+    rera_evidence: &[ServingReraEvidenceRecord],
+) -> Result<String, serde_json::Error> {
+    fn sorted_rows<T: Serialize>(
+        rows: impl IntoIterator<Item = T>,
+    ) -> Result<Vec<String>, serde_json::Error> {
+        let mut encoded = rows
+            .into_iter()
+            .map(|row| serde_json::to_string(&row))
+            .collect::<Result<Vec<_>, _>>()?;
+        encoded.sort();
+        Ok(encoded)
+    }
+
+    // Ingestion time is provenance, not fact truth. Observation identity pins
+    // source time and immutable lineage for the proof snapshot.
+    let facts = facts.iter().map(|fact| FactSnapshotIdentity {
+        entity_id: &fact.entity_id,
+        fact_key: &fact.fact_key,
+        value_type: &fact.value_type,
+        value_text: &fact.value_text,
+        value: &fact.value,
+        confidence: fact.confidence,
+        source_type: &fact.source_type,
+        source_url: &fact.source_url,
+        model: &fact.model,
+        skill_id: &fact.skill_id,
+        observation: &fact.observation,
+    });
+    let payload = (
+        sorted_rows(entities)?,
+        sorted_rows(facts)?,
+        sorted_rows(search_metadata)?,
+        sorted_rows(edges)?,
+        sorted_rows(rera_evidence)?,
+    );
+    let digest = Sha256::digest(serde_json::to_vec(&payload)?);
+    let hex = digest
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    Ok(format!("snapshot:sha256:{hex}"))
 }
 
 fn validate_serving_records(

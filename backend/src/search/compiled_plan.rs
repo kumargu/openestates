@@ -151,6 +151,35 @@ pub struct GeoBranch {
     pub fallback_text: Option<String>,
 }
 
+impl GeoBranch {
+    pub fn unresolved_requirements(&self) -> &[String] {
+        match &self.geo_scope {
+            GeoScope::Unresolved {
+                requested,
+                reason: GeoScopeResolution::UnresolvedExplicitGeography,
+                ..
+            } => requested,
+            _ => &[],
+        }
+    }
+
+    pub(crate) fn restore_portable_ranking_intent(&mut self, ranking_intent: SearchIntent) {
+        self.scoring_query = canonical_scoring_query(
+            &self.eligibility_predicates,
+            &ranking_intent,
+            &self.resolved_entities,
+        );
+        self.recall_query = canonical_recall_query(
+            &self.predicates,
+            &ranking_intent,
+            &self.resolved_entities,
+            &self.scoring_query,
+        );
+        self.ranking_intent = ranking_intent;
+        self.fallback_text = None;
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompiledSearchPlan {
     pub root: BoolExpr<BranchId>,
@@ -382,6 +411,15 @@ impl CompiledSearchPlan {
                 .iter()
                 .find(|previous| previous.branch_id == branch.branch_id)
             {
+                // A required unresolved request is part of the signed plan even when
+                // it has no entity-backed predicate yet. Rebinding cannot erase it.
+                if branch.geo_scope.is_bundle_wide()
+                    && matches!(&previous.geo_scope, GeoScope::Unresolved {
+                        requested, reason: GeoScopeResolution::UnresolvedExplicitGeography, ..
+                    } if !requested.is_empty())
+                {
+                    branch.geo_scope.clone_from(&previous.geo_scope);
+                }
                 branch.fallback_text.clone_from(&previous.fallback_text);
                 if branch.recall_query.is_empty() {
                     branch.recall_query.clone_from(&previous.recall_query);
@@ -768,7 +806,7 @@ fn has_positive_area_or_society_geography(expression: &ConstraintExpr, negated: 
     }
 }
 
-fn expand_geo_cells(
+pub(crate) fn expand_geo_cells(
     anchors: &[GeoAnchor],
     seed_cells: &[GeoCellSeed],
     topology: &GraphIndex,
@@ -786,6 +824,8 @@ fn expand_geo_cells(
         .map(|seed| seed.cell_id.as_str())
         .collect::<Vec<_>>();
     let mut paths = BTreeMap::<String, GeoCellPath>::new();
+    // Distance depends on the immutable anchors and destination, not the BFS path.
+    let mut distances = BTreeMap::new();
     let mut queue = VecDeque::new();
     for seed in seed_cells {
         let path = GeoCellPath {
@@ -810,14 +850,20 @@ fn expand_geo_cells(
             if path.cell_ids.contains(next) {
                 continue;
             }
-            let Some(distance) = geo_cell_distance(
-                &non_area_anchors,
-                &seed_ids,
-                next,
-                spatial_index,
-                snapshot_identity,
-            )
-            .filter(|distance| distance.distance_km <= policy.max_distance_km) else {
+            let Some(distance) = distances
+                .entry(next.clone())
+                .or_insert_with(|| {
+                    geo_cell_distance(
+                        &non_area_anchors,
+                        &seed_ids,
+                        next,
+                        spatial_index,
+                        snapshot_identity,
+                    )
+                })
+                .as_ref()
+                .filter(|distance| distance.distance_km <= policy.max_distance_km)
+            else {
                 continue;
             };
             let mut candidate = GeoCellPath {
@@ -831,7 +877,10 @@ fn expand_geo_cells(
                 &mut candidate.supporting_evidence,
                 adjacency.evidence_refs.clone(),
             );
-            extend_unique(&mut candidate.supporting_evidence, distance.evidence_refs);
+            extend_unique(
+                &mut candidate.supporting_evidence,
+                distance.evidence_refs.clone(),
+            );
             let replace = paths.get(next).is_none_or(|existing| {
                 candidate.hops < existing.hops
                     || (candidate.hops == existing.hops

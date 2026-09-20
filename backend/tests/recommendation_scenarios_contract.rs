@@ -549,10 +549,14 @@ fn build_bundle(case: &ScenarioCase, specs: &[PropertySpec]) -> LoadedServingBun
     let search_capabilities = SearchCapabilityIndex::from_bundle(&entities, &fact_index);
     let graph_index =
         GraphIndex::from_serving_bundle(&entities, &edges, "recommendation-scenarios-v1");
+    let evidence_index =
+        backend::serving::ServingEvidenceIndex::from_records(fact_index.all_facts(), &edges)
+            .expect("controlled recommendation evidence index");
 
     LoadedServingBundle {
         manifest: ServingBundleManifest {
             bundle_version: "recommendation-scenarios-v1".to_string(),
+            proof_snapshot_identity: "recommendation-scenarios-v1".to_string(),
             format_version: 1,
             created_at: Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
             entity_count: entities.len() as u64,
@@ -582,6 +586,7 @@ fn build_bundle(case: &ScenarioCase, specs: &[PropertySpec]) -> LoadedServingBun
         graph_index,
         recall_index,
         fact_index,
+        evidence_index,
         rera_evidence_index: ReraEvidenceIndex::default(),
         entity_index,
         spatial_index,

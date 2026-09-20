@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  parseProofFocusParam,
   propertyDetailPath,
   propertySurfacePath,
 } from "../src/lib/api.ts";
@@ -48,8 +47,9 @@ const emptyMapContext: PropertyMapContext = {
   places: [],
 };
 
-test("proof focus URL contract round-trips through detail and surface paths", () => {
+test("detail and surface carry only signed proof identity, never client claims", () => {
   const focus: ProofFocus = {
+    proofToken: "signed.receipt-identity",
     surfaceId: "around_this_home",
     layerId: "hospitals",
     factKey: "nearby_hospitals",
@@ -69,17 +69,20 @@ test("proof focus URL contract round-trips through detail and surface paths", ()
     propertyDetailPath("property id/with slash", focus, "context-1", "q123"),
     "http://test.local",
   );
-  const parsed = parseProofFocusParam(detailUrl.searchParams.get("focus"));
-  assert.deepEqual(parsed, focus);
+  assert.equal(detailUrl.searchParams.get("proofToken"), focus.proofToken);
+  assert.equal(detailUrl.searchParams.has("focus"), false);
+  assert.equal(detailUrl.href.includes("Manipal"), false);
   assert.equal(detailUrl.searchParams.get("context"), "context-1");
   assert.equal(detailUrl.searchParams.get("qf"), "q123");
 
   const surfaceUrl = new URL(
-    propertySurfacePath("property id/with slash", "around_this_home", parsed),
+    propertySurfacePath("property id/with slash", "around_this_home", focus),
     "http://test.local",
   );
   assert.equal(surfaceUrl.pathname, "/api/properties/property%20id%2Fwith%20slash/surfaces/around_this_home");
-  assert.deepEqual(parseProofFocusParam(surfaceUrl.searchParams.get("focus")), focus);
+  assert.equal(surfaceUrl.searchParams.get("proofToken"), focus.proofToken);
+  assert.equal(surfaceUrl.searchParams.has("focus"), false);
+  assert.equal(propertyDetailPath("home", { ...focus, proofToken: undefined }), "/property/home");
 });
 
 test("around-this-home stays hidden without usable context", () => {

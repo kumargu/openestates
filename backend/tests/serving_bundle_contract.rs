@@ -342,6 +342,7 @@ async fn normal_serving_build_materializes_internal_geo_cells_and_excludes_their
         .unwrap()
         .is_empty());
 
+    let proof_identity = manifest.proof_snapshot_identity().to_string();
     let entity_bytes = lake
         .get_bytes(&LakeKey::new(manifest.entity_parquet_key).unwrap())
         .await
@@ -361,7 +362,7 @@ async fn normal_serving_build_materializes_internal_geo_cells_and_excludes_their
         .all(|derivation| derivation
             .input_evidence
             .iter()
-            .all(|evidence| evidence.snapshot_identity == version)));
+            .all(|evidence| evidence.snapshot_identity == proof_identity)));
 }
 
 fn serving_entity(

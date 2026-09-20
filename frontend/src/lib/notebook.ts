@@ -639,15 +639,20 @@ function migrateNotedPropertiesToShortlist(
   state: NotebookState,
   shortlist: string[],
 ): string[] {
-  if (window.localStorage.getItem(NOTED_SHORTLIST_MIGRATION_KEY) === "1") {
+  try {
+    if (window.localStorage.getItem(NOTED_SHORTLIST_MIGRATION_KEY) === "1") {
+      return shortlist;
+    }
+    const notedPropertyIds = Object.values(state.documents)
+      .filter(documentHasMeaningfulNote)
+      .map((document) => document.propertyId);
+    const nextShortlist = writeShortlistIds([...notedPropertyIds, ...shortlist]);
+    window.localStorage.setItem(NOTED_SHORTLIST_MIGRATION_KEY, "1");
+    return nextShortlist;
+  } catch {
+    // An optional read-time migration must not prevent search from mounting.
     return shortlist;
   }
-  const notedPropertyIds = Object.values(state.documents)
-    .filter(documentHasMeaningfulNote)
-    .map((document) => document.propertyId);
-  const nextShortlist = writeShortlistIds([...notedPropertyIds, ...shortlist]);
-  window.localStorage.setItem(NOTED_SHORTLIST_MIGRATION_KEY, "1");
-  return nextShortlist;
 }
 
 function readRawState(): NotebookState {

@@ -8,6 +8,29 @@ import { useSearchSpan } from "../workspace/SearchSpanContext.ts";
 import { ImageWithFallback } from "../ImageWithFallback.tsx";
 import { AtlasIcon } from "./AtlasIcon.tsx";
 
+type EvidenceSection = NonNullable<PropertyDetailResponse["evidence"]>["sections"][number];
+
+function compactMarketItems(section: EvidenceSection) {
+  const seenSources = new Set<string>();
+  const limit = section.presentation?.max_preview_items ?? 6;
+  return section.items
+    .filter((item) => item.value?.trim() || item.values?.length)
+    .filter((item) => {
+      const sourceIdentity = item.source_url?.trim();
+      if (!sourceIdentity) return true;
+      if (seenSources.has(sourceIdentity)) return false;
+      seenSources.add(sourceIdentity);
+      return true;
+    })
+    .slice(0, limit);
+}
+
+function marketValue(item: ReturnType<typeof compactMarketItems>[number]) {
+  const value = humanizeFactText(item.values?.length ? item.values.join(" · ") : item.value).trim();
+  const separator = value.indexOf(":");
+  return separator > 0 && separator < 64 ? value.slice(separator + 1).trim() : value;
+}
+
 export function PropertyAtlasPhotos({ story }: { story: PropertyStoryModel }) {
   const [index, setIndex] = useState(0);
   const images = story.media.galleryUrls;
@@ -34,7 +57,7 @@ export function PropertyAtlasPhotos({ story }: { story: PropertyStoryModel }) {
   );
 }
 
-/** Existing served facts remain available below the canvas, without another drawer. */
+/** The lower property chapter owns market context; other evidence stays on its primary surface. */
 export function PropertyAtlasFacts({ data, story, focus }: {
   data: PropertyDetailResponse;
   story: PropertyStoryModel;
@@ -42,42 +65,34 @@ export function PropertyAtlasFacts({ data, story, focus }: {
 }) {
   const searchContext = useSearchSpan();
   const sections = visibleEvidenceSections(data.evidence?.sections);
+  const market = sections.find((section) => section.kind === "market");
+  const items = market ? compactMarketItems(market) : [];
   const records = [...new Map(story.recordCards.map(record => [record.href, record])).values()];
-  if (!sections.length && !records.length) return null;
+  if (!market && !records.length) return null;
+  const focused = Boolean(market && focus?.destinationKind === "section" && market.items.some(item =>
+    item.key === focus.factKey && (!focus.entityId || item.entity_id === focus.entityId)));
   return (
     <section className="property-atlas-facts" aria-label="Property information">
-      {sections.map(section => {
-        const focused = focus?.destinationKind === "section" && section.items.some(item =>
-          item.key === focus.factKey && (!focus.entityId || item.entity_id === focus.entityId));
-        return <details key={section.kind} id={`property-topic-${section.kind}`} tabIndex={-1}
-          open={focused || undefined} data-proof-focused={focused || undefined}>
-          <summary>{section.title}</summary>
-          <dl>
-            {section.items.filter(item => item.value?.trim() || item.values?.length).map((item, index) => (
-              <div key={`${item.entity_id}:${item.key ?? item.label}:${index}`}>
-                <dt>{item.label}</dt>
-                <dd>{humanizeFactText(item.values?.length ? item.values.join(" · ") : item.value)}
-                  {item.source_url && <a href={item.source_url} target="_blank" rel="noreferrer">Source ↗</a>}
-                </dd>
-              </div>
-            ))}
-          </dl>
-          {section.community_pulse?.paragraph && <p>{section.community_pulse.paragraph}</p>}
-          {section.media?.map((strip, index) => (
-            <div className="property-atlas-facts__media" key={`${strip.kind}:${index}`}>
-              {strip.frames.map((frame, frameIndex) => <figure key={`${frame.image_url}:${frameIndex}`}>
-                <ImageWithFallback src={frame.image_url} alt={frame.label} loading="lazy" />
-                {frame.source_url && <figcaption><a href={frame.source_url} target="_blank" rel="noreferrer">Source ↗</a></figcaption>}
-              </figure>)}
+      <header>
+        <h2>{market?.title ?? "Market trail"}</h2>
+        {records.length > 0 && <nav aria-label="Property reports">
+          {records.map(record => <Link key={record.href} to={hrefWithSearchSpan(record.href, searchSpanReferenceForTarget(searchContext, data.property.id))}>
+            {record.label}<span aria-hidden="true"> ↗</span>
+          </Link>)}
+        </nav>}
+      </header>
+      {market && items.length > 0 ? (
+        <dl id="property-topic-market" tabIndex={-1} data-proof-focused={focused || undefined}>
+          {items.map((item, index) => (
+            <div key={`${item.entity_id}:${item.key ?? item.label}:${index}`}>
+              <dt>{item.label}</dt>
+              <dd>{marketValue(item)}
+                {item.source_url && <a href={item.source_url} target="_blank" rel="noreferrer" aria-label={`Open source for ${item.label}`}>↗</a>}
+              </dd>
             </div>
           ))}
-        </details>;
-      })}
-      {records.length > 0 && <nav aria-label="Property reports">
-        {records.map(record => <Link key={record.href} to={hrefWithSearchSpan(record.href, searchSpanReferenceForTarget(searchContext, data.property.id))}>
-          {record.label}<span aria-hidden="true"> ↗</span>
-        </Link>)}
-      </nav>}
+        </dl>
+      ) : null}
     </section>
   );
 }

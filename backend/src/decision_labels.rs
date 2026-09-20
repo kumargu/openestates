@@ -96,11 +96,19 @@ pub fn rera_decision_check_summary_for_society(
     serving_facts: &ServingFactIndex,
     society_id: &str,
 ) -> Option<DecisionCheckSummary> {
+    let labels = rera_decision_labels_for_society(serving_facts, society_id);
+    rera_decision_check_summary_with_labels(serving_facts, society_id, &labels)
+}
+
+pub(crate) fn rera_decision_check_summary_with_labels(
+    serving_facts: &ServingFactIndex,
+    society_id: &str,
+    labels: &[DecisionLabel],
+) -> Option<DecisionCheckSummary> {
     let Ok(config) = rera_decision_labels_config() else {
         return None;
     };
     let projection = SocietyFactProjection::from_index(serving_facts, society_id);
-    let labels = rera_decision_labels_for_society(serving_facts, society_id);
     let registration_number = registration_number(&projection);
 
     if labels.is_empty() && registration_number.is_none() {
@@ -143,7 +151,7 @@ pub fn rera_decision_check_summary_for_society(
     Some(DecisionCheckSummary {
         tile_label: config.summary.tile_label.clone(),
         tile_caption: None,
-        tone: summary_tone(&labels),
+        tone: summary_tone(labels),
         registration_number,
         registration_number_compact,
         registry_url: registry_url(&projection),

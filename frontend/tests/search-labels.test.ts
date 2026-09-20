@@ -1,198 +1,31 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  queryWithoutBhkClause,
-  searchResultReasonLabels,
-  splitLabelParts,
-} from "../src/lib/search.ts";
+import { searchResultReasonLabels } from "../src/lib/search.ts";
+import type { SearchMatchReason } from "../src/lib/types.ts";
 
-test("splitLabelParts keeps commas inside parentheses", () => {
-  assert.deepEqual(
-    splitLabelParts("Near Whitefield (Itpl, Whitefield)"),
-    ["Near Whitefield (Itpl, Whitefield)"],
-  );
-  assert.deepEqual(
-    splitLabelParts("Quiet, Near Whitefield (Itpl, Whitefield)"),
-    ["Quiet", "Near Whitefield (Itpl, Whitefield)"],
-  );
+function reason(explanation: string, showOnCard = true): SearchMatchReason {
+  return { branchId: "branch-1", predicateId: explanation, explanation, showOnCard, proofToken: "signed:receipt" };
+}
+
+test("backend visibility prevents area, budget and BHK copy from repeating on cards", () => {
+  assert.deepEqual(searchResultReasonLabels({ reasons: [
+    reason("Whitefield", false), reason("3 BHK", false), reason("under ₹2.5Cr", false),
+    reason("Nearby schools: Example School (0.4 km)"),
+  ] }), ["Nearby schools: Example School (0.4 km)"]);
 });
 
-test("place chips do not split ITPL out of Whitefield", () => {
-  const labels = searchResultReasonLabels({
-    title: "2 BHK in Godrej Splendour",
-    area: "itpl, Whitefield",
-    society_name: "Godrej Splendour",
-    builder_name: "Godrej",
-    match_reason: "Near Whitefield (Itpl, Whitefield)",
-  });
-  assert.equal(labels.some((label) => label.includes("Whitefield)") || label.endsWith("(Itpl")), false);
-  assert.ok(labels.every((label) => !label.includes("(") || label.includes(")")));
+test("structured labels retain parentheses and punctuation without reinterpretation", () => {
+  assert.deepEqual(searchResultReasonLabels({ reasons: [reason("Near Whitefield (ITPL, Whitefield)")] }),
+    ["Near Whitefield (ITPL, Whitefield)"]);
 });
 
-test("a 2 or 3 BHK match reason does not become a tile chip", () => {
-  const labels = searchResultReasonLabels({
-    title: "3 BHK in Prestige Lakeside Habitat",
-    area: "Whitefield",
-    society_name: "Prestige Lakeside Habitat",
-    builder_name: "Prestige",
-    match_reason: "Matches Whitefield · 2 or 3 BHK",
-  });
-  assert.equal(labels.some((label) => /bhk/i.test(label)), false);
+test("result chips retain backend order, deduplicate and stay capped at two", () => {
+  assert.deepEqual(searchResultReasonLabels({ reasons: [reason("RERA registration found"),
+    reason("RERA registration found"), reason("Google 4.4 · 320 reviews"), reason("0.7 km from Hoodi Metro")] }),
+    ["RERA registration found", "Google 4.4 · 320 reviews"]);
 });
 
-test("generic budget and BHK filters do not repeat on every result tile", () => {
-  const labels = searchResultReasonLabels({
-    title: "3 BHK in Example Society",
-    area: "Whitefield",
-    society_name: "Example Society",
-    builder_name: "Example Builder",
-    match_reason: "3 BHK, under 2.5 Cr, social infrastructure",
-    match_explanation: {
-      reasons: [{
-        preference: "social infrastructure",
-        fact_key: "nearby_schools",
-        display: "Nearby schools: Example School (0.4 km)",
-        score: 0.8,
-        confidence: 0.82,
-        source_type: "Google",
-        scoring_method: "serving-geo-distance",
-      }],
-      preference_coverage: [],
-      graph_driven_pct: 1,
-      total_facts_consulted: 1,
-    },
-  });
-
-  assert.deepEqual(labels, ["Nearby schools: Example School (0.4 km)"]);
-});
-
-test("queryWithoutBhkClause uses UTF-8 source spans", () => {
-  const query = "₹2Cr, two or three BHK in Whitefield";
-  const clause = "two or three BHK";
-  const start = Buffer.byteLength(query.slice(0, query.indexOf(clause)));
-  const end = start + Buffer.byteLength(clause);
-  assert.equal(
-    queryWithoutBhkClause(query, [{ start, end, raw_text: clause }]),
-    "₹2Cr, in Whitefield",
-  );
-});
-
-test("queryWithoutBhkClause removes every repeated source span", () => {
-  const query = "2 BHK in Whitefield or 2 BHK in Bellandur";
-  const clause = "2 BHK";
-  const secondStart = Buffer.byteLength(query.slice(0, query.lastIndexOf(clause)));
-  assert.equal(
-    queryWithoutBhkClause(query, [
-      { start: 0, end: clause.length, raw_text: clause },
-      {
-        start: secondStart,
-        end: secondStart + clause.length,
-        raw_text: clause,
-      },
-    ]),
-    "in Whitefield or in Bellandur",
-  );
-});
-
-test("queryWithoutBhkClause removes source spans for exclusions", () => {
-  const query = "2 BHK in Whitefield, outside a 4 BHK";
-  const include = "2 BHK";
-  const exclude = "outside a 4 BHK";
-  const excludeStart = Buffer.byteLength(query.slice(0, query.indexOf(exclude)));
-  assert.equal(
-    queryWithoutBhkClause(query, [
-      { start: 0, end: include.length, raw_text: include },
-      {
-        start: excludeStart,
-        end: excludeStart + exclude.length,
-        raw_text: exclude,
-      },
-    ]),
-    "in Whitefield",
-  );
-});
-
-test("a near-area chip is omitted when the card already names that place", () => {
-  const labels = searchResultReasonLabels({
-    title: "2 BHK in Godrej Splendour",
-    area: "itpl, Whitefield",
-    society_name: "Godrej Splendour",
-    builder_name: "Godrej",
-    match_reason: "Near Whitefield (Itpl, Whitefield)",
-  });
-  assert.deepEqual(labels, []);
-});
-
-test("result chips prefer factual matched displays and stay capped at two", () => {
-  const labels = searchResultReasonLabels({
-    title: "3 BHK in Example Society",
-    area: "Whitefield",
-    society_name: "Example Society",
-    builder_name: "Example Builder",
-    match_reason: "Legal safety · Good reviews · Near metro",
-    match_explanation: {
-      reasons: [
-        {
-          preference: "RERA registration",
-          fact_key: "rera_status",
-          display: "RERA registration found",
-          score: 0.9,
-          confidence: 0.95,
-          source_type: "Rera",
-          scoring_method: "serving-text",
-        },
-        {
-          preference: "review quality",
-          fact_key: "google_rating",
-          display: "Google 4.4 · 320 reviews",
-          score: 0.8,
-          confidence: 0.9,
-          source_type: "Google",
-          scoring_method: "serving-numeric",
-        },
-        {
-          preference: "near metro",
-          fact_key: "nearby_metro_stations",
-          display: "0.7 km from Hoodi Metro",
-          score: 0.7,
-          confidence: 0.9,
-          source_type: "Google",
-          scoring_method: "serving-nearby-distance",
-        },
-      ],
-      preference_coverage: [],
-      graph_driven_pct: 1,
-      total_facts_consulted: 3,
-    },
-  });
-  assert.deepEqual(labels, [
-    "RERA registration found",
-    "Google 4.4 · 320 reviews",
-  ]);
-});
-
-test("source URLs do not become buyer-facing evidence labels", () => {
-  const labels = searchResultReasonLabels({
-    title: "3 BHK in Example Society",
-    area: "Whitefield",
-    society_name: "Example Society",
-    builder_name: "Example Builder",
-    match_reason: "Verified review quality",
-    match_explanation: {
-      reasons: [{
-        preference: "review quality",
-        fact_key: "google_reviews_url",
-        display: "Google reviews: https://maps.google.com/example",
-        score: 0.7,
-        confidence: 0.82,
-        source_type: "Google",
-        scoring_method: "serving-text",
-      }],
-      preference_coverage: [],
-      graph_driven_pct: 1,
-      total_facts_consulted: 1,
-    },
-  });
-
-  assert.deepEqual(labels, []);
+test("hidden source receipts and absent reasons do not create display labels", () => {
+  assert.deepEqual(searchResultReasonLabels({ reasons: [reason("https://maps.google.com/example", false)] }), []);
+  assert.deepEqual(searchResultReasonLabels({ reasons: [] }), []);
 });

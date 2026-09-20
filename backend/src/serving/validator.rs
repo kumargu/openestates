@@ -317,7 +317,7 @@ pub async fn validate_search_serving_candidate(
         &facts,
         &metadata,
         &edges,
-        &manifest.bundle_version,
+        manifest.proof_snapshot_identity(),
         &mut issues,
     );
     if let Err(error) = validate_canonical_spatial_identities(&entities, &edges) {

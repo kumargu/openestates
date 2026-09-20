@@ -1,15 +1,35 @@
 import type {
   AreaListItem,
+  BrowsePropertyCard,
   DiscoveryResponse,
-  MatchExplanation,
   PropertyCard,
   PropertyDetailResponse,
   SearchAreaContext,
-  SearchResponse,
+  SearchJourneyEnvelope,
 } from "./types.ts";
 import { atlasFixtureCard, atlasFixtureId, atlasFixtureScene } from './dev-atlas-fixtures.ts';
 
 const now = "2026-07-11T00:00:00.000Z";
+
+function browseFixture(property: PropertyCard): BrowsePropertyCard {
+  return {
+    id: property.id,
+    society_id: property.kg_entity_refs.society_entity_id,
+    title: property.title,
+    society_name: property.society_name,
+    area: property.area,
+    image: property.hero_image ?? property.images?.[0] ?? "",
+    bhk: property.bhk,
+    price: property.price,
+    price_min: property.price_min,
+    price_max: property.price_max,
+    sqft: property.sqft,
+    google_rating: property.google_rating,
+    google_review_count: property.google_review_count,
+    detail_href: `/property/${encodeURIComponent(property.id)}`,
+    save_id: property.id,
+  };
+}
 
 const fixturePropertyRows: Array<Omit<PropertyCard, "kg_entity_refs">> = [
   {
@@ -243,59 +263,75 @@ export const fixtureAreas: AreaListItem[] = [
 ];
 
 export const fixtureDiscovery: DiscoveryResponse = {
-  product_promise: "Tell us the life you want. We'll show homes with receipts.",
-  quotes: [
-    { text: "Fewer homes. Better reasons.", tone: "proof" },
-    { text: "Search by tradeoff, not checkbox.", tone: "intent" },
-    { text: "Receipts before recommendations.", tone: "trust" },
-    { text: "Area context before site visits.", tone: "proof" },
-  ],
+  product_story: {
+    title: "Why 80feet",
+    items: [
+      {
+        id: "proof",
+        title: "See the receipts",
+        description: "Open the facts behind every recommendation.",
+        action_label: "Open a home",
+        href: "/properties/{property_id}/rera",
+        image_src: "/landing/tiles/04-rera-evidence.webp",
+        image_src_narrow: "/landing/tiles/04-rera-evidence-960.webp",
+        image_alt: "A property record showing registration, approvals and progress.",
+      },
+      {
+        id: "compare",
+        title: "Compare before deciding",
+        description: "Keep price, proof and tradeoffs side by side.",
+        action_label: "Open workspace",
+        href: "/workspace/compare",
+        image_src: "/landing/tiles/06-tradeoffs.webp",
+        image_src_narrow: "/landing/tiles/06-tradeoffs-960.webp",
+        image_alt: "Two homes compared across commute, water, reviews and price.",
+      },
+    ],
+  },
   shelves: [
     {
-      id: "verified_value",
-      title: "Value with receipts",
-      quote: "Good price, proof attached.",
-      description: "Lower per-sqft options with visible source signals.",
-      search_query: "good value with proof",
-      receipt_copy: "Price + RERA + Google",
-      cards: fixtureProperties
-        .filter((property) => property.price_per_sqft > 0)
-        .sort((a, b) => a.price_per_sqft - b.price_per_sqft)
-        .slice(0, 3)
+      id: "area_spotlight-whitefield",
+      title: "Explore Whitefield",
+      show_card_area: false,
+      cards: fixtureProperties.slice(0, 4)
         .map((property) => ({
-          property,
-          reason: `${property.price_per_sqft.toLocaleString("en-IN")} /sqft with ${property.transparency_tags.length} source tags`,
+          property: browseFixture(property),
         })),
     },
     {
-      id: "low_commute_pain",
-      title: "Low commute pain",
-      quote: "Shorter commute, cleaner proof.",
-      description: "Homes with closer metro access or stronger traffic signals.",
-      search_query: "near metro low traffic",
-      receipt_copy: "Metro + traffic signals",
-      cards: fixtureProperties
-        .filter((property) => property.metro_distance_mins > 0 && property.metro_distance_mins <= 15)
-        .sort((a, b) => a.metro_distance_mins - b.metro_distance_mins)
-        .slice(0, 3)
+      id: "metro_access",
+      title: "Metro within reach",
+      show_card_area: true,
+      cards: fixtureProperties.slice(1, 5)
         .map((property) => ({
-          property,
-          reason: `${property.metro_distance_mins} min metro access`,
+          property: browseFixture(property),
         })),
     },
     {
-      id: "family_ready",
-      title: "Family-ready societies",
-      quote: "More life-fit, less guesswork.",
-      description: "3BHK+ homes with society, risk, and review signals.",
-      search_query: "family friendly 3BHK",
-      receipt_copy: "Society + risk + reviews",
-      cards: fixtureProperties
-        .filter((property) => property.bhk >= 3)
-        .slice(0, 3)
+      id: "nearby_schools",
+      title: "Schools nearby",
+      show_card_area: true,
+      cards: fixtureProperties.slice(2, 6)
         .map((property) => ({
-          property,
-          reason: `${property.bhk} BHK with ${property.transparency_tags.length} visible signals`,
+          property: browseFixture(property),
+        })),
+    },
+    {
+      id: "room_to_breathe",
+      title: "Room to breathe",
+      show_card_area: true,
+      cards: fixtureProperties.slice(3, 7)
+        .map((property) => ({
+          property: browseFixture(property),
+        })),
+    },
+    {
+      id: "resident_favourites",
+      title: "Places people rate highly",
+      show_card_area: true,
+      cards: fixtureProperties.slice(4, 8)
+        .map((property) => ({
+          property: browseFixture(property),
         })),
     },
   ],
@@ -389,7 +425,7 @@ export function getFixtureResponse(path: string): unknown | null {
   return null;
 }
 
-function searchFixtureProperties(query: string): SearchResponse {
+function searchFixtureProperties(query: string): SearchJourneyEnvelope {
   const normalized = query.trim().toLowerCase();
   const intent = parseIntent(normalized);
   const areaContext = intent.area ? areaContexts[intent.area.toLowerCase()] ?? null : null;
@@ -401,31 +437,46 @@ function searchFixtureProperties(query: string): SearchResponse {
     .filter((result) => result.score > 0 || normalized.length === 0)
     .sort((a, b) => b.score - a.score);
 
-  const results = scored.map(({ property, score, reason }) => ({
-    ...property,
-    match_score: Math.round(score),
-    match_label: score >= 82 ? "Strong match" : score >= 68 ? "Good match" : score >= 54 ? "Value pick" : "Good match",
-    match_reason: reason,
-    match_tier: "exact" as const,
-    match_explanation: makeMatchExplanation(property, intent),
-    confidence_score: confidenceFor(property),
+  const results = scored.map(({ property }) => ({
+    ...browseFixture(property), matchTier: "exact" as const, reasons: [],
   }));
 
   return {
-    query,
-    resultSets: results.length > 0
-      ? [{ branchId: "branch-1", label: "Matches", results }]
-      : [],
-    orderedResultIds: results.map((result) => result.id),
-    totalMatches: results.length,
+    contractVersion: 1,
     runtimeVersion: {
       servingBundleVersion: "dev-fixtures",
       scoringPolicyVersion: 0,
       searchEngineVersion: "dev-fixtures",
     },
-    areaContext: areaContext ?? undefined,
-    state: results.length > 0 ? "results" : "no_matches",
+    active: {
+      revision: { id: `preview:${query}`, stateToken: `preview:${query}`, resultFingerprint: `preview:${query}`, depth: 0 },
+      buyerBrief: query,
+      latestUtterance: query,
+      intent: { branches: [] },
+      collections: [],
+      results: {
+        kind: "current",
+        resultSets: results.length > 0 ? [{ branchId: "branch-1", label: "Matches", results }] : [],
+        orderedResultIds: results.map((result) => result.id),
+        totalMatches: results.length,
+        areaContext: areaContext ?? undefined,
+        state: results.length > 0 ? "results" : "no_matches",
+      },
+    },
+    attempt: { kind: "initial", outcome: "activated" },
   };
+}
+
+export function getFixtureSearchMutation(path: string, body: unknown): SearchJourneyEnvelope | null {
+  if (path !== "/api/search/resume" && path !== "/api/search/revisions") return null;
+  const token = (body as { parentToken?: string })?.parentToken;
+  if (!token?.startsWith("preview:")) throw new Error("Preview search has expired");
+  const journey = searchFixtureProperties(token.slice("preview:".length));
+  journey.attempt = path.endsWith("/resume") ? { kind: "resume", outcome: "resumed" } : {
+    kind: "revision", outcome: "clarificationRequired",
+    clarification: { code: "preview_only", message: "Refinements are unavailable in this preview. Start a new search." },
+  };
+  return journey;
 }
 
 function parseIntent(query: string): {
@@ -546,43 +597,6 @@ function scoreFixtureProperty(
     reason: reasons.length > 0
       ? `Matched on ${reasons.join(", ")} with trust and market signals available.`
       : "Relevant fallback result with trust and market signals available.",
-  };
-}
-
-function makeMatchExplanation(property: PropertyCard, intent: ReturnType<typeof parseIntent>): MatchExplanation {
-  const reasons = [
-    intent.area && property.area.toLowerCase() === intent.area.toLowerCase()
-      ? reason("area", "located_in", `${property.society_name} is in ${property.area}.`, 1)
-      : null,
-    intent.bhk && property.bhk === intent.bhk
-      ? reason("configuration", "bhk", `${property.bhk} BHK matches the requested configuration.`, 0.95)
-      : null,
-    property.root_source === "rera"
-      ? reason("trust", "root_source", "Listing has an RERA-rooted source chain.", 0.88)
-      : reason("trust", "root_source", "Self-reported listing needs source-chain verification.", 0.55),
-  ].filter((value): value is ReturnType<typeof reason> => value !== null);
-
-  return {
-    reasons,
-    preference_coverage: [
-      { preference: "location", status: intent.area ? "matched" : "partial", fact_key: "located_in" },
-      { preference: "trust", status: "matched", fact_key: "root_source" },
-      { preference: "budget", status: intent.budgetMax ? property.price <= intent.budgetMax ? "matched" : "partial" : "no_data", fact_key: intent.budgetMax ? "price" : null },
-    ],
-    graph_driven_pct: property.root_source === "rera" ? 72 : 48,
-    total_facts_consulted: 12,
-  };
-}
-
-function reason(preference: string, factKey: string, display: string, score: number) {
-  return {
-    preference,
-    fact_key: factKey,
-    display,
-    score,
-    confidence: score,
-    source_type: "fixture",
-    scoring_method: "graph" as const,
   };
 }
 

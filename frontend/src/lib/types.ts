@@ -105,29 +105,51 @@ export type DecisionCheckSummary = {
   groups?: DecisionCheckGroup[];
 };
 
-export type DiscoveryQuote = {
-  text: string;
-  tone: "proof" | "intent" | "trust" | string;
-};
+export type DiscoveryShelfCard = { property: BrowsePropertyCard };
 
-export type DiscoveryShelfCard = {
-  property: PropertyCard;
-  reason: string;
+export type BrowsePropertyCard = {
+  id: string;
+  society_id: string;
+  title: string;
+  society_name: string;
+  area: string;
+  image: string;
+  bhk: number;
+  price: number;
+  price_min?: number;
+  price_max?: number;
+  sqft: number;
+  google_rating?: number;
+  google_review_count?: number;
+  detail_href: string;
+  save_id: string;
 };
 
 export type DiscoveryShelf = {
   id: string;
   title: string;
-  quote: string;
-  description: string;
-  search_query: string;
-  receipt_copy: string;
+  show_card_area: boolean;
   cards: DiscoveryShelfCard[];
 };
 
+export type DiscoveryProductStoryItem = {
+  id: string;
+  title: string;
+  description: string;
+  action_label: string;
+  href: string;
+  image_src: string;
+  image_src_narrow: string;
+  image_alt: string;
+};
+
+export type DiscoveryProductStory = {
+  title: string;
+  items: DiscoveryProductStoryItem[];
+};
+
 export type DiscoveryResponse = {
-  product_promise: string;
-  quotes: DiscoveryQuote[];
+  product_story: DiscoveryProductStory;
   shelves: DiscoveryShelf[];
 };
 
@@ -548,6 +570,8 @@ export type MapLayerExperience = {
 };
 
 export type SurfaceSceneResponse = {
+  proofFocusStatus?: "notRequested" | "applied" | "stale" | "retired" | "mismatch" | "unavailable";
+  proofFocusMessage?: string;
   contractVersion: 1;
   surfaceId: string;
   propertyId: string;
@@ -567,6 +591,8 @@ export type SurfaceSceneResponse = {
 };
 
 export type ProofFocus = {
+  proofToken?: string;
+  sourceUrl?: string;
   surfaceId: string;
   layerId: string;
   factKey: string;
@@ -1132,15 +1158,9 @@ export type ConfidenceScore = {
   components: ConfidenceComponent[];
 };
 
-export type SearchResultItem = PropertyCard & {
-  match_score: number;
-  match_label: string;
-  match_reason: string;
-  match_explanation?: MatchExplanation;
-  proof_focuses?: ProofFocus[];
-  confidence_score?: ConfidenceScore;
-  match_tier: "exact" | "supported";
-  tradeoff_label?: string;
+export type SearchResultItem = Omit<JourneyResultCard, "matchTier"> & {
+  matchTier: "exact" | "supported" | "contextual";
+  collectionTitle?: string;
 };
 
 export type SearchAreaContext = {
@@ -1201,6 +1221,9 @@ export type SearchRuntimeVersion = {
 };
 
 export type SearchResponse = {
+  /** Rendered view; the API wire contract is SearchJourneyEnvelope. */
+  journey?: SearchJourneyEnvelope;
+  navigationContext?: { id: string; queryFingerprint: string };
   query: string;
   resultSets: SearchResultSet[];
   orderedResultIds: string[];
@@ -1209,6 +1232,98 @@ export type SearchResponse = {
   areaContext?: SearchAreaContext;
   state: "results" | "no_matches";
   searchGuidance?: SearchGuidance;
+};
+
+export type SearchMatchReason = {
+  branchId: string;
+  predicateId: string;
+  explanation: string;
+  proofToken: string;
+  showOnCard: boolean;
+};
+
+export type JourneyResultCard = BrowsePropertyCard & {
+  matchTier: "exact" | "supported";
+  homeStateDisplay?: string;
+  reasons: SearchMatchReason[];
+};
+
+export type JourneyPredicate = {
+  id: string;
+  dimension: string;
+  label: string;
+  polarity: string;
+  operator: string;
+  value: unknown;
+  unit?: string;
+  resolvedLabel?: string;
+  required: boolean;
+};
+export type JourneyExpression =
+  | { kind: "all" | "any"; clauses: JourneyExpression[] }
+  | { kind: "not"; clause: JourneyExpression }
+  | { kind: "predicate"; predicate: JourneyPredicate };
+export type JourneyIntent = {
+  branches: Array<{ id: string; constraints: JourneyExpression; unresolvedRequirements?: string[]; preferences: Array<{ id: string; label: string; polarity?: string; required?: boolean; weight?: number; priority?: number }> }>;
+};
+export type SearchRevisionTarget =
+  | { kind: "branch"; branchId: string }
+  | { kind: "predicate"; branchId: string; predicateId: string };
+export type SearchJourneyEnvelope = {
+  contractVersion: 1;
+  runtimeVersion: SearchRuntimeVersion;
+  active: {
+    revision: { id: string; parentId?: string; stateToken: string; resultFingerprint: string; depth: number };
+    buyerBrief: string;
+    latestUtterance: string;
+    intent: JourneyIntent;
+    collections: JourneyCollection[];
+    results: {
+      kind: "current";
+      orderedResultIds: string[];
+      resultSets: Array<{ branchId: string; label: string; results: JourneyResultCard[] }>;
+      totalMatches: number;
+      state: "results" | "no_matches";
+      areaContext?: SearchAreaContext;
+      guidance?: SearchGuidance;
+    } | { kind: "retained"; orderedResultIds: string[]; resultFingerprint: string };
+  };
+  attempt: {
+    kind: "initial" | "revision" | "resume";
+    catalogRebased?: boolean;
+    catalogDelta?: SearchJourneyDelta;
+    intentDelta?: SearchJourneyDelta;
+    outcome: "activated" | "preservedParent" | "clarificationRequired" | "limitReached" | "resumed";
+    clarification?: { code: string; message: string };
+    selectedPropertyConsequence?: { propertyId: string; outcome: "retained" | "excluded"; explanation: string; failedPredicateIds?: string[] };
+  };
+};
+
+export type JourneyCollection = {
+  id: string;
+  strategy: string;
+  title: string;
+  note: string;
+  priceBand: { min: number; max: number; currency: string; label: string };
+  cards: BrowsePropertyCard[];
+};
+
+export type SearchJourneyDelta = {
+  added: string[];
+  removed: string[];
+  retained: string[];
+  moved: Array<{ propertyId: string; from: number; to: number; cause: "catalogRefresh" | "intentRefinement"; explanation: string }>;
+};
+
+export type SearchProofResolution = {
+  propertyId: string;
+  factKey: string;
+  targetEntityId?: string;
+  targetLabel?: string;
+  value?: { type: string; data: unknown };
+  unit?: string;
+  sourceObservations: Array<{ observationId: string; sourceUrl?: string }>;
+  destination?: { surfaceId: string; layerId?: string; kind: string; targetId: string };
 };
 
 export type ReraInfo = {

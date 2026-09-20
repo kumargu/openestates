@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { propertyDetailPath } from "../src/lib/api.ts";
+import { primaryProofFocus } from "../src/lib/proof-focus.ts";
 import {
   captureDiscoveryDeparture,
   clearDiscoveryContext,
@@ -43,11 +44,7 @@ const RUNTIME_VERSION: SearchRuntimeVersion = {
 function searchResult(id: string, title = `Home ${id}`): SearchResultItem {
   return {
     id,
-    kg_entity_refs: {
-      property_entity_id: `property:${id}`,
-      society_entity_id: `society:${id}`,
-      source_entity_ids: [],
-    },
+    society_id: `society:${id}`,
     title,
     area: "Whitefield",
     price: 20_000_000,
@@ -67,8 +64,10 @@ function searchResult(id: string, title = `Home ${id}`): SearchResultItem {
     match_score: 0.8,
     match_label: "Strong match",
     match_reason: "Near school",
-    match_tier: "exact",
+    matchTier: "exact",
+    reasons: [{ branchId: "branch-1", predicateId: "school", explanation: "Matched a nearby school", proofToken: `signed:${id}`, showOnCard: true }],
     proof_focuses: [{
+      proofToken: `signed:${id}`,
       surfaceId: "around_this_home",
       layerId: "schools",
       factKey: "nearby_schools",
@@ -221,11 +220,7 @@ test("property journey context preserves every carried result in search order", 
   sessionValues.clear();
   const results = Array.from({ length: 15 }, (_, index) => ({
     id: `home-${index + 1}`,
-    kg_entity_refs: {
-      property_entity_id: `property:home-${index + 1}`,
-      society_entity_id: `society:${Math.floor(index / 3)}`,
-      source_entity_ids: [],
-    },
+    society_id: `society:${Math.floor(index / 3)}`,
     title: `Home ${index + 1}`,
     area: "Whitefield",
     price: 20_000_000 + index,
@@ -238,7 +233,7 @@ test("property journey context preserves every carried result in search order", 
     transparency_tags: [],
     description_summary: "",
     possession_status: "Ready",
-    home_state_display: "Delivered · 4 yrs old",
+    homeStateDisplay: "Delivered · 4 yrs old",
     metro_distance_mins: 10,
     floor: 4,
     total_floors: 18,
@@ -246,8 +241,9 @@ test("property journey context preserves every carried result in search order", 
     match_score: 0.8,
     match_label: "Strong match",
     match_reason: "Near school",
-    match_tier: "exact",
+    matchTier: "exact",
     proof_focuses: [{
+      proofToken: `signed:${index + 1}`,
       surfaceId: "around_this_home",
       layerId: "schools",
       factKey: "nearby_schools",
@@ -300,8 +296,8 @@ test("property journey context preserves every carried result in search order", 
     queryFingerprint("quiet 3bhk"),
   );
   assert.deepEqual(
-    JSON.parse(carriedUrl.searchParams.get("focus") ?? "null"),
-    selectedResult.proofFocus,
+    carriedUrl.searchParams.get("proofToken"),
+    selectedResult.proofFocus?.proofToken ?? null,
   );
 });
 
@@ -455,8 +451,8 @@ test("property links restore each result's proof focus", () => {
   assert.equal(href.pathname, "/property/two");
   assert.equal(href.searchParams.get("searchHome"), "two");
   assert.deepEqual(
-    JSON.parse(href.searchParams.get("focus") ?? "null"),
-    results[1]?.proof_focuses?.[0],
+    href.searchParams.get("proofToken"),
+    primaryProofFocus(results[1])?.proofToken,
   );
 });
 
@@ -565,11 +561,7 @@ test("map context keeps ranked search societies without duplicate configurations
   sessionValues.clear();
   const result = (id: string, societyId: string, societyName: string): SearchResultItem => ({
     id,
-    kg_entity_refs: {
-      property_entity_id: `property:${id}`,
-      society_entity_id: societyId,
-      source_entity_ids: [],
-    },
+    society_id: societyId,
     title: societyName,
     area: "Whitefield",
     price: 20_000_000,
@@ -589,7 +581,7 @@ test("map context keeps ranked search societies without duplicate configurations
     match_score: 0.8,
     match_label: "Strong match",
     match_reason: "Near school",
-    match_tier: "exact",
+    matchTier: "exact",
   });
   const contextId = writeDiscoveryMapContext("quiet 3bhk", [
     result("one", "society:a", "Alpha"),
@@ -647,11 +639,7 @@ test("map context is consumed only by a property carried by its URL token", () =
   sessionValues.clear();
   const result = (id: string, societyId: string): SearchResultItem => ({
     id,
-    kg_entity_refs: {
-      property_entity_id: `property:${id}`,
-      society_entity_id: societyId,
-      source_entity_ids: [],
-    },
+    society_id: societyId,
     title: id,
     area: "Whitefield",
     price: 20_000_000,
@@ -671,7 +659,7 @@ test("map context is consumed only by a property carried by its URL token", () =
     match_score: 0.8,
     match_label: "Strong match",
     match_reason: "Near school",
-    match_tier: "exact",
+    matchTier: "exact",
   });
   writeDiscoveryMapContext("quiet 3bhk", [
     result("one", "society:a"),
@@ -694,12 +682,12 @@ test("discovery map context requires its URL token and shares the journey lifeti
   sessionValues.clear();
   const result = {
     id: "one",
-    kg_entity_refs: { property_entity_id: "property:one", society_entity_id: "society:a", source_entity_ids: [] },
+    society_id: "society:a",
     title: "Alpha", area: "Whitefield", price: 20_000_000, price_per_sqft: 12_000,
     bhk: 3, sqft: 1_600, society_name: "Alpha", builder_name: "Builder", hero_image: null,
     transparency_tags: [], description_summary: "", possession_status: "Ready", metro_distance_mins: 10,
     floor: 4, total_floors: 18, facing: "East", match_score: 0.8, match_label: "Strong match",
-    match_reason: "Near school", match_tier: "exact",
+    match_reason: "Near school", matchTier: "exact",
   } satisfies SearchResultItem;
   writeDiscoveryMapContext("Quiet   3BHK", [result], { id: "token", now: 5_000 });
 
@@ -737,12 +725,12 @@ test("discovery map context reuses one bounded slot for result updates", () => {
   sessionValues.clear();
   const result = {
     id: "one",
-    kg_entity_refs: { property_entity_id: "property:one", society_entity_id: "society:a", source_entity_ids: [] },
+    society_id: "society:a",
     title: "Alpha", area: "Whitefield", price: 20_000_000, price_per_sqft: 12_000,
     bhk: 3, sqft: 1_600, society_name: "Alpha", builder_name: "Builder", hero_image: null,
     transparency_tags: [], description_summary: "", possession_status: "Ready", metro_distance_mins: 10,
     floor: 4, total_floors: 18, facing: "East", match_score: 0.8, match_label: "Strong match",
-    match_reason: "Near school", match_tier: "exact",
+    match_reason: "Near school", matchTier: "exact",
   } satisfies SearchResultItem;
 
   const firstId = writeDiscoveryMapContext("quiet 3bhk", [result], { now: 5_000 });
@@ -804,4 +792,16 @@ test("repeating a query creates an immutable journey instead of overwriting hist
   assert.notEqual(first.id, second.id);
   assert.equal(readPropertySearchContext(first.id, 20_002)?.results[0]?.propertyId, "one");
   assert.equal(readPropertySearchContext(second.id, 20_002)?.results[0]?.propertyId, "two");
+});
+
+
+test("departure checkpoints the accepted revision's history entry after pushed edits", () => {
+  sessionValues.clear();
+  const url = "/?q=3BHK&journey=latest";
+  const span = writeSearchJourneyContext("3BHK", url, [searchResult("one")], RUNTIME_VERSION);
+  assert.ok(span);
+  captureDiscoveryDeparture(url, 320, 3);
+  const stored = readPropertySearchContext(span.id);
+  assert.equal(stored?.returnHistoryIndex, 3);
+  assert.equal(stored?.returnScrollY, 320);
 });
