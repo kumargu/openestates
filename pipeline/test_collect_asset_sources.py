@@ -41,6 +41,7 @@ from pipeline.skills.fetch_google_review_links import (
     FetchGoogleReviewLinksSkill,
     fetch_google_places_nearby_text,
 )
+from pipeline.skills.rera_regulatory_intelligence import RegulatoryIntelligenceError
 from pipeline.skills.search_reddit import (
     RedditSourceBlocked,
     RedditSourceInvalidResponse,
@@ -382,6 +383,58 @@ class CollectAssetSourcesTest(unittest.TestCase):
 
         load_cached.assert_not_called()
         capture.assert_called_once()
+
+    def test_rera_receipts_reuse_valid_regulatory_cache_when_refresh_fails(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            listing_cache = root / "listing.json"
+            listing_raw = root / "listing.html"
+            listing_cache.write_text(
+                json.dumps({"cached_at": "2026-08-09T10:30:00Z"}),
+                encoding="utf-8",
+            )
+            listing_raw.write_bytes(b"<html>official receipt</html>")
+            cached_receipt = {
+                "kind": "regulatory_list",
+                "source_url": "https://rera.karnataka.gov.in/projectList",
+                "content_type": "application/gzip",
+                "body_hex": b"cached regulatory receipt".hex(),
+                "captured_at": "2026-08-09T10:00:00Z",
+                "parent_receipt_id": None,
+                "crawl_run_id": "rera-regulatory-lists-2026-08-09",
+            }
+            cached_payload = {
+                "registration_number": "PRM/KA/RERA/1251/446/PR/300924/007105",
+                "checked_at": "2026-08-09T10:00:00Z",
+                "receipts": [cached_receipt],
+                "records": [],
+            }
+            request = {
+                "force_refresh_assets": ["rera_receipts"],
+                "source_entities": [
+                    {
+                        "entity_id": "society:fixture",
+                        "name": "Fixture",
+                        "project_key": "PRM/KA/RERA/1251/446/PR/300924/007105",
+                    }
+                ],
+            }
+            with patch("pipeline.collect_asset_sources.LISTING_CACHE_PATH", listing_cache), patch(
+                "pipeline.collect_asset_sources.LISTING_RAW_CACHE_PATH", listing_raw
+            ), patch(
+                "pipeline.collect_asset_sources.capture_scoped_rera_detail_receipts",
+                return_value=[],
+            ), patch(
+                "pipeline.collect_asset_sources.capture_scoped_rera_regulatory_payloads",
+                side_effect=RegulatoryIntelligenceError("temporarily unavailable"),
+            ), patch(
+                "pipeline.collect_asset_sources.load_scoped_rera_regulatory_payloads",
+                return_value=[cached_payload],
+            ) as load_cached:
+                payload = collect_rera_receipts(request)
+
+        load_cached.assert_called_once_with(request)
+        self.assertIn(cached_receipt, payload["receipts"])
 
     def test_rera_source_records_parse_the_raw_listing_with_receipt_lineage(self):
         with tempfile.TemporaryDirectory() as temp_dir:

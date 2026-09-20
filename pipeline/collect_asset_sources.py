@@ -2468,10 +2468,10 @@ def collect_rera_receipts(request: Dict[str, Any]) -> Dict[str, Any]:
                 regulatory_payloads = capture_scoped_rera_regulatory_payloads(request)
     except RegulatoryIntelligenceError as error:
         logger.warning(
-            "K-RERA regulatory lists unavailable; leaving regulatory coverage empty: %s",
+            "K-RERA regulatory lists unavailable; reusing valid cached coverage when available: %s",
             error,
         )
-        regulatory_payloads = []
+        regulatory_payloads = load_scoped_rera_regulatory_payloads(request)
     regulatory_receipt_keys = set()
     for payload in regulatory_payloads:
         for receipt in payload["receipts"]:
