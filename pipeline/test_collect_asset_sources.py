@@ -472,6 +472,22 @@ class CollectAssetSourcesTest(unittest.TestCase):
             json.loads(row["raw_value"])["project_name"], "Fixture Project"
         )
 
+    def test_rera_capture_id_matches_rust_rfc3339_fraction_precision(self):
+        receipt_id = "rera_receipt:sha256:fixture"
+        source_url = "https://rera.karnataka.gov.in/projectDetails?action=952"
+        from pipeline.collect_asset_sources import rera_capture_id
+
+        expected = hashlib.sha256(
+            "rera_capture.v1\n{}\n{}\n2026-09-20T10:07:45.871+00:00".format(
+                receipt_id, source_url
+            ).encode("utf-8")
+        ).hexdigest()
+
+        self.assertEqual(
+            rera_capture_id(receipt_id, source_url, "2026-09-20T10:07:45.871000+00:00"),
+            "rera_capture:sha256:{}".format(expected),
+        )
+
     def test_rera_source_records_scoped_run_ignores_unrelated_malformed_listing_rows(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

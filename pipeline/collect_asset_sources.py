@@ -2650,7 +2650,13 @@ def rera_receipt_id(body: bytes) -> str:
 
 
 def rera_capture_id(receipt_id: str, source_url: str, captured_at: str) -> str:
-    timestamp = captured_at[:-1] + "+00:00" if captured_at.endswith("Z") else captured_at
+    parsed = datetime.fromisoformat(str(captured_at).replace("Z", "+00:00"))
+    if parsed.microsecond == 0:
+        timestamp = parsed.isoformat(timespec="seconds")
+    elif parsed.microsecond % 1000 == 0:
+        timestamp = parsed.isoformat(timespec="milliseconds")
+    else:
+        timestamp = parsed.isoformat(timespec="microseconds")
     material = "rera_capture.v1\n{}\n{}\n{}".format(receipt_id, source_url, timestamp)
     return "rera_capture:sha256:{}".format(
         hashlib.sha256(material.encode("utf-8")).hexdigest()
