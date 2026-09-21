@@ -168,7 +168,7 @@ export function sectionTileCount(section: EvidenceSection): number | null {
 export function sectionConstellation(
   section: Pick<EvidenceSection, "kind" | "constellation">,
 ): EvidenceConstellation {
-  return section.constellation ?? "trust";
+  return section.constellation && section.constellation in CONSTELLATION_META ? section.constellation as EvidenceConstellation : "trust";
 }
 
 export function constellationMeta(id: EvidenceConstellation) {

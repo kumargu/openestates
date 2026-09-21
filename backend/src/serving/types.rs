@@ -446,6 +446,15 @@ pub struct ServingQuarantineReport {
     pub excluded_society_count: u64,
     pub reason_counts: BTreeMap<String, u64>,
     pub societies: Vec<QuarantinedSociety>,
+    #[serde(default)]
+    pub excluded_claims: Vec<ExcludedServingClaim>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExcludedServingClaim {
+    pub entity_id: String,
+    pub fact_key: String,
+    pub reason: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

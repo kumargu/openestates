@@ -6,7 +6,7 @@ export function journeyFixture(id = "revision-1", brief = "3 BHK, under ₹2.4Cr
   const envelope = structuredClone(getFixtureResponse("/api/search?q=3BHK")) as SearchJourneyEnvelope;
   envelope.active.buyerBrief = brief;
   envelope.active.revision = {
-    id,
+    id, operation: "initial", semanticFingerprint: "fixture",
     parentId: id === "revision-1" ? undefined : "revision-1",
     stateToken: `signed:${id}`,
     resultFingerprint: "same-homes",
@@ -23,6 +23,7 @@ export function journeyFixture(id = "revision-1", brief = "3 BHK, under ₹2.4Cr
       branchId: "branch-1", predicateId: "school", explanation: "Near Fixture School", proofToken: "signed:exact-receipt", showOnCard: true,
     }];
     const browseCards = envelope.active.results.resultSets[0].results.slice(0, 2).map((result, index) => ({
+      availability: result.availability,
       id: `contextual-${index + 1}`,
       society_id: `society:contextual-${index + 1}`,
       title: `Contextual home ${index + 1}`,
@@ -55,7 +56,7 @@ export function retainedFixture(parent = journeyFixture()): SearchJourneyEnvelop
       kind: "retained", orderedResultIds: parent.active.results.orderedResultIds,
       resultFingerprint: parent.active.revision.resultFingerprint,
     } },
-    attempt: { kind: "revision", outcome: "preservedParent", clarification: {
+    attempt: { operation: "refine", catalogRebased: false, kind: "revision", outcome: "preservedParent", clarification: {
       code: "no_matches", message: "No homes match that change. Your previous search is unchanged.",
     } },
   };

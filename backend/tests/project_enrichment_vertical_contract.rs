@@ -37,11 +37,19 @@ use tower::ServiceExt;
 
 #[tokio::test]
 async fn three_societies_reach_serving_with_listing_and_builder_evidence() {
+    materialized_contract(false).await;
+    materialized_contract(true).await;
+}
+
+async fn materialized_contract(carpet: bool) {
     let root = tempdir().unwrap();
     let lake = LakeStore::local(root.path()).unwrap();
     let store = AssetMaterializationStore::new(lake.clone());
     let observed_at = Utc.with_ymd_and_hms(2026, 7, 14, 12, 0, 0).unwrap();
-    let projects = fixtures();
+    let mut projects = fixtures();
+    if carpet {
+        projects[0].area_basis = "carpet";
+    }
     let partition = AssetPartition::new([
         ("dt", "2026-07-14"),
         ("society", "project-enrichment-fixture"),
@@ -286,6 +294,13 @@ async fn three_societies_reach_serving_with_listing_and_builder_evidence() {
         interest_counter: AtomicU64::new(0),
         interest_write_lock: tokio::sync::Mutex::new(()),
     });
+    let snapshot_identity = state
+        .search_runtime
+        .load()
+        .bundle
+        .manifest
+        .proof_snapshot_identity()
+        .to_string();
     let app = build_app_router_with_lake(state, lake);
     let response = app
         .clone()
@@ -335,11 +350,24 @@ async fn three_societies_reach_serving_with_listing_and_builder_evidence() {
                 .unwrap(),
         )
         .unwrap();
+        assert!(
+            journey["active"]["results"]["totalMatches"]
+                .as_u64()
+                .unwrap()
+                > 0,
+            "{query} must exercise matches"
+        );
+        let mut resolved_count = 0;
+        let mut numeric_count = 0;
         for set in journey["active"]["results"]["resultSets"]
             .as_array()
             .unwrap()
         {
             for result in set["results"].as_array().unwrap() {
+                assert!(
+                    !result["reasons"].as_array().unwrap().is_empty(),
+                    "matched inventory retains witnesses"
+                );
                 for reason in result["reasons"].as_array().unwrap() {
                     let response = app.clone().oneshot(Request::builder()
                         .method("POST").uri("/api/search/proofs/resolve")
@@ -354,13 +382,28 @@ async fn three_societies_reach_serving_with_listing_and_builder_evidence() {
                     )
                     .unwrap();
                     assert_eq!(status, StatusCode::OK, "{query}: {receipt}");
+                    resolved_count += 1;
+                    if receipt["constraint"].is_object() {
+                        numeric_count += 1;
+                        assert_eq!(receipt["claim"]["unit"], receipt["constraint"]["unit"]);
+                        assert!(receipt["claim"]["value"].is_number());
+                    }
+                    assert_eq!(receipt["snapshotIdentity"], snapshot_identity);
                     assert_eq!(receipt["resolutionStatus"], "resolved");
                     assert!(!receipt["sourceObservations"].as_array().unwrap().is_empty());
                 }
             }
         }
+        assert!(resolved_count > 0);
+        if query.contains("acres") {
+            assert!(
+                numeric_count > 0,
+                "numeric eligibility must issue its constraint and witness"
+            );
+        }
     }
     let response = app
+        .clone()
         .oneshot(
             Request::builder()
                 .uri("/api/search?q=3BHK%20carpet%20area%20above%201500%20sqft")
@@ -378,13 +421,104 @@ async fn three_societies_reach_serving_with_listing_and_builder_evidence() {
     )
     .unwrap();
     assert_eq!(
-        journey["active"]["results"]["totalMatches"], 0,
-        "super built-up observations cannot prove carpet area"
+        journey["active"]["results"]["totalMatches"],
+        if carpet { 1 } else { 0 },
+        "only explicit carpet observations can prove carpet area"
     );
+    let ids = body["active"]["results"]["orderedResultIds"]
+        .as_array()
+        .unwrap();
+    for id in ids {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!(
+                        "/api/properties/{}?snapshotIdentity={snapshot_identity}",
+                        id.as_str().unwrap()
+                    ))
+                    .extension(ConnectInfo(SocketAddr::from(([192, 0, 2, 5], 41000))))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let detail: Value = serde_json::from_slice(
+            &to_bytes(response.into_body(), 4 * 1024 * 1024)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        let measurement = &detail["property"]["area_measurement"];
+        assert_eq!(
+            measurement["evidence"]["snapshot_identity"],
+            snapshot_identity
+        );
+        assert_eq!(measurement["unit"], "sqft");
+        if measurement["basis"] != "carpet" {
+            assert!(detail["property"].get("carpet_area_sqft").is_none());
+        }
+    }
+    for (snapshot, expected) in [
+        (&snapshot_identity, StatusCode::OK),
+        (&"retired".to_string(), StatusCode::CONFLICT),
+    ] {
+        let response = app.clone().oneshot(Request::builder().method("POST").uri("/api/properties/batch")
+            .header("content-type", "application/json")
+            .extension(ConnectInfo(SocketAddr::from(([192, 0, 2, 6], 41000))))
+            .body(Body::from(serde_json::json!({"propertyIds": [ids[1], ids[0], ids[1], "missing"], "snapshotIdentity": snapshot}).to_string())).unwrap()).await.unwrap();
+        assert_eq!(response.status(), expected);
+        if expected == StatusCode::OK {
+            let batch: Value = serde_json::from_slice(
+                &to_bytes(response.into_body(), 4 * 1024 * 1024)
+                    .await
+                    .unwrap(),
+            )
+            .unwrap();
+            assert_eq!(batch["items"].as_array().unwrap().len(), 2);
+            assert_eq!(batch["items"][0]["id"], ids[1]);
+            assert_eq!(batch["items"][1]["id"], ids[0]);
+            assert_eq!(batch["missingIds"], serde_json::json!(["missing"]));
+        }
+    }
+    for resource in ["", "/rera", "/recommendations", "/evidence"] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!(
+                        "/api/properties/{}{resource}?snapshotIdentity=retired",
+                        ids[0].as_str().unwrap()
+                    ))
+                    .extension(ConnectInfo(SocketAddr::from(([192, 0, 2, 6], 41000))))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            response.status(),
+            StatusCode::CONFLICT,
+            "{resource} must reject mixed snapshots"
+        );
+    }
+    if !carpet {
+        if let Ok(address) = std::env::var("OPENESTATES_CONTRACT_SERVER_ADDR") {
+            let listener = tokio::net::TcpListener::bind(address).await.unwrap();
+            axum::serve(
+                listener,
+                app.into_make_service_with_connect_info::<SocketAddr>(),
+            )
+            .await
+            .unwrap();
+        }
+    }
 }
 
 struct ProjectFixture {
     name: &'static str,
+    area_basis: &'static str,
     registration: &'static str,
     status: &'static str,
     acres: f64,
@@ -397,6 +531,7 @@ fn fixtures() -> Vec<ProjectFixture> {
     vec![
         ProjectFixture {
             name: "Prestige Raintree Park",
+            area_basis: "mixed",
             registration: "PRM/KA/RERA/1251/446/PR/270824/006981",
             status: "Under Construction",
             acres: 21.0,
@@ -406,6 +541,7 @@ fn fixtures() -> Vec<ProjectFixture> {
         },
         ProjectFixture {
             name: "Prestige Park Grove",
+            area_basis: "built_up",
             registration: "PRM/KA/RERA/1251/446/PR/100823/006141",
             status: "Sold Out",
             acres: 71.41,
@@ -415,6 +551,7 @@ fn fixtures() -> Vec<ProjectFixture> {
         },
         ProjectFixture {
             name: "Prestige Lavender Fields",
+            area_basis: "super_builtup",
             registration: "PRM/KA/RERA/1251/446/PR/290423/005906",
             status: "Sold Out",
             acres: 18.2,
@@ -458,6 +595,32 @@ fn source_inputs(
                     observation_provider: None,
                     provider_observation_id: None,
                     asset_lineage: Vec::new(),
+                });
+                let mut documents = detail_facts.last().unwrap().clone();
+                documents.fact_key = "rera_document_manifest".to_string();
+                documents.value_json = serde_json::to_string(&FactValue::Text(
+                    serde_json::json!([{
+                        "artifact_id": "fixture-sanctioned-plan", "kind": "sanctioned_plan",
+                        "label": "Sanctioned plan", "document_group": "plans",
+                        "source_url": "https://rera.example/documents/sanctioned-plan.pdf",
+                        "buyer_visibility": "public", "confidence": 1.0
+                    }])
+                    .to_string(),
+                ))
+                .unwrap();
+                documents.observation_provider = Some("Rera".to_string());
+                documents.provider_observation_id =
+                    Some(format!("{}:documents", project.registration));
+                documents.asset_lineage = vec!["rera_registry_monthly".to_string()];
+                detail_facts.push(documents);
+                detail_fact_annotations.push(SkillFactAnnotationRecord {
+                    entity_id: entity_id.clone(),
+                    fact_key: "rera_document_manifest".to_string(),
+                    display_template: None,
+                    answers_preferences_json: "[]".to_string(),
+                    scoring_direction: None,
+                    scoring_weight: None,
+                    scoring_thresholds_json: "[]".to_string(),
                 });
                 detail_fact_annotations.push(SkillFactAnnotationRecord {
                     entity_id,
@@ -507,7 +670,7 @@ fn source_inputs(
             area_display: None,
             price_per_sqft_display: None,
             configuration: Some("3BHK".to_string()),
-            area_type: Some("super_builtup".to_string()),
+            area_type: Some(project.area_basis.to_string()),
             bhk: Some(3.0),
             bathrooms: Some(3.0),
             floor: Some("12".to_string()),

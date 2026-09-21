@@ -183,7 +183,6 @@ pub struct ScoringPolicyFile {
     pub engine_version: String,
     #[serde(default)]
     pub missing_data: MissingDataPolicy,
-    pub area_tracker: AreaTrackerPolicy,
     #[serde(default)]
     pub search_ranking: SearchRankingPolicy,
     #[serde(default)]
@@ -197,24 +196,6 @@ pub struct ScoringPolicyFile {
     pub recommendation_recall: RecommendationRecallPolicy,
     #[serde(default)]
     pub recommendation_branches: Vec<RecommendationBranchPolicy>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AreaTrackerPolicy {
-    pub min_listing_count: usize,
-    pub ready_possession_statuses: Vec<String>,
-    pub near_metro_max_minutes: u32,
-    pub demand: AreaTrackerDemandPolicy,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AreaTrackerDemandPolicy {
-    pub search_count_normalizer: f32,
-    pub search_count_cap: f32,
-    pub evidence_gap_normalizer: f32,
-    pub evidence_gap_cap: f32,
-    pub listing_count_normalizer: f32,
-    pub listing_count_cap: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -385,10 +366,6 @@ pub fn scoring_policy() -> &'static ScoringPolicyFile {
 
 pub fn search_ranking_policy() -> &'static SearchRankingPolicy {
     &scoring_policy().search_ranking
-}
-
-pub fn area_tracker_policy() -> &'static AreaTrackerPolicy {
-    &scoring_policy().area_tracker
 }
 
 pub fn score_property_for_surface(
@@ -669,7 +646,6 @@ fn text_safety_score(text: &str) -> f64 {
 }
 
 fn validate_policy(policy: &ScoringPolicyFile) -> Result<(), DagConfigError> {
-    validate_area_tracker(&policy.area_tracker)?;
     validate_recommendation_policy(policy)?;
     if !policy
         .search_ranking
@@ -900,34 +876,6 @@ fn normalize_policy_value(value: &str) -> String {
         .collect()
 }
 
-fn validate_area_tracker(policy: &AreaTrackerPolicy) -> Result<(), DagConfigError> {
-    if policy.min_listing_count == 0
-        || policy.ready_possession_statuses.is_empty()
-        || policy.near_metro_max_minutes == 0
-    {
-        return Err(DagConfigError::InvalidConfig(
-            "area tracker requires listings, ready statuses, and a metro threshold".to_string(),
-        ));
-    }
-    let demand_values = [
-        policy.demand.search_count_normalizer,
-        policy.demand.search_count_cap,
-        policy.demand.evidence_gap_normalizer,
-        policy.demand.evidence_gap_cap,
-        policy.demand.listing_count_normalizer,
-        policy.demand.listing_count_cap,
-    ];
-    if demand_values
-        .iter()
-        .any(|value| !value.is_finite() || *value <= 0.0)
-    {
-        return Err(DagConfigError::InvalidConfig(
-            "area tracker demand normalizers and caps must be finite and positive".to_string(),
-        ));
-    }
-    Ok(())
-}
-
 fn default_true() -> bool {
     true
 }
@@ -1057,7 +1005,6 @@ mod tests {
         assert!(!policy.signals.is_empty());
         assert!(!policy.recommendation_branches.is_empty());
         assert!(policy.missing_data.never_zero_fill);
-        assert_eq!(policy.area_tracker.min_listing_count, 2);
         assert_eq!(policy.search_ranking.ranked_focus_min_match_score, 0.35);
         assert_eq!(policy.search_ranking.result_limit, 32);
         assert!(policy.search_ranking.exact_society_matches_first);

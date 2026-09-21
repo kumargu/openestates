@@ -13,7 +13,7 @@ Core product surfaces:
 - property pages that feel like asset pages, not dumb listings
 - results that explain *why* a property is shown
 - shortlist and compare workflows that reduce ambiguity
-- Area Tracker as a living market map for prices, crawl freshness, society density, and evidence strength
+- Area Tracker is deferred; restoration is separate product work over promoted domain facts and the durable search-event stream.
 - plan pages that compare buying, renting, investing, and repayment tradeoffs without turning into generic calculators
 
 OpenEstates is not trying to win by having the biggest pile of listings. The wedge is **rich discovery with transparent proof**: fewer but better-ranked options, source-backed reasoning, and clear tradeoffs.
@@ -93,7 +93,6 @@ Curated-feeling shelves are welcome, but they must be generated from facts rathe
 - Family-friendly societies
 - Good price, weaker proof
 - Premium but explainable
-- Area Tracker picks
 
 ### User-added properties are future inputs, not instant truth
 When opening the gates for owners, buyers, or brokers to add properties, accept structured contributions only: listing facts, price proof, photos, source links, RERA/project mapping, and locality signals. User submissions should enter a validation/enrichment flow before they affect ranking or proof labels.
@@ -150,7 +149,7 @@ Rules:
 - Canonicalizing entity IDs must preserve runtime alias lookup across facts, graph edges, and spatial/proximity indexes; test each path using the ID carried by runtime properties.
 - Missing evidence should be tracked internally for enrichment, not rendered as raw "unknown/gap" copy to users.
 - Legacy local data stores must not silently mix with DAG outputs; mixed truth makes quality impossible to measure.
-- Area Tracker must stay first-class and must read from the same DAG-backed facts as property details and search.
+- Area Tracker is explicitly deferred. Keep search-event ingestion for enrichment; do not restore its retired endpoint or disconnected UI as a fallback.
 
 ### Fact model > feature-specific blobs
 Keep canonical facts separate from search metadata, derived scores, UI copy, and cache indexes. New features should consume facts through typed views or serving products, not mutate the canonical layer.
@@ -168,7 +167,7 @@ Use these layers deliberately:
 Do not treat cache output as source truth.
 
 ### APIs stay clean
-Backend endpoints should serve structured views: ranked results, property details, area tracker, proof summaries, collections, and plan inputs. Handlers should assemble and map data, not perform crawling, enrichment, or ad hoc business logic.
+Backend endpoints should serve structured views: ranked results, property details, proof summaries, collections, and plan inputs. Handlers should assemble and map data, not perform crawling, enrichment, or ad hoc business logic.
 
 ### Search quality must be measurable
 Every new discovery behavior should be testable with fuzzy/user-like queries and expected evidence. Track recall, ranking reasons, source freshness, and whether useless or stale facts leak into responses.
@@ -205,9 +204,9 @@ tests, compile/type checks, and the search hardcoding audit.
   invariants whose contracts are already stable, such as evidence identity,
   row-order stability, four-state Boolean logic, and exact geometry.
 - Prefer extending an existing integration or query-bank scenario over adding
-  duplicate synthetic fixture builders. Keep existing tests; when fixture
-  plumbing changes, update the fixture without cloning it or weakening its
-  product assertion.
+  duplicate synthetic fixture builders. Preserve meaningful behavior coverage;
+  delete obsolete and duplicate tests with replacement evidence. Map each
+  deleted assertion to its surviving contract or explain why its behavior is retired.
 - Add regression coverage when a failure exposes generic product behavior, not
   when it only mirrors an evolving implementation detail. Record whether a new
   test caught a real bug or merely encoded an expectation.
@@ -217,6 +216,8 @@ tests, compile/type checks, and the search hardcoding audit.
   coverage in a focused pass where its maintenance cost is justified.
 
 ### Architecture replacement discipline
+
+- Each migration records its affected producers, consumers, old-path deletions and validating gate. Rust public DTOs define wire schemas; generated TypeScript and boundary validation must stay in sync. Contract version is independent of immutable bundle identity. Pin related reads to one snapshot and reject mismatches explicitly.
 
 - Do not add backward-compatibility shims unless the user explicitly requests
   them. This product is pre-production; prefer rebuilding local artifacts and
@@ -284,7 +285,7 @@ Search results and property details must share a structured proof contract for "
 
 Proof focus must never hide facts that already exist. It is an overlay on top of the stable detail payload, not a replacement filter and not a second ranking engine. Direct property visits should render normal default evidence; visits from search may add focus state. If a matched proof is outside a default UI cap or nearby radius, the UI must expand for that proof while preserving the rest of the layer's configured facts.
 
-Do not solve proof handoff with one-off UI branches such as "if hospital then open hospitals" or project/place-specific checks. The contract should be generic: `surface_id`, `layer_id`, `fact_key`, matched entity/source handle, matched label, distance/value, requested constraint, and reason. Components should consume that contract consistently across map layers, RERA/project facts, flooding, transmission lines, lakes, schools, tech parks, reviews, and future surfaces.
+Do not solve proof handoff with one-off UI branches such as "if hospital then open hospitals" or project/place-specific checks. The contract should be generic: `fact_key`, immutable snapshot identity, predicate identity, typed constraint, matched entity and durable evidence references. UI presentation config maps those references to sections and layers; layout destinations are never proof identity. A valid receipt without a specialized destination opens in the generic evidence view. Components should consume that contract consistently across map layers, RERA/project facts, flooding, transmission lines, lakes, schools, tech parks, reviews, and future surfaces.
 
 ### Config is the control plane — prefer it over hardcoding
 
@@ -294,7 +295,8 @@ OpenEstates behaves like a **document database for product behavior**: most thin
 
 ```
 app/config/
-  dag/                         # ontology, leaves, assets, enrichment, UI surfaces
+  dag/                         # ontology, leaves, assets, enrichment, domain policies
+  ui/                          # layouts, navigation, sections, evidence destinations
   bootstrap/                   # import policies + edge inference rules only
 data/lake/                     # DAG assets + serving bundles (Parquet)
 ```
@@ -328,7 +330,7 @@ Hardcoding is allowed only when it is truly structural: route names, API field m
 - Rust `match fact_key` or frontend `riskSignalsFor()` built from seed scores
 - Per-skill copies of `answers_preferences` / `scoring_hint` — belong in `fact_registry.json`
 
-**Loader contract:** `backend/src/dag_config/` validates config at startup; runtime prefers config with embedded fallback only until parity is proven. Python collectors and materializers read the same files.
+**Loader contract:** `backend/src/dag_config/` validates config at startup; runtime requires validated versioned config and fails explicitly when required config is missing. Do not add embedded fallback copies. Python collectors and materializers read the same files.
 
 See `docs/dag_convergence_design.md` and `docs/dag_execution_plan.md` for the full migration phases.
 
@@ -410,7 +412,7 @@ Use OSM and Google together through typed DAG facts, with a strict ownership bou
 
 ### Skills own the domain, Rust owns the runtime
 - New knowledge dimension = new skill in `pipeline/skills/` that produces self-describing `SourcedFact`s
-- ZERO Rust code changes needed for new fact types — the skill declares `display_template`, `answers_preferences`, and `scoring_hint` in **`app/config/dag/fact_registry.json`** (Phase 2+), not in Rust
+- Configured facts using existing mechanics need no runtime changes. Genuinely new mechanics may require generic runtime code and a materializer-to-API contract. Domain eligibility and scoring belong in `app/config/dag/`; layout, navigation and display policy belong in `app/config/ui/`.
 - Do not add hardcoded match arms in Rust for new fact keys
 - Do not add hardcoded lists in frontend for buyer-facing signals — consume structured API views driven by config
 
@@ -440,10 +442,9 @@ SourcedFact:
   value: Text("good")
   confidence: 0.6
   source: { source_type: Reddit, skill_id: "search_reddit", ... }
-  display_template: "Maintenance is {value}"
-  answers_preferences: ["good society", "maintenance"]
-  scoring_hint: { direction: TextMatch, weight: 2.0 }
 ```
+
+Canonical facts carry values and provenance. Search metadata carries configured preference/scoring bindings; presentation config carries display policy. Neither metadata nor display text is an evidence input.
 
 ### Local Search + Offline Enrichment Flow
 
@@ -467,7 +468,7 @@ Rules:
 - Search should never invent or live-discover facts.
 - User-facing UI should not show raw missing/gap sentences. Use confidence,
   proof strength, and source freshness instead.
-- Newly enriched/crawled data gets lower confidence until RERA/source checks pass.
+- Confidence follows explicit source and evidence policy. Observation and ingestion timestamps never determine confidence, age, eligibility, ranking or current state. They remain provenance/display metadata.
 
 Every search either returns good local data or records the evidence needed to
 make the next search better. This is the flywheel.
@@ -485,8 +486,11 @@ data/lake/
 
 ```
 GET  /api/search
+POST /api/search/revisions
+POST /api/search/resume
+POST /api/search/proofs/resolve
+POST /api/properties/batch
 GET  /api/properties/{id}
-GET  /api/areas/tracker
 GET  /api/societies
 GET  /api/admin/data-health
 ```

@@ -713,18 +713,6 @@ fn validate_property_projection(
                 Some(property.id.clone()),
             );
         }
-        let price_is_explicitly_unavailable = property
-            .transparency_tags
-            .iter()
-            .any(|tag| tag.eq_ignore_ascii_case("Price unavailable"));
-        if property.price == 0 && !price_is_explicitly_unavailable {
-            issue(
-                issues,
-                "incomplete_property_price",
-                "property card requires a positive price or an explicit unavailable state",
-                Some(property.id.clone()),
-            );
-        }
         if property.builder_name.trim().is_empty() {
             issue(
                 issues,

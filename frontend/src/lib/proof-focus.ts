@@ -1,7 +1,21 @@
+import contextPresentation from "../../../app/config/ui/property-context.json" with { type: "json" };
 import type { ProofFocus, SearchProofResolution, SearchResultItem } from "./types.ts";
 
+function proofDestination(factKey: string) {
+  const surfaces: ReadonlyArray<{ id: string; proofHandoff?: { kind: string; targetId: string; factKeys?: string[] }; scene?: { layers: Array<{ id: string; factKeys: string[] }> } }> = contextPresentation.surfaces;
+  for (const surface of surfaces) {
+    if (!("proofHandoff" in surface) || !surface.proofHandoff) continue;
+    const handoff = surface.proofHandoff;
+    const layer = surface.scene?.layers.find((layer) => layer.factKeys.some((key) => key === factKey));
+    if (layer || handoff.factKeys?.includes(factKey)) return {
+      surfaceId: surface.id, layerId: layer?.id, kind: handoff.kind, targetId: handoff.targetId,
+    };
+  }
+  return undefined;
+}
+
 export function resolvedProofFocus(proof: SearchProofResolution, token: string): ProofFocus | undefined {
-  const destination = proof.destination;
+  const destination = proofDestination(proof.factKey);
   if (!destination) return undefined;
   const value = proof.value?.data;
   const display = typeof value === "string" || typeof value === "number" || typeof value === "boolean"

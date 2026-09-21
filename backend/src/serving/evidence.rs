@@ -7,7 +7,7 @@ use sha2::{Digest, Sha256};
 
 use super::{ServingEdgeRecord, ServingFactRecord};
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ObservationId(String);
 
@@ -17,7 +17,7 @@ impl ObservationId {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct DerivationId(String);
 
@@ -27,7 +27,7 @@ impl DerivationId {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "id", rename_all = "snake_case")]
 pub enum EvidenceId {
     Observation(ObservationId),
@@ -152,7 +152,7 @@ impl ServingEvidenceIndex {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct EvidenceRef {
     pub snapshot_identity: String,
     pub subject_entity_id: String,
@@ -289,7 +289,7 @@ struct ObservationIdentityPayload<'a> {
     asset_lineage: &'a [String],
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DerivedEvidence {
     pub derivation_id: DerivationId,
     pub snapshot_identity: String,

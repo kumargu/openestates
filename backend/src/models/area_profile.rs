@@ -1,12 +1,12 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize, Deserialize)]
 pub struct PriceRange {
     pub low: u64,
     pub high: u64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize, Deserialize)]
 pub struct RedditSignals {
     pub decision_drivers: Vec<String>,
     pub recurring_concerns: Vec<String>,
@@ -14,7 +14,7 @@ pub struct RedditSignals {
     pub last_updated: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize, Deserialize)]
 pub struct AreaProfile {
     pub id: String,
     pub name: String,

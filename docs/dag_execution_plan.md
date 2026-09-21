@@ -118,7 +118,7 @@ app/config/
     resolution_policies.json
     asset_registry.json
     enrichment_targets.json
-    ui_surfaces.json            # surface → traversal + leaf_keys
+    # Presentation traversal config lives in app/config/ui/property-context.json
     entity_context.json         # FUTURE API contract (Phase 10)
     crawl_policies/
     search_intent.json
@@ -249,7 +249,7 @@ Each phase has **deliverables**, **acceptance criteria**, and **storage checks**
 1. Create `app/config/` and directory layout
 2. Draft `concern_taxonomy.json` from issue #2 + livability themes (78 leaves)
 3. Draft `ontology.json` (7 entity types + 6 relations)
-4. Draft `resolution_policies.json`, `ui_surfaces.json`, `enrichment_targets.json`
+4. Draft `resolution_policies.json`, `app/config/ui/property-context.json`, `enrichment_targets.json`
 5. Document confidence → proof label mapping
 6. `coverage.json` audit + `lake/layout.json` storage contract
 
@@ -257,7 +257,7 @@ Each phase has **deliverables**, **acceptance criteria**, and **storage checks**
 
 - [x] `app/config/` scaffold created
 - [x] 78 leaves merged from livability themes + issue #2
-- [x] `ui_surfaces.json` — 6 surfaces with traversal hops
+- [x] `app/config/ui/property-context.json` — 6 surfaces with traversal hops
 - [x] Storage section in `lake/layout.json` matches serving schema
 - [x] `entity_context.json` contract stub for future graph UI API
 - [ ] Every issue #2 signal maps to a `fact_key` or is explicitly deferred
@@ -541,7 +541,7 @@ match preference {
 
 **Work:**
 
-1. Rust `EntityContextComposer`: walk from anchor (`society:*` or `property:*`) using `ui_surfaces.json` traversal hops (baked into bundle manifest or startup config snapshot)
+1. Rust `EntityContextComposer`: walk from anchor (`society:*` or `property:*`) using `app/config/ui/property-context.json` traversal hops (baked into bundle manifest or startup config snapshot)
 2. Emit `clauses[]` then `summary_paragraph` via deterministic `display_template` + hop templates (no LLM on hot path)
 3. `GET /api/entities/{entity_id}/context` and `GET /api/properties/{id}/context`
 4. React: generic renderers by `presentation.variant`; property page consumes `summary` + `surfaces[]`
@@ -581,7 +581,7 @@ Stream I — EntityContext graph API    (Phase 10 — last)
 |-------|--------|----------|
 | Node/edge schema | ✅ Ready | `ontology.json` |
 | Leaf defs + templates | ✅ Ready | `concern_taxonomy.json`, `fact_registry.json` |
-| Surface traversals | ✅ Ready | `ui_surfaces.json` |
+| Surface traversals | ✅ Ready | `app/config/ui/property-context.json` |
 | Edge inference rules | ✅ Ready | `bootstrap/edge_inference.json` |
 | Gold edges Parquet | ✅ Schema | `lake/layout.json` |
 | Serving edges table | ❌ Gap | Phase 4 |

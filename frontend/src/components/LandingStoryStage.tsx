@@ -248,8 +248,8 @@ function BrowsePropertyTile({
 }) {
   const meta = [
     showArea ? property.area : null,
-    property.bhk > 0 ? `${property.bhk} BHK` : null,
-    property.sqft > 0 ? `${property.sqft.toLocaleString("en-IN")} sqft` : null,
+    property.bhk !== undefined && property.bhk > 0 ? `${property.bhk} BHK` : null,
+    property.sqft !== undefined && property.sqft > 0 ? `${property.sqft.toLocaleString("en-IN")} sqft` : null,
   ].filter(Boolean).join(" · ");
   const href = hrefWithSearchSpan(proofFocus ? propertyDetailPath(property.id, proofFocus) : property.detail_href, searchSpan ? {
     ...searchSpan,

@@ -9,6 +9,7 @@ use crate::serving::{DerivedEvidence, EvidenceRef, ServingFactIndex};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InventoryOption {
+    pub confidence: f32,
     pub property_id: String,
     pub society_id: String,
     pub bhk: Option<u32>,
@@ -51,6 +52,7 @@ impl InventoryOption {
                 let minimum = value.area_sqft_min;
                 let maximum = value.area_sqft_max;
                 let mut option = value.into_option(property, society_entity_id)?;
+                option.confidence = fact.confidence;
                 if let Some(value) = area.filter(|v| *v > 0) {
                     option.area_measurement = Some(crate::models::Measurement {
                         value: value as f64,
@@ -202,7 +204,7 @@ impl InventoryOption {
             fact_key: self.evidence_fact_key.clone(),
             derived_evidence: None,
             algorithm_version: "inventory-option-evaluator-v2".to_string(),
-            confidence: 1.0,
+            confidence: self.confidence,
             snapshot_identity: snapshot_identity.to_string(),
         })
     }
@@ -237,6 +239,7 @@ impl InventoryObservationValue {
         let price_min = self.price_min.or(exact_price);
         let price_max = self.price_max.or(exact_price);
         let option = InventoryOption {
+            confidence: 0.0,
             property_id: property.id.clone(),
             society_id: society_entity_id.to_string(),
             bhk: Some(bhk),

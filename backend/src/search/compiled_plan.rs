@@ -54,7 +54,7 @@ pub struct GeoCellSearchPolicy {
     pub max_distance_km: f64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "op", content = "value", rename_all = "camelCase")]
 pub enum BoolExpr<T> {
     All(Vec<BoolExpr<T>>),

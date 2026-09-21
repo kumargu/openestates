@@ -7,10 +7,10 @@ use crate::dag_config::{
 };
 use crate::knowledge::node::RootSource;
 use crate::knowledge::{FactValue, KnowledgeGraph};
+use crate::models::Property;
 #[cfg(test)]
 use crate::models::Society;
-use crate::models::{KgEntityRefs, Property};
-use crate::routes::enrichment::{area_node_id, property_node_id, society_node_id};
+use crate::routes::enrichment::society_node_id;
 use crate::scoring::BestEffortRankingTier;
 use crate::serving::{
     EvidenceId, GoogleReviewEvidence, ServingFactIndex, ServingFactRecord,
@@ -513,57 +513,7 @@ impl CandidateEvaluator {
                     return None;
                 }
 
-                let mut card = crate::models::PropertyCard {
-                    id: p.id.clone(),
-                    kg_entity_refs: KgEntityRefs {
-                        property_entity_id: property_node_id(&p.id),
-                        society_entity_id: society_node_id(&p.society_id),
-                        area_entity_id: area_node_id(&p.area),
-                        builder_entity_id: None,
-                        source_entity_ids: Vec::new(),
-                    },
-                    title: p.title.clone(),
-                    area: p.area.clone(),
-                    price: p.price,
-                    price_min: p.price_min,
-                    price_max: p.price_max,
-                    price_per_sqft: p.price_per_sqft,
-                    bhk: p.bhk,
-                    sqft: p.carpet_area_sqft,
-                    carpet_area_sqft: p.carpet_area_sqft,
-                    super_builtup_sqft: p.super_builtup_sqft,
-                    area_measurement: p.area_measurement.clone(),
-                    society_name: society_name.to_string(),
-                    builder_name: p.builder_name.clone(),
-                    images: p.images.clone(),
-                    hero_image: p.hero_image.clone(),
-                    transparency_tags: crate::routes::enrichment::compact_transparency_tags(
-                        &p.transparency_tags,
-                    ),
-                    description_summary: p.description_summary.clone(),
-                    possession_status: p.possession_status.clone(),
-                    metro_distance_mins: p.metro_distance_mins,
-                    floor: p.floor,
-                    total_floors: p.total_floors,
-                    facing: p.facing.clone(),
-                    google_rating: None,
-                    google_review_count: None,
-                    google_reviews_url: None,
-                    society_land_acres: None,
-                    open_space_pct: None,
-                    root_source: None,
-                    project_status: None,
-                    project_status_display: None,
-                    home_state_display: None,
-                    builder_delivery_display: None,
-                    data_freshness: None,
-                    floor_plan_preview_url: None,
-                    plan_carpet_area_sqft: None,
-                    plan_sale_area_sqft: None,
-                    plan_configuration_type: None,
-                    decision_labels: Vec::new(),
-                    decision_check_summary: None,
-                };
+                let mut card = p.to_card(society_name);
                 if let Some(serving_facts) = serving_facts {
                     enrich_card_from_serving_facts(
                         &mut card,
@@ -1513,7 +1463,7 @@ fn numeric_constraint_evaluation(
                     measurement.value,
                     measurement.evidence.clone(),
                     option.evidence_fact_key.clone()?,
-                    1.0,
+                    option.confidence,
                 )
             } else {
                 let rows = serving_facts?.entity(society_entity_id)?;
@@ -1591,10 +1541,31 @@ fn aggregate_numeric_constraint_fact<'a>(
                 numeric_constraint_fact_value(fact, schema).map(|value| (fact, value))
             })
     });
+    let mut values = values.collect::<Vec<_>>();
+    values.sort_by(|left, right| {
+        let priority = |fact: &crate::serving::ServingFactRecord| {
+            schema
+                .fact_keys
+                .iter()
+                .position(|key| key.eq_ignore_ascii_case(&fact.fact_key))
+        };
+        priority(left.0)
+            .cmp(&priority(right.0))
+            .then_with(|| right.0.confidence.total_cmp(&left.0.confidence))
+            .then_with(|| {
+                left.0
+                    .stable_selection_key()
+                    .cmp(&right.0.stable_selection_key())
+            })
+    });
     match schema.aggregation {
         NumericAggregation::First => values.into_iter().next(),
-        NumericAggregation::Minimum => values.min_by(|left, right| left.1.total_cmp(&right.1)),
-        NumericAggregation::Maximum => values.max_by(|left, right| left.1.total_cmp(&right.1)),
+        NumericAggregation::Minimum => values
+            .into_iter()
+            .min_by(|left, right| left.1.total_cmp(&right.1)),
+        NumericAggregation::Maximum => values
+            .into_iter()
+            .max_by(|left, right| left.1.total_cmp(&right.1)),
     }
 }
 
@@ -3962,6 +3933,7 @@ mod tests {
                 (
                     property.id.clone(),
                     InventoryOption {
+                        confidence: 1.0,
                         property_id: property.id.clone(),
                         society_id,
                         bhk: Some(property.bhk),
@@ -4043,7 +4015,21 @@ mod tests {
             model: None,
             skill_id: Some("unit-test".to_string()),
             learned_at: Utc.with_ymd_and_hms(2026, 7, 31, 0, 0, 0).unwrap(),
-            observation: None,
+            observation: Some(
+                crate::serving::SourceObservation::new(
+                    source_type,
+                    if fact_key.starts_with("geo.") {
+                        "fixture:coordinates".to_string()
+                    } else {
+                        format!("fixture:{fact_key}")
+                    },
+                    format!("society:{society_id}"),
+                    Utc.with_ymd_and_hms(2026, 7, 31, 0, 0, 0).unwrap(),
+                    None,
+                    vec!["fixture/source-v1".to_string()],
+                )
+                .unwrap(),
+            ),
         }
     }
 
@@ -4128,7 +4114,21 @@ mod tests {
             model: None,
             skill_id: Some("unit-test".to_string()),
             learned_at: Utc.with_ymd_and_hms(2026, 7, 31, 0, 0, 0).unwrap(),
-            observation: None,
+            observation: Some(
+                crate::serving::SourceObservation::new(
+                    source_type,
+                    if fact_key.starts_with("geo.") {
+                        "fixture:coordinates".to_string()
+                    } else {
+                        format!("fixture:{fact_key}")
+                    },
+                    entity_id,
+                    Utc.with_ymd_and_hms(2026, 7, 31, 0, 0, 0).unwrap(),
+                    None,
+                    vec!["fixture/v1".to_string()],
+                )
+                .unwrap(),
+            ),
         }
     }
 

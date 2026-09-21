@@ -106,6 +106,8 @@ export function atlasFixtureScene(surfaceId: string): SurfaceSceneResponse {
   };
   return {
     contractVersion: 1,
+    snapshotIdentity: "dev-fixture-v1",
+    proofFocusStatus: "notRequested",
     surfaceId,
     propertyId: atlasFixtureId,
     servingBundleVersion: "local-atlas-fixture",
@@ -151,6 +153,7 @@ export function atlasFixtureScene(surfaceId: string): SurfaceSceneResponse {
     callouts: [],
     receipts: [
       {
+        evidence: { snapshot_identity: "dev-fixture-v1", subject_entity_id: "society:prestige-waterford", evidence_id: { kind: "observation", id: "fixture:osm" } },
         id: "osm",
         entityId: "society:prestige-waterford",
         factKey: "geo.geometry_geojson",
@@ -161,6 +164,7 @@ export function atlasFixtureScene(surfaceId: string): SurfaceSceneResponse {
         sourceUrl: "https://www.openstreetmap.org/",
       },
       {
+        evidence: { snapshot_identity: "dev-fixture-v1", subject_entity_id: "society:prestige-waterford", evidence_id: { kind: "observation", id: "fixture:places" } },
         id: "places",
         entityId: "society:prestige-waterford",
         factKey: "nearby_places",

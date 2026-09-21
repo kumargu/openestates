@@ -45,7 +45,7 @@ Read `app/config/manifest.json` first.
 | `resolution_policies.json` | Source tiers, confidence caps, conflict resolution |
 | `asset_registry.json` | Crawl/enrich/materialize **asset DAG** |
 | `enrichment_targets.json` | Leaf/surface-scoped **re-enrichment plans** |
-| `ui_surfaces.json` | Buyer UI surface → leaf set mapping |
+| `app/config/ui/property-context.json` | Buyer UI surface → leaf set mapping |
 | `crawl_policies/*.json` | Per-source skip/cadence/isolated worker |
 | `source_adapters/` | Per-source adapter contracts (pending) |
 

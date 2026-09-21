@@ -17,9 +17,24 @@ use super::{
     SearchExecution, SearchGuidance, SearchResultCard, SearchRuntimeVersion, VerifiedMatch,
 };
 
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SearchResultState {
+    Results,
+    NoMatches,
+}
+
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MatchTier {
+    Exact,
+    Supported,
+    Contextual,
+}
+
 pub const SEARCH_JOURNEY_CONTRACT_VERSION: u32 = 1;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchJourneyEnvelope {
     pub contract_version: u32,
@@ -28,7 +43,7 @@ pub struct SearchJourneyEnvelope {
     pub attempt: SearchJourneyAttempt,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchJourneyActive {
     pub revision: SearchJourneyRevision,
@@ -39,11 +54,12 @@ pub struct SearchJourneyActive {
     pub collections: Vec<super::collections::JourneyCollection>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchJourneyRevision {
     pub id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub parent_id: Option<String>,
     pub operation: super::revision::SearchRevisionOperation,
     pub depth: usize,
@@ -52,7 +68,7 @@ pub struct SearchJourneyRevision {
     pub state_token: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
@@ -63,10 +79,12 @@ pub enum SearchJourneyResults {
         result_sets: Vec<JourneyResultSet>,
         ordered_result_ids: Vec<String>,
         total_matches: usize,
-        state: String,
+        state: SearchResultState,
         #[serde(skip_serializing_if = "Option::is_none")]
+        #[schemars(with = "Box<AreaProfile>")]
         area_context: Option<Box<AreaProfile>>,
         #[serde(skip_serializing_if = "Option::is_none")]
+        #[schemars(with = "SearchGuidance")]
         guidance: Option<SearchGuidance>,
     },
     Retained {
@@ -88,7 +106,7 @@ impl SearchJourneyResults {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JourneyResultSet {
     pub branch_id: String,
@@ -96,18 +114,19 @@ pub struct JourneyResultSet {
     pub results: Vec<JourneyResultCard>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JourneyResultCard {
     #[serde(flatten)]
     pub card: BrowsePropertyCard,
-    pub match_tier: String,
+    pub match_tier: MatchTier,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub home_state_display: Option<String>,
     pub reasons: Vec<SearchMatchReason>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchMatchReason {
     pub show_on_card: bool,
@@ -117,7 +136,7 @@ pub struct SearchMatchReason {
     pub proof_token: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum SearchJourneyAttemptKind {
     Initial,
@@ -125,7 +144,7 @@ pub enum SearchJourneyAttemptKind {
     Resume,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum SearchJourneyOutcome {
     Activated,
@@ -135,7 +154,7 @@ pub enum SearchJourneyOutcome {
     Resumed,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchJourneyAttempt {
     pub kind: SearchJourneyAttemptKind,
@@ -143,25 +162,30 @@ pub struct SearchJourneyAttempt {
     pub outcome: SearchJourneyOutcome,
     pub catalog_rebased: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "ResultDelta")]
     pub catalog_delta: Option<ResultDelta>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "ResultDelta")]
     pub intent_delta: Option<ResultDelta>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "IntentPresentation")]
     pub attempted_intent: Option<IntentPresentation>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "JourneyClarification")]
     pub clarification: Option<JourneyClarification>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "SelectedPropertyConsequence")]
     pub selected_property_consequence: Option<SelectedPropertyConsequence>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JourneyClarification {
     pub code: String,
     pub message: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SelectedPropertyConsequence {
     pub property_id: String,
@@ -176,21 +200,21 @@ pub struct SelectedPropertyConsequence {
     pub proof_references: Vec<SearchMatchReason>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum SelectedPropertyOutcome {
     Retained,
     Excluded,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum SelectedPropertyCause {
     CatalogRefresh,
     IntentRefinement,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResultDelta {
     pub added: Vec<String>,
@@ -199,7 +223,7 @@ pub struct ResultDelta {
     pub moved: Vec<ResultMovement>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResultMovement {
     pub property_id: String,
@@ -209,21 +233,21 @@ pub struct ResultMovement {
     pub explanation: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ResultMovementCause {
     CatalogRefresh,
     IntentRefinement,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IntentPresentation {
     pub root: BoolExpr<String>,
     pub branches: Vec<IntentBranchPresentation>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IntentBranchPresentation {
     pub id: String,
@@ -233,7 +257,7 @@ pub struct IntentBranchPresentation {
     pub preferences: Vec<IntentPreferencePresentation>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
@@ -254,7 +278,7 @@ pub enum IntentExpression {
     },
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IntentPredicatePresentation {
     pub id: String,
@@ -264,13 +288,15 @@ pub struct IntentPredicatePresentation {
     pub operator: String,
     pub value: Value,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub unit: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub resolved_label: Option<String>,
     pub required: bool,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IntentPreferencePresentation {
     pub id: String,
@@ -279,6 +305,7 @@ pub struct IntentPreferencePresentation {
     pub weight: f32,
     pub required: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "usize")]
     pub priority: Option<usize>,
 }
 
@@ -395,7 +422,10 @@ pub fn project_current_results(
                             .get(&result.card.id)
                             .expect("eligible search results have a hydrated browse card")
                             .clone(),
-                        match_tier: result.match_tier.clone(),
+                        match_tier: serde_json::from_value(serde_json::Value::String(
+                            result.match_tier.clone(),
+                        ))
+                        .expect("validated match tier"),
                         home_state_display: result.card.home_state_display.clone(),
                         reasons,
                     }
@@ -407,7 +437,8 @@ pub fn project_current_results(
         result_sets,
         ordered_result_ids: execution.ordered_result_ids.clone(),
         total_matches: execution.total_matches,
-        state: execution.state.clone(),
+        state: serde_json::from_value(serde_json::Value::String(execution.state.clone()))
+            .expect("validated search state"),
         area_context: execution.area_context.clone().map(Box::new),
         guidance: execution.search_guidance.clone(),
     }
@@ -744,19 +775,30 @@ fn project_reasons(
             &binding.path,
             &branch.predicate_bindings,
         ));
-        let Ok(proof_token) = issue_proof_token(ProofIssueRequest {
-            constraint: verified.constraint.as_ref(),
-            snapshot_identity: snapshot.bundle.manifest.proof_snapshot_identity(),
-            semantic_fingerprint: &plan.semantic_fingerprint,
-            property_id: &result.card.id,
-            branch_id: &branch.branch_id,
-            predicate_id: &binding.predicate_id,
-            subject_entity_id: &verified.subject_entity_id,
-            target_entity_id: verified.target_entity_id.as_deref(),
-            fact_key: &fact_key,
-            relation: &verified.relation,
-            evidence_refs: &evidence_refs,
-        }) else {
+        let Ok(proof_token) = issue_proof_token(
+            snapshot,
+            ProofIssueRequest {
+                claim: verified
+                    .value
+                    .zip(verified.unit.as_ref())
+                    .map(|(value, unit)| super::proof::EvaluatedClaim {
+                        dimension: verified.metric.clone(),
+                        value,
+                        unit: unit.clone(),
+                    }),
+                constraint: verified.constraint.as_ref(),
+                snapshot_identity: snapshot.bundle.manifest.proof_snapshot_identity(),
+                semantic_fingerprint: &plan.semantic_fingerprint,
+                property_id: &result.card.id,
+                branch_id: &branch.branch_id,
+                predicate_id: &binding.predicate_id,
+                subject_entity_id: &verified.subject_entity_id,
+                target_entity_id: verified.target_entity_id.as_deref(),
+                fact_key: &fact_key,
+                relation: &verified.relation,
+                evidence_refs: &evidence_refs,
+            },
+        ) else {
             continue;
         };
         if used.insert(binding.predicate_id.clone()) {
@@ -808,19 +850,23 @@ fn project_reasons(
                 subject_entity_id: identity.subject_entity_id.clone(),
                 evidence_id: identity.evidence_id.clone(),
             }];
-            let Ok(proof_token) = issue_proof_token(ProofIssueRequest {
-                constraint: None,
-                snapshot_identity: snapshot.bundle.manifest.proof_snapshot_identity(),
-                semantic_fingerprint: &plan.semantic_fingerprint,
-                property_id: &result.card.id,
-                branch_id: &branch.branch_id,
-                predicate_id: &predicate_id,
-                subject_entity_id: &identity.subject_entity_id,
-                target_entity_id: target_entity_id.as_deref(),
-                fact_key: &fact.fact_key,
-                relation: "supports",
-                evidence_refs: &evidence_refs,
-            }) else {
+            let Ok(proof_token) = issue_proof_token(
+                snapshot,
+                ProofIssueRequest {
+                    claim: None,
+                    constraint: None,
+                    snapshot_identity: snapshot.bundle.manifest.proof_snapshot_identity(),
+                    semantic_fingerprint: &plan.semantic_fingerprint,
+                    property_id: &result.card.id,
+                    branch_id: &branch.branch_id,
+                    predicate_id: &predicate_id,
+                    subject_entity_id: &identity.subject_entity_id,
+                    target_entity_id: target_entity_id.as_deref(),
+                    fact_key: &fact.fact_key,
+                    relation: "supports",
+                    evidence_refs: &evidence_refs,
+                },
+            ) else {
                 continue;
             };
             used.insert(predicate_id.clone());
@@ -902,9 +948,7 @@ fn resolvable_evidence(
                 let configured_key = match predicate {
                     ConstraintTerm::Spatial {
                         category_fact_keys, ..
-                    } => category_fact_keys
-                        .iter()
-                        .find(|key| super::proof::proof_destination_for_fact_key(key).is_some()),
+                    } => category_fact_keys.iter().next(),
                     _ => None,
                 };
                 fact_key.get_or_insert_with(|| {

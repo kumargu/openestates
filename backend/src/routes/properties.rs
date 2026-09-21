@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 
 use axum::body::Body;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::{header, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
@@ -50,13 +50,24 @@ use crate::livability_brief::{
 };
 
 use super::enrichment::{
-    enrich_area, enrich_property_card, enrich_society, extract_area_intelligence,
-    extract_builder_trust, extract_rera_info, kg_entity_refs_for_property,
+    extract_area_intelligence, extract_builder_trust, kg_entity_refs_for_property,
     overlay_project_scale_facts, rera_affidavit_only_visible, rera_decision_cards,
     rera_document_groups, society_node_id, AreaIntelligence, BuilderTrust, DataFreshness,
     ReraComplaintScopeSummary, ReraDocumentManifestItem, ReraInfo, ReraScheduleSection,
 };
 use super::property_map::property_map_context_from_surface_scene;
+
+pub(crate) fn property_card(
+    property: &crate::models::Property,
+    societies: &[crate::models::Society],
+) -> PropertyCard {
+    let name = societies
+        .iter()
+        .find(|society| society_node_id(&society.id) == society_node_id(&property.society_id))
+        .map(|society| society.name.as_str())
+        .unwrap_or("");
+    property.to_card(name)
+}
 
 /// GET /api/properties — returns UI-ready property cards.
 pub async fn list_properties(State(state): State<Arc<AppState>>) -> Result<Response, StatusCode> {
@@ -74,7 +85,6 @@ pub async fn list_properties(State(state): State<Arc<AppState>>) -> Result<Respo
         }
     }
 
-    let graph = state.knowledge.read().await.clone();
     let bytes = state
         .execution
         .run_customer_compute(move || {
@@ -84,7 +94,7 @@ pub async fn list_properties(State(state): State<Arc<AppState>>) -> Result<Respo
                 .iter()
                 .filter(|property| property.is_listable())
                 .map(|property| {
-                    let card = enrich_property_card(property, &runtime.societies, &graph);
+                    let card = property_card(property, &runtime.societies);
                     overlay_serving_google_reviews(card, &property.society_id, Some(serving_facts))
                 })
                 .collect();
@@ -96,6 +106,81 @@ pub async fn list_properties(State(state): State<Arc<AppState>>) -> Result<Respo
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     *cache = Some((version, bytes.clone()));
     Ok(serialized_catalog_response(bytes))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PropertySummaryRequest {
+    pub property_ids: Vec<String>,
+    pub snapshot_identity: Option<String>,
+}
+
+#[derive(schemars::JsonSchema, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PropertySummaries {
+    pub contract_version: u32,
+    pub snapshot_identity: String,
+    pub items: Vec<PropertyCard>,
+    pub missing_ids: Vec<String>,
+}
+
+pub async fn property_summaries(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<PropertySummaryRequest>,
+) -> Result<Json<PropertySummaries>, (StatusCode, Json<ErrorResponse>)> {
+    let runtime = state.search_runtime.load_full();
+    let limits = &crate::security::security_tuning().surface_requests;
+    let error = |status, code: &str| {
+        (
+            status,
+            Json(ErrorResponse {
+                error: code.to_string(),
+            }),
+        )
+    };
+    if request.property_ids.len() > limits.batch_property_limit
+        || request
+            .property_ids
+            .iter()
+            .any(|id| id.is_empty() || id.len() > limits.max_property_id_bytes)
+    {
+        return Err(error(StatusCode::BAD_REQUEST, "invalid_property_ids"));
+    }
+    let snapshot_identity = runtime.bundle.manifest.proof_snapshot_identity();
+    if request
+        .snapshot_identity
+        .as_deref()
+        .is_some_and(|expected| expected != snapshot_identity)
+    {
+        return Err(error(StatusCode::CONFLICT, "stale_snapshot"));
+    }
+    let mut items = Vec::new();
+    let mut missing_ids = Vec::new();
+    let mut seen = HashSet::new();
+    for id in request.property_ids {
+        if !seen.insert(id.clone()) {
+            continue;
+        }
+        if let Some(property) = runtime
+            .property_by_id
+            .get(&id)
+            .and_then(|index| runtime.properties.get(*index))
+        {
+            items.push(overlay_serving_google_reviews(
+                property_card(property, &runtime.societies),
+                &property.society_id,
+                Some(&runtime.bundle.fact_index),
+            ));
+        } else {
+            missing_ids.push(id);
+        }
+    }
+    Ok(Json(PropertySummaries {
+        contract_version: 1,
+        snapshot_identity: snapshot_identity.to_string(),
+        items,
+        missing_ids,
+    }))
 }
 
 fn serialized_catalog_response(bytes: Bytes) -> Response {
@@ -111,8 +196,11 @@ fn serialized_catalog_response(bytes: Bytes) -> Response {
     response
 }
 
-#[derive(Serialize)]
+#[derive(schemars::JsonSchema, Serialize)]
 pub struct PropertyDetail {
+    pub availability: crate::models::property::InventoryAvailability,
+    pub contract_version: u32,
+    pub snapshot_identity: String,
     pub property: crate::models::Property,
     /// Stable graph IDs the UI can dereference to render dynamic KG-backed sections.
     pub entity_refs: KgEntityRefs,
@@ -197,7 +285,7 @@ pub struct PropertyDetail {
     pub plans: Option<crate::plans::ProjectPlansView>,
 }
 
-#[derive(Serialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(schemars::JsonSchema, Serialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ReraEvidenceAvailability {
     Available,
@@ -205,7 +293,7 @@ pub enum ReraEvidenceAvailability {
     Unavailable,
 }
 
-#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+#[derive(schemars::JsonSchema, Serialize, Clone, Debug, PartialEq, Eq)]
 pub struct ReraReportRef {
     pub registration_ids: Vec<String>,
     pub href: String,
@@ -371,35 +459,42 @@ pub struct ReraReportSurfaceSectionResponse {
     pub empty_behavior: String,
 }
 
-#[derive(Serialize, Clone, Debug, PartialEq)]
+#[derive(schemars::JsonSchema, Serialize, Clone, Debug, PartialEq)]
 pub struct ExternalReviews {
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "f64")]
     pub google_rating: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "u32")]
     pub google_review_count: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub google_reviews_url: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reviews: Vec<ExternalReviewCard>,
 }
 
-#[derive(Serialize, Clone, Debug, PartialEq)]
+#[derive(schemars::JsonSchema, Serialize, Clone, Debug, PartialEq)]
 pub struct ExternalReviewCard {
     pub id: String,
     pub source: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub author: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "f64")]
     pub rating: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub date_label: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "u32")]
     pub helpful_count: Option<u32>,
     pub text: String,
     pub tone: ReviewTone,
 }
 
-#[derive(Serialize, Clone, Debug, PartialEq)]
+#[derive(schemars::JsonSchema, Serialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum ReviewTone {
     Positive,
@@ -429,16 +524,17 @@ struct RankedReview {
     source_order: usize,
 }
 
-#[derive(Serialize, Clone, Debug, PartialEq)]
+#[derive(schemars::JsonSchema, Serialize, Clone, Debug, PartialEq)]
 pub struct DetailSignal {
     pub key: String,
     pub label: String,
     pub icon: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "u32")]
     pub count: Option<u32>,
 }
 
-#[derive(Serialize, Clone, Debug)]
+#[derive(schemars::JsonSchema, Serialize, Clone, Debug)]
 pub struct BuilderPortfolio {
     pub builder_name: String,
     pub tracked_projects: usize,
@@ -446,31 +542,40 @@ pub struct BuilderPortfolio {
     pub delayed_projects: usize,
     pub complaint_projects: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "i32")]
     pub revocations: Option<i32>,
     pub projects: Vec<BuilderProjectRecord>,
 }
 
-#[derive(Serialize, Clone, Debug)]
+#[derive(schemars::JsonSchema, Serialize, Clone, Debug)]
 pub struct BuilderProjectRecord {
     pub property_id: String,
     pub project_name: String,
     pub area: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub rera_number: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub rera_portal_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub rera_status: Option<String>,
     pub rera_registered: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub start_date: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub completion_date: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "i32")]
     pub delay_months: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "i32")]
     pub complaints_count: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub project_status_display: Option<String>,
     pub current: bool,
 }
@@ -494,7 +599,7 @@ pub struct SourcePanel {
     pub community_pulse: Option<CommunityPulse>,
 }
 
-#[derive(Serialize, Clone, Debug)]
+#[derive(schemars::JsonSchema, Serialize, Clone, Debug)]
 pub struct SourceItem {
     pub entity_id: String,
     pub key: String,
@@ -502,11 +607,13 @@ pub struct SourceItem {
     pub value: String,
     pub scope: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub relationship: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub values: Vec<String>,
     pub source_type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub source_url: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub attributions: Vec<SourceAttribution>,
@@ -515,10 +622,11 @@ pub struct SourceItem {
     pub learned_at: String,
 }
 
-#[derive(Serialize, Clone, Debug, PartialEq)]
+#[derive(schemars::JsonSchema, Serialize, Clone, Debug, PartialEq)]
 pub struct SourceAttribution {
     pub value: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub source_url: Option<String>,
     pub source_type: String,
     #[serde(skip_serializing)]
@@ -528,7 +636,7 @@ pub struct SourceAttribution {
 
 const APPROACH_ROAD_MEDIA_FRAME_LIMIT: usize = 6;
 
-#[derive(Serialize, Clone, Debug, PartialEq)]
+#[derive(schemars::JsonSchema, Serialize, Clone, Debug, PartialEq)]
 pub struct EvidenceMediaStrip {
     pub kind: String,
     pub provider: String,
@@ -539,7 +647,7 @@ pub struct EvidenceMediaStrip {
     pub frames: Vec<EvidenceMediaFrame>,
 }
 
-#[derive(Serialize, Clone, Debug, PartialEq)]
+#[derive(schemars::JsonSchema, Serialize, Clone, Debug, PartialEq)]
 pub struct EvidenceMediaFrame {
     pub label: String,
     pub distance_from_gate_m: u32,
@@ -580,16 +688,17 @@ struct ApproachRoadVisualFrameRecord {
     image_url: Option<String>,
 }
 
-#[derive(Serialize, Clone, Debug)]
+#[derive(schemars::JsonSchema, Serialize, Clone, Debug)]
 pub struct PropertyEvidenceResponse {
     pub property_id: String,
     pub entity_refs: KgEntityRefs,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub serving_bundle_version: Option<String>,
     pub sections: Vec<EvidenceSection>,
 }
 
-#[derive(Serialize, Clone, Debug)]
+#[derive(schemars::JsonSchema, Serialize, Clone, Debug)]
 pub struct EvidenceSection {
     pub kind: String,
     pub title: String,
@@ -597,6 +706,7 @@ pub struct EvidenceSection {
     pub subtitle: String,
     pub scope: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub relationship: Option<String>,
     pub priority: u32,
     pub constellation: String,
@@ -610,10 +720,11 @@ pub struct EvidenceSection {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub media: Vec<EvidenceMediaStrip>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "CommunityPulse")]
     pub community_pulse: Option<CommunityPulse>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(schemars::JsonSchema, Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct EvidencePresentation {
     pub variant: String,
     pub density: String,
@@ -637,17 +748,6 @@ pub struct PropertyEvidenceBatchResponse {
 #[derive(Serialize)]
 pub struct ErrorResponse {
     pub error: String,
-}
-
-fn canonical_property_id(id: &str) -> &str {
-    match id {
-        "discovered" => "discovered-sumadhura-eden-garden-3bhk",
-        "fixture-prestige-lakeside-3bhk" => "discovered-prestige-lakeside-habitat-3bhk",
-        "fixture-samadhura-capitol-3bhk" => "discovered-sumadhura-capitol-residences-3bhk",
-        "fixture-vaswani-starlight-3bhk" => "discovered-vaswani-starlight-3bhk",
-        "fixture-prestige-city-3bhk" => "discovered-the-prestige-city-3bhk",
-        _ => id,
-    }
 }
 
 fn recommendation_cache_key(property_id: &str, serving_bundle_version: Option<&str>) -> String {
@@ -704,7 +804,7 @@ fn find_property_by_request_id<'a>(
     properties: &'a [crate::models::Property],
     id: &str,
 ) -> Option<&'a crate::models::Property> {
-    let canonical_id = canonical_property_id(id);
+    let canonical_id = id;
     properties.iter().find(|p| p.id == canonical_id)
 }
 
@@ -2288,7 +2388,7 @@ fn build_builder_portfolio(
             continue;
         }
 
-        let rera = rera_info_for(&property.society_id, graph, serving_facts);
+        let rera = rera_info_for(&property.society_id, serving_facts);
         if rera.as_ref().is_some_and(|record| record.registered) {
             rera_registered_projects += 1;
         }
@@ -2363,8 +2463,10 @@ fn build_builder_portfolio(
 pub async fn get_property_evidence(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
+    Query(query): Query<PropertySnapshotQuery>,
 ) -> Result<Json<PropertyEvidenceResponse>, (StatusCode, Json<ErrorResponse>)> {
     let runtime = state.search_runtime.load_full();
+    check_property_snapshot(&runtime, query.snapshot_identity.as_deref())?;
     let property = find_property_by_request_id(&runtime.properties, &id).ok_or_else(|| {
         (
             StatusCode::NOT_FOUND,
@@ -2399,7 +2501,7 @@ pub async fn get_property_evidence_batch(
         if requested.len() >= limit {
             break;
         }
-        let canonical = canonical_property_id(&id).to_string();
+        let canonical = id;
         if !requested.iter().any(|existing| existing == &canonical) {
             requested.push(canonical);
         }
@@ -2440,8 +2542,10 @@ pub async fn get_property_evidence_batch(
 pub async fn get_property_recommendations(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
+    Query(query): Query<PropertySnapshotQuery>,
 ) -> Result<Json<RecommendationResponse>, (StatusCode, Json<ErrorResponse>)> {
     let runtime = state.search_runtime.load_full();
+    check_property_snapshot(&runtime, query.snapshot_identity.as_deref())?;
     let property = find_property_by_request_id(&runtime.properties, &id)
         .cloned()
         .ok_or_else(|| {
@@ -2504,13 +2608,38 @@ pub async fn get_property_recommendations(
 
 /// GET /api/properties/:id — returns joined property + society + area,
 /// enriched from the knowledge graph.
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PropertySnapshotQuery {
+    pub snapshot_identity: Option<String>,
+}
+
+fn check_property_snapshot(
+    runtime: &crate::state::SearchRuntimeSnapshot,
+    expected: Option<&str>,
+) -> Result<(), (StatusCode, Json<ErrorResponse>)> {
+    if expected
+        .is_some_and(|expected| expected != runtime.bundle.manifest.proof_snapshot_identity())
+    {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: "stale_snapshot".to_string(),
+            }),
+        ));
+    }
+    Ok(())
+}
+
 pub async fn get_property(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
+    Query(query): Query<PropertySnapshotQuery>,
 ) -> Result<Json<PropertyDetail>, (StatusCode, Json<ErrorResponse>)> {
     // Use the immutable serving snapshot so no async lock guard survives the
     // interest-file read later in this handler.
     let runtime = state.search_runtime.load_full();
+    check_property_snapshot(&runtime, query.snapshot_identity.as_deref())?;
     let serving_bundle = Some(runtime.bundle.clone());
     let properties = &runtime.properties;
     let property = find_property_by_request_id(properties, &id)
@@ -2538,13 +2667,10 @@ pub async fn get_property(
 
     // Enrich society from KG
     let society_key = super::enrichment::to_slug(&property.society_id);
-    let mut society = societies
+    let society = societies
         .iter()
         .find(|s| super::enrichment::to_slug(&s.id) == society_key)
         .cloned();
-    if let Some(ref mut soc) = society {
-        enrich_society(soc, &graph);
-    }
 
     let external_reviews = external_reviews_for(
         &property.society_id,
@@ -2555,13 +2681,10 @@ pub async fn get_property(
 
     // Enrich area from KG
     let area_key = area_lookup_key(&property.area_id);
-    let mut area = areas
+    let area = areas
         .iter()
         .find(|a| area_lookup_key(&a.id) == area_key || area_lookup_key(&a.name) == area_key)
         .cloned();
-    if let Some(ref mut ap) = area {
-        enrich_area(ap, &graph);
-    }
 
     // Find similar properties via local embedding similarity on the society node,
     // then fill with same-area same-BHK homes so the page still has alternatives
@@ -2584,7 +2707,7 @@ pub async fn get_property(
                     && !seen.contains(&p.id)
             }) {
                 seen.insert(prop.id.clone());
-                let card = enrich_property_card(prop, societies, &graph);
+                let card = property_card(prop, societies);
                 similar.push(overlay_serving_google_reviews(
                     card,
                     &prop.society_id,
@@ -2609,7 +2732,7 @@ pub async fn get_property(
             area_props.sort_by_key(|p| p.price_per_sqft.abs_diff(property.price_per_sqft.max(1)));
             for prop in area_props.into_iter().take(6 - similar.len()) {
                 seen.insert(prop.id.clone());
-                let card = enrich_property_card(prop, societies, &graph);
+                let card = property_card(prop, societies);
                 similar.push(overlay_serving_google_reviews(
                     card,
                     &prop.society_id,
@@ -2623,7 +2746,6 @@ pub async fn get_property(
     // Extract RERA info from the society's KG node
     let rera = rera_info_for(
         &property.society_id,
-        &graph,
         serving_bundle.as_ref().map(|bundle| &bundle.fact_index),
     );
     let rera_report_ref = rera_report_ref_for_property(&property, serving_bundle.as_deref());
@@ -2835,6 +2957,13 @@ pub async fn get_property(
         serving_bundle.as_ref().map(|bundle| &bundle.fact_index),
     );
     Ok(Json(PropertyDetail {
+        availability: property.inventory_availability(),
+        contract_version: 1,
+        snapshot_identity: runtime
+            .bundle
+            .manifest
+            .proof_snapshot_identity()
+            .to_string(),
         entity_refs,
         evidence,
         property,
@@ -3804,8 +3933,10 @@ fn rera_society_entity_id_candidates(society_id: &str) -> Vec<String> {
 pub async fn get_property_rera(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
+    Query(query): Query<PropertySnapshotQuery>,
 ) -> Result<Json<ReraEvidenceReportResponse>, (StatusCode, Json<ErrorResponse>)> {
     let runtime = state.search_runtime.load_full();
+    check_property_snapshot(&runtime, query.snapshot_identity.as_deref())?;
     let property = find_property_by_request_id(&runtime.properties, &id).ok_or_else(|| {
         (
             StatusCode::NOT_FOUND,
@@ -3824,11 +3955,7 @@ pub async fn get_property_rera(
     })?;
     let surface = rera_surface_response(config);
     let graph = state.knowledge.read().await;
-    let project_record = rera_info_for(
-        &property.society_id,
-        &graph,
-        Some(&runtime.bundle.fact_index),
-    );
+    let project_record = rera_info_for(&property.society_id, Some(&runtime.bundle.fact_index));
     let evidence_record = rera_evidence_for_property(&runtime.bundle, property);
     let buyer_report = ReraBuyerReport {
         fact_sections: rera_buyer_fact_sections_for_society(
@@ -3948,15 +4075,8 @@ fn empty_rera_evidence_projection(
     }
 }
 
-fn rera_info_for(
-    society_id: &str,
-    graph: &crate::knowledge::KnowledgeGraph,
-    serving_facts: Option<&ServingFactIndex>,
-) -> Option<ReraInfo> {
-    let fallback = extract_rera_info(graph, society_id);
-    let Some(serving_facts) = serving_facts else {
-        return fallback;
-    };
+fn rera_info_for(society_id: &str, serving_facts: Option<&ServingFactIndex>) -> Option<ReraInfo> {
+    let serving_facts = serving_facts?;
     let projection = SocietyFactProjection::from_index(serving_facts, society_id);
     let has_serving_rera = projection.latest_bool("rera_registered").is_some()
         || projection.latest_text("rera_number").is_some()
@@ -3968,10 +4088,9 @@ fn rera_info_for(
             .latest_text("rera_plan_artifact_manifest")
             .is_some();
     if !has_serving_rera {
-        return fallback;
+        return None;
     }
-
-    let mut info = fallback.unwrap_or_default();
+    let mut info = ReraInfo::default();
     if let Some(fact) = projection.latest_bool("rera_registered") {
         info.registered = fact.value;
     }
@@ -4125,7 +4244,6 @@ mod serving_state_tests {
     use crate::knowledge::fact::{FactSource, SourceType};
     use crate::knowledge::node::{Node, NodeType};
     use crate::models::{Property, Society};
-    use crate::routes::enrichment::enrich_property_card;
     use crate::serving::{ServingFactRecord, ServingSearchMetadataRecord};
 
     #[test]
@@ -4349,7 +4467,7 @@ mod serving_state_tests {
         let society = society();
         let serving = serving_index();
 
-        let mut card = enrich_property_card(&property, std::slice::from_ref(&society), &graph);
+        let mut card = property_card(&property, std::slice::from_ref(&society));
         crate::search::text::enrich_card_from_serving_facts(
             &mut card,
             &serving,
@@ -4543,7 +4661,6 @@ mod serving_state_tests {
 
     #[test]
     fn property_detail_projects_current_rera_facts_and_exposes_acreage() {
-        let graph = crate::knowledge::KnowledgeGraph::new();
         let serving = ServingFactIndex::from_records(
             vec![
                 serving_fact("rera_registered", FactValue::Bool(true), 10),
@@ -4634,7 +4751,7 @@ mod serving_state_tests {
             Vec::<ServingSearchMetadataRecord>::new(),
         );
 
-        let detail = rera_info_for("sample", &graph, Some(&serving))
+        let detail = rera_info_for("sample", Some(&serving))
             .expect("serving RERA facts should create detail evidence");
 
         assert!(detail.registered);

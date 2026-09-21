@@ -11,5 +11,18 @@
       ]
     }
   ],
-  "society_requirements": []
+  "society_requirements": [],
+  "observation_required_fact_keys": [
+    "bhk",
+    "price",
+    "price_min",
+    "price_max",
+    "price_per_sqft",
+    "carpet_area_sqft",
+    "super_builtup_sqft"
+  ],
+  "observation_required_prefixes": [
+    "listing_",
+    "pricing_"
+  ]
 }

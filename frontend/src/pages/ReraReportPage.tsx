@@ -941,8 +941,9 @@ function ReraReportContent({ id }: { id: string }) {
 
   useEffect(() => {
     let active = true;
-    Promise.all([getProperty(id), getPropertyRera(id)])
-      .then(([detail, report]) => active && setState({ status: "ready", detail, report }))
+    getProperty(id)
+      .then(async (detail) => ({ detail, report: await getPropertyRera(id, { snapshotIdentity: detail.snapshot_identity }) }))
+      .then(({ detail, report }) => active && setState({ status: "ready", detail, report }))
       .catch(() => active && setState({ status: "error" }));
     return () => { active = false; };
   }, [id, retryKey]);
@@ -1006,7 +1007,7 @@ function ReraReportContent({ id }: { id: string }) {
           />
           <Inventory section={surfaceById(report.surface.sections, "inventory")} evidence={report.evidence} />
           <Plans
-            plans={detail.plans}
+            plans={detail.plans ?? undefined}
             surface={surfaceById(report.surface.sections, "plans")}
           />
           <Documents

@@ -109,7 +109,7 @@ pub struct MatchExplanation {
 }
 
 /// One component of the confidence score, explaining a dimension.
-#[derive(Debug, Clone, Serialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize)]
 pub struct ConfidenceComponent {
     /// Dimension name: "source_quality", "fact_coverage", "freshness", "match_quality"
     pub dimension: String,
@@ -122,7 +122,7 @@ pub struct ConfidenceComponent {
 }
 
 /// Overall confidence in a search result's data quality.
-#[derive(Debug, Clone, Serialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize)]
 pub struct ConfidenceScore {
     /// Overall confidence (0.0 - 1.0)
     pub overall: f64,
@@ -208,9 +208,10 @@ pub struct KnowledgeContext {
     pub learning_gaps: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchRuntimeVersion {
+    pub snapshot_identity: String,
     pub serving_bundle_version: String,
     pub scoring_policy_version: u32,
     pub search_engine_version: String,

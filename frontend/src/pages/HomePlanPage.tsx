@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { getProperties, getProperty } from "../lib/api.ts";
+import { getPropertyCardsByIds, getProperty } from "../lib/api.ts";
 import { PUBLIC_BRAND_NAME } from "../lib/brand.ts";
 import type { PropertyCard, PropertyDetailResponse } from "../lib/types.ts";
 import { PageTitle } from "../components/PageTitle.tsx";
@@ -63,7 +63,7 @@ function constructionProfileFor(data: PropertyDetailResponse): ConstructionProfi
   ].filter(Boolean).some((value) => (
     isExplicitlyReadyStatus(String(value))
   ));
-  const completionDate = data.rera?.completion_date;
+  const completionDate = data.rera?.completion_date ?? undefined;
   const parsedCompletion = parsePlanDate(completionDate);
   const completionIsFuture = parsedCompletion ? parsedCompletion.getTime() > Date.now() : false;
   const underConstruction = !explicitlyReady && (
@@ -75,7 +75,7 @@ function constructionProfileFor(data: PropertyDetailResponse): ConstructionProfi
   return {
     state: underConstruction ? "under_construction" : "ready",
     asOfDate,
-    startDate: data.rera?.start_date,
+    startDate: data.rera?.start_date ?? undefined,
     completionDate,
     dateSource: completionDate ? "rera" : underConstruction ? "estimated" : "not_applicable",
   };
@@ -97,6 +97,7 @@ export function HomePlanPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const searchSpan = useSearchSpan();
+  const snapshotIdentity = searchSpan?.runtimeVersion.snapshotIdentity;
   const { propertyIds } = useNotebook();
   const [catalog, setCatalog] = useState<PropertyCard[]>([]);
   const [catalogReady, setCatalogReady] = useState(false);
@@ -114,7 +115,7 @@ export function HomePlanPage() {
   useEffect(() => {
     const controller = new AbortController();
     let active = true;
-    getProperties({ signal: controller.signal })
+    getPropertyCardsByIds([...propertyIds, ...(id ? [id] : [])], { signal: controller.signal, snapshotIdentity })
       .then((homes) => {
         if (active) setCatalog(homes);
       })
@@ -129,7 +130,7 @@ export function HomePlanPage() {
       active = false;
       controller.abort();
     };
-  }, []);
+  }, [id, propertyIds, snapshotIdentity]);
 
   useEffect(() => {
     if (!id) return undefined;
@@ -138,7 +139,7 @@ export function HomePlanPage() {
       if (!active) return;
       setStatus("loading");
     });
-    getProperty(id)
+    getProperty(id, { snapshotIdentity })
       .then((data) => {
         if (!active) return;
         setPropertyData(data);
@@ -169,7 +170,7 @@ export function HomePlanPage() {
         setStatus(message.includes("404") ? "not_found" : "error");
       });
     return () => { active = false; };
-  }, [id, retryKey]);
+  }, [id, retryKey, snapshotIdentity]);
 
   const projection = useMemo(
     () => inputs
@@ -222,6 +223,7 @@ export function HomePlanPage() {
     !id
     || status !== "ready"
     || propertyData?.property.id !== id
+    || !hasPlannablePrice(propertyData?.property.price)
     || !inputs
     || !projection
     || !repayment
@@ -280,6 +282,7 @@ export function HomePlanPage() {
   }
 
   const property = propertyData.property;
+  if (!hasPlannablePrice(property.price)) return null;
   const baseline = buildBaselinePlanInputs(property.price, constructionProfileFor(propertyData));
   // Drafts capture what the buyer changed, so they are written on edit only.
   const persistEdit = (

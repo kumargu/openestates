@@ -387,13 +387,13 @@ def main() -> None:
     write_json(DAG / "enrichment_targets.json", enrichment)
 
     ui_surfaces = build_ui_surfaces(fact_registry["facts"])
-    write_json(DAG / "ui_surfaces.json", ui_surfaces)
+    write_json(DAG.parent / "ui" / "property-context.json", ui_surfaces)
 
     manifest = load_json(DAG / "manifest.json")
     manifest["includes"] = sorted(
         dict.fromkeys(
             manifest.get("includes", [])
-            + ["fact_registry.json", "enrichment_targets.json", "ui_surfaces.json"]
+            + ["fact_registry.json", "enrichment_targets.json"]
         )
     )
     manifest["pending"] = [p for p in manifest.get("pending", []) if p not in manifest["includes"]]
@@ -401,7 +401,7 @@ def main() -> None:
         **manifest.get("agent_routing", {}),
         "add_leaf": "concern_taxonomy.json + fact_registry.json",
         "enrich_leaf": "enrichment_targets.json",
-        "add_ui_surface": "ui_surfaces.json",
+        "add_ui_surface": "app/config/ui/property-context.json",
         "bootstrap_policy": "app/config/bootstrap/",
         "bootstrap_edge_inference": "app/config/bootstrap/edge_inference.json",
     }

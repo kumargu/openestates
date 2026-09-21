@@ -2,7 +2,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 
 use crate::knowledge::graph::KnowledgeGraph;
 use crate::models::{Property, PropertyCard, Society};
-use crate::routes::enrichment::{enrich_property_card, society_node_id};
+use crate::routes::enrichment::society_node_id;
 use crate::routes::properties::{
     build_source_panels, evidence_section_from_panel, overlay_serving_google_reviews,
     PropertyEvidenceResponse,
@@ -241,7 +241,7 @@ fn recall_candidates(
             let property = properties.iter().find(|property| property.id == id)?;
             channels.sort_by(|left, right| left.channel.cmp(&right.channel));
             let card = overlay_serving_google_reviews(
-                enrich_property_card(property, societies, graph),
+                crate::routes::properties::property_card(property, societies),
                 &property.society_id,
                 serving_bundle.map(|bundle| &bundle.fact_index),
             );

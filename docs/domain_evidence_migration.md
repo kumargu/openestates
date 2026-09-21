@@ -26,3 +26,29 @@ Validation: `/tmp/openestates-contracts-tests.log`: materializer vertical contra
 ## Remaining checkpoints
 
 Inventory admission/reporting; public DTO schema generation and boundary validation; proof outcomes independent of UI destinations; snapshot-pinned context reads; bounded selected-home hydration; migrate the benchmark; real API browser journeys; consolidate obsolete tests and documentation; full lint/build/integration/hardcoding gates and screenshots.
+
+## Checkpoint 2: public boundaries and admission
+
+Producers: typed runtime attributes, RERA registry normalization and search evaluation. Consumers: generated wire decoders, benchmark, selected-home summaries and detail proof views.
+
+- Rust DTOs generate JSON Schema and TypeScript; frontend decoding rejects malformed journey/detail/summary/proof responses before caching them.
+- The benchmark consumes only the current revision envelope and authoritative ordered IDs. Its proof checks resolve signed receipts; client-authored focus is retired.
+- Signed proof issuance and resolution share one validator over the immutable snapshot. Missing evidence cannot acquire a signed reference. Presentation destinations moved out of search proof code and into `surfaces/proof_focus.rs` with UI config under `app/config/ui/`.
+- Shared property-card projection replaces graph-enriched card construction. Unknown inventory attributes are omitted from serialization; bounded summary responses expose availability and preserve requested order.
+- The vertical test's former numeric loop was vacuous. Requiring a nonempty result exposed missing RERA source observation identity in the materializer (`data_gap`). The fix carries the actual serialized registry record's digest, captured timestamp and asset lineage through normalization; no inferred source observation, entity join or crawler fallback is introduced.
+- The same materialized router can serve a loopback fixture for browser journeys via `OPENESTATES_CONTRACT_SERVER_ADDR`. Its ordinary contract runs both negative area-basis cases and an explicit carpet case.
+
+Interaction research: reviewed the ThreeUI source tree (`MengTo/threeui`, main). No directly relevant receipt disclosure was found. The generic receipt uses native disclosure: closed at rest, native pointer/keyboard focus and touch activation, no animation under either normal or reduced-motion preferences. Decorative demo motion was not borrowed. A receipt remains usable without a map or specialized section.
+
+Checkpoint 2 verification:
+- Rust library: 712 passed. Controlled semantics: 15 passed; journey: 22 passed; serving: 3 passed; source-materialized vertical: passed. Clippy has no warnings.
+- Frontend: 306 passed before replacing two source-text checks with the real browser assertions; lint and production build pass. Vite reports the existing large map chunk.
+- Existing browser journeys: 36 passed. Materialized desktop/mobile journeys: 2 passed, including search → generic receipt → EMI plan → RERA document disclosure → back. No application API is mocked. Bounded summary reads preserve requested order; all related detail resources reject a retired snapshot.
+- Benchmark and hardcoding checks: 22 Python checks passed; production search audit: zero findings. The frozen query bank is unchanged.
+- The live-bundle browser check is now an explicit `test:promotion-browser` gate requiring `SEARCH_LIVE_API`; required CI suites do not silently skip it.
+
+Coverage mapping: obsolete graph-only inventory assertions now check withheld inventory and browseable societies; coordinate fixtures share one real observation identity across latitude and longitude, matching the production materializer. Quarantine coverage includes the new society browse representative. The deleted JSX/source-name tests are replaced by rendered official-link and bounded-network assertions in `e2e/contracts/journey.spec.ts`.
+
+UI critic: the generic receipt stays closed at rest, has a keyboard-focusable native summary, and exposes its claim and source only on request. No extra heading, badge, motion or tutorial copy was added. Screenshots capture [desktop rest](verification/domain-evidence/desktop-receipt-resting.png), [desktop open](verification/domain-evidence/desktop-receipt-open.png), [mobile rest](verification/domain-evidence/mobile-receipt-resting.png), and [mobile open](verification/domain-evidence/mobile-receipt-open.png). External map rendering is intentionally unavailable in this contract; the screenshot does not assert map geometry or imagery. The receipt is usable in that state. React review confirms cancellation guards, snapshot dependencies, and native disclosure semantics.
+
+Still required before completion: remove remaining graph enrichment and name-recovery paths; replace layout-addressed context resources; finish dedicated domain DTO ownership and capability admission; validate identity aliases against representative source records; rerun all gates after those replacements. This checkpoint does not claim those migrations are complete.

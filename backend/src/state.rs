@@ -847,6 +847,7 @@ mod tests {
             },
         );
         let runtime_version = crate::search::SearchRuntimeVersion {
+            snapshot_identity: "test-bundle".to_string(),
             serving_bundle_version: "test-bundle".to_string(),
             scoring_policy_version: 1,
             search_engine_version: SEARCH_ENGINE_VERSION.to_string(),

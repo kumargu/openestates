@@ -876,9 +876,15 @@ fn push_fact(
         learned_at: project.fetched_at,
         run_id: run_id.to_string(),
         input_hash,
-        observation_provider: None,
-        provider_observation_id: None,
-        asset_lineage: Vec::new(),
+        observation_provider: Some("Rera".to_string()),
+        provider_observation_id: Some(format!(
+            "rera_registry_record:sha256:{}",
+            sha256_hex(&serde_json::to_vec(project)?)
+        )),
+        asset_lineage: vec![
+            RERA_REGISTRY_MONTHLY_ASSET_ID.to_string(),
+            RERA_LEGAL_FACTS_ASSET_ID.to_string(),
+        ],
     });
     annotations.push(SkillFactAnnotationRecord {
         entity_id: entity_id.to_string(),

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize, Deserialize)]
 pub struct Society {
     pub id: String,
     pub name: String,
@@ -16,6 +16,7 @@ pub struct Society {
     pub common_complaints: Vec<String>,
     pub review_summary: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub google_reviews_url: Option<String>,
     pub future_google_place_name: String,
     pub future_google_place_id: Option<String>,

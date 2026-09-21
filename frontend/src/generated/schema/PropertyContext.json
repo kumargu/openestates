@@ -1,0 +1,1211 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SurfaceSceneResponse",
+  "type": "object",
+  "properties": {
+    "anchor": {
+      "$ref": "#/definitions/SceneAnchor"
+    },
+    "callouts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/SceneCallout"
+      }
+    },
+    "contractVersion": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "entityRefs": {
+      "$ref": "#/definitions/KgEntityRefs"
+    },
+    "experience": {
+      "$ref": "#/definitions/UiSurfaceSceneExperienceConfig"
+    },
+    "features": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/SceneFeature"
+      }
+    },
+    "fillRate": {
+      "$ref": "#/definitions/SceneFillRate"
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/SceneGap"
+      }
+    },
+    "layers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/SceneLayer"
+      }
+    },
+    "proofFocus": {
+      "$ref": "#/definitions/ResolvedProofFocus"
+    },
+    "proofFocusMessage": {
+      "type": "string"
+    },
+    "proofFocusStatus": {
+      "$ref": "#/definitions/ProofFocusStatus"
+    },
+    "propertyId": {
+      "type": "string"
+    },
+    "receipts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/SceneReceipt"
+      }
+    },
+    "relations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/SceneRelation"
+      }
+    },
+    "servingBundleVersion": {
+      "type": "string"
+    },
+    "snapshotIdentity": {
+      "type": "string"
+    },
+    "surfaceId": {
+      "type": "string"
+    },
+    "viewport": {
+      "$ref": "#/definitions/SceneViewport"
+    }
+  },
+  "required": [
+    "snapshotIdentity",
+    "contractVersion",
+    "surfaceId",
+    "propertyId",
+    "entityRefs",
+    "anchor",
+    "viewport",
+    "proofFocusStatus",
+    "layers",
+    "features",
+    "relations",
+    "callouts",
+    "receipts",
+    "fillRate",
+    "gaps"
+  ],
+  "definitions": {
+    "CoordinateQuality": {
+      "type": "string",
+      "enum": [
+        "exact",
+        "derived",
+        "approximate",
+        "missing"
+      ]
+    },
+    "DisplayTone": {
+      "type": "string",
+      "enum": [
+        "positive",
+        "neutral",
+        "caution",
+        "risk"
+      ]
+    },
+    "EvidenceId": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "observation"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "derivation"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ]
+        }
+      ]
+    },
+    "EvidenceRef": {
+      "type": "object",
+      "properties": {
+        "evidence_id": {
+          "$ref": "#/definitions/EvidenceId"
+        },
+        "snapshot_identity": {
+          "type": "string"
+        },
+        "subject_entity_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "snapshot_identity",
+        "subject_entity_id",
+        "evidence_id"
+      ]
+    },
+    "FillState": {
+      "type": "string",
+      "enum": [
+        "filled",
+        "partial",
+        "empty"
+      ]
+    },
+    "KgEntityRefs": {
+      "description": "Minimal entity identity bundle attached to property/search/detail responses.\n\nThese fields are stable API identifiers, not display copy and not a complete\nserving export. They exist so the UI can ask follow-up endpoints for richer\ncontext when a user shows intent: opens a property, expands a card, compares\nhomes, clicks a source trail, or requests a nearby/risk/community breakdown.\n\nCurrent usage pattern:\n1. Render fast listing data from `PropertyCard` or `PropertyDetailResponse`.\n2. Use `source_entity_ids` as opaque provenance handles for the property,\n   society, area, and builder.\n3. Use source/evidence read models when the UI needs a larger drill-down\n   such as builder portfolio, nearby projects, or lineage.\n4. Build optional UI sections from facts with source/confidence metadata.\n5. Hide sections that have no backed facts instead of rendering empty cards.\n\nImportant distinction: these are KG node IDs, not necessarily canonical RERA\nIDs. Some societies have an alias node such as `society:prestige-park-grove`\nwhile lake artifacts may also contain a RERA-rooted canonical ID. The UI\nshould not infer canonicalization from the string shape. It should treat the\nIDs as opaque handles and follow the API.",
+      "type": "object",
+      "properties": {
+        "area_entity_id": {
+          "description": "Area/locality node for traffic, waterlogging, metro, schools, price trend,\nand other externalities.",
+          "type": "string"
+        },
+        "builder_entity_id": {
+          "description": "Builder node when the society has a known BuiltBy edge in the KG.",
+          "type": "string"
+        },
+        "property_entity_id": {
+          "description": "Listing-level node for facts specific to this flat/unit/listing.",
+          "type": "string"
+        },
+        "society_entity_id": {
+          "description": "Society/project node for RERA, reviews, nearby places, amenities, and\ncommunity evidence.",
+          "type": "string"
+        },
+        "source_entity_ids": {
+          "description": "Existing graph nodes the UI can safely prefetch first.\n\nThis list is backend-filtered to nodes present in the current KG, sorted,\nand deduplicated. It may omit an otherwise valid field ID if that node has\nnot been materialized yet. UI code should treat it as a convenient fetch\nplan, not as a complete semantic model.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "property_entity_id",
+        "society_entity_id",
+        "area_entity_id"
+      ]
+    },
+    "ProofFocusStatus": {
+      "type": "string",
+      "enum": [
+        "notRequested",
+        "applied",
+        "stale",
+        "retired",
+        "mismatch",
+        "unavailable"
+      ]
+    },
+    "ResolvedProofFocus": {
+      "description": "Server-owned focus passed from proof resolution to a configured detail\nsurface. It is serializable in the scene but cannot be client-authored.",
+      "type": "object",
+      "properties": {
+        "destinationKind": {
+          "type": "string"
+        },
+        "distanceM": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "entityId": {
+          "type": "string"
+        },
+        "factKey": {
+          "type": "string"
+        },
+        "featureId": {
+          "type": "string"
+        },
+        "layerId": {
+          "type": "string"
+        },
+        "matchedLabel": {
+          "type": "string"
+        },
+        "matchedValue": {
+          "type": "string"
+        },
+        "observationIds": {
+          "description": "Exact source identities; display text is never a substitute for these.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "receiptId": {
+          "type": "string"
+        },
+        "surfaceId": {
+          "type": "string"
+        },
+        "targetId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "surfaceId",
+        "layerId",
+        "factKey",
+        "destinationKind",
+        "targetId"
+      ]
+    },
+    "SceneAnchor": {
+      "type": "object",
+      "properties": {
+        "area": {
+          "type": "string"
+        },
+        "boundary": {
+          "$ref": "#/definitions/SceneBoundary"
+        },
+        "coordinateQuality": {
+          "$ref": "#/definitions/CoordinateQuality"
+        },
+        "entityId": {
+          "type": "string"
+        },
+        "geometry": {
+          "$ref": "#/definitions/SceneGeometry"
+        },
+        "label": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "entityId",
+        "label",
+        "coordinateQuality"
+      ]
+    },
+    "SceneBoundary": {
+      "type": "object",
+      "properties": {
+        "confidence": {
+          "type": "number",
+          "format": "float"
+        },
+        "geometry": {
+          "$ref": "#/definitions/SceneGeometry"
+        },
+        "sourceType": {
+          "type": "string"
+        },
+        "sourceUrl": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "geometry",
+        "sourceType",
+        "confidence"
+      ]
+    },
+    "SceneBounds": {
+      "type": "object",
+      "properties": {
+        "east": {
+          "type": "number",
+          "format": "double"
+        },
+        "north": {
+          "type": "number",
+          "format": "double"
+        },
+        "south": {
+          "type": "number",
+          "format": "double"
+        },
+        "west": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "west",
+        "south",
+        "east",
+        "north"
+      ]
+    },
+    "SceneCallout": {
+      "type": "object",
+      "properties": {
+        "featureIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "receiptIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "tone": {
+          "$ref": "#/definitions/DisplayTone"
+        }
+      },
+      "required": [
+        "id",
+        "tone",
+        "label",
+        "featureIds",
+        "receiptIds"
+      ]
+    },
+    "SceneFeature": {
+      "type": "object",
+      "properties": {
+        "confidence": {
+          "type": "number",
+          "format": "float"
+        },
+        "coordinateQuality": {
+          "$ref": "#/definitions/CoordinateQuality"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "display": {
+          "$ref": "#/definitions/SceneFeatureDisplay"
+        },
+        "entityId": {
+          "type": "string"
+        },
+        "geometry": {
+          "$ref": "#/definitions/SceneGeometry"
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "layerId": {
+          "type": "string"
+        },
+        "metrics": {
+          "$ref": "#/definitions/SceneMetrics"
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "receiptIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "shortLabel": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "layerId",
+        "kind",
+        "label",
+        "geometry",
+        "coordinateQuality",
+        "display",
+        "confidence",
+        "receiptIds"
+      ]
+    },
+    "SceneFeatureDisplay": {
+      "type": "object",
+      "properties": {
+        "icon": {
+          "type": "string"
+        },
+        "priority": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "tone": {
+          "$ref": "#/definitions/DisplayTone"
+        }
+      },
+      "required": [
+        "tone",
+        "priority"
+      ]
+    },
+    "SceneFillRate": {
+      "type": "object",
+      "properties": {
+        "availableFeatures": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "emptyLayers": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "filledLayers": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "partialLayers": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "shownFeatures": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "value": {
+          "type": "number",
+          "format": "float"
+        }
+      },
+      "required": [
+        "filledLayers",
+        "partialLayers",
+        "emptyLayers",
+        "shownFeatures",
+        "availableFeatures",
+        "value"
+      ]
+    },
+    "SceneGap": {
+      "type": "object",
+      "properties": {
+        "fillState": {
+          "$ref": "#/definitions/FillState"
+        },
+        "layerId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "layerId",
+        "fillState"
+      ]
+    },
+    "SceneGeometry": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "coordinates": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "double"
+              },
+              "maxItems": 2,
+              "minItems": 2
+            },
+            "type": {
+              "type": "string",
+              "const": "Point"
+            }
+          },
+          "required": [
+            "type",
+            "coordinates"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "coordinates": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "format": "double"
+                },
+                "maxItems": 2,
+                "minItems": 2
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "LineString"
+            }
+          },
+          "required": [
+            "type",
+            "coordinates"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "coordinates": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "format": "double"
+                  },
+                  "maxItems": 2,
+                  "minItems": 2
+                }
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "Polygon"
+            }
+          },
+          "required": [
+            "type",
+            "coordinates"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "coordinates": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "number",
+                      "format": "double"
+                    },
+                    "maxItems": 2,
+                    "minItems": 2
+                  }
+                }
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "MultiPolygon"
+            }
+          },
+          "required": [
+            "type",
+            "coordinates"
+          ]
+        }
+      ]
+    },
+    "SceneLayer": {
+      "type": "object",
+      "properties": {
+        "availableCount": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "emptyState": {
+          "type": "string"
+        },
+        "enabledByDefault": {
+          "type": "boolean"
+        },
+        "experience": {
+          "$ref": "#/definitions/UiSurfaceLayerExperienceConfig"
+        },
+        "family": {
+          "type": "string"
+        },
+        "featureValueLabels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "fillState": {
+          "$ref": "#/definitions/FillState"
+        },
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "mapPresentation": {
+          "type": "string"
+        },
+        "rank": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "relationClass": {
+          "type": "string"
+        },
+        "renderKind": {
+          "type": "string"
+        },
+        "shownCount": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "family",
+        "renderKind",
+        "relationClass",
+        "enabledByDefault",
+        "rank",
+        "availableCount",
+        "shownCount",
+        "fillState"
+      ]
+    },
+    "SceneMetrics": {
+      "type": "object",
+      "properties": {
+        "distanceM": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "rating": {
+          "type": "number",
+          "format": "double"
+        },
+        "reviewCount": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "severity": {
+          "type": "string"
+        },
+        "travelTimeMin": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      }
+    },
+    "SceneReceipt": {
+      "type": "object",
+      "properties": {
+        "claim": {
+          "type": "string"
+        },
+        "confidence": {
+          "type": "number",
+          "format": "float"
+        },
+        "entityId": {
+          "type": "string"
+        },
+        "evidence": {
+          "$ref": "#/definitions/EvidenceRef"
+        },
+        "factKey": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "learnedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "scope": {
+          "type": "string"
+        },
+        "sourceType": {
+          "type": "string"
+        },
+        "sourceUrl": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence",
+        "id",
+        "entityId",
+        "factKey",
+        "claim",
+        "sourceType",
+        "learnedAt",
+        "confidence"
+      ]
+    },
+    "SceneRelation": {
+      "type": "object",
+      "properties": {
+        "confidence": {
+          "type": "number",
+          "format": "float"
+        },
+        "direct": {
+          "type": "boolean"
+        },
+        "distanceM": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "edgeType": {
+          "type": "string"
+        },
+        "fromId": {
+          "type": "string"
+        },
+        "receiptIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "relationClass": {
+          "type": "string"
+        },
+        "toId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "fromId",
+        "toId",
+        "edgeType",
+        "relationClass",
+        "direct",
+        "confidence",
+        "receiptIds"
+      ]
+    },
+    "SceneViewport": {
+      "type": "object",
+      "properties": {
+        "bounds": {
+          "$ref": "#/definitions/SceneBounds"
+        },
+        "center": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          },
+          "maxItems": 2,
+          "minItems": 2
+        },
+        "radiusM": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      }
+    },
+    "UiSurfaceLayerExperienceConfig": {
+      "type": "object",
+      "properties": {
+        "anchorInteriorDwellMs": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "default": null,
+          "minimum": 0
+        },
+        "anchorInteriorPitch": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double",
+          "default": null
+        },
+        "anchorLookAheadM": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "default": null,
+          "minimum": 0
+        },
+        "anchorPitch": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double",
+          "default": null
+        },
+        "anchorPoseTransitionMs": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "default": null,
+          "minimum": 0
+        },
+        "cameraAltitudeM": {
+          "type": "number",
+          "format": "double"
+        },
+        "cameraFov": {
+          "type": "number",
+          "format": "double"
+        },
+        "cameraRangeM": {
+          "type": "number",
+          "format": "double"
+        },
+        "cameraTilt": {
+          "type": "number",
+          "format": "double"
+        },
+        "dwellMs": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "endsHereState": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "entranceDwellMs": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "default": null,
+          "minimum": 0
+        },
+        "kind": {
+          "type": "string"
+        },
+        "maximumDurationMs": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "default": null,
+          "minimum": 0
+        },
+        "maximumPanoramaGapM": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "default": null,
+          "minimum": 0
+        },
+        "minimumDurationMs": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "default": null,
+          "minimum": 0
+        },
+        "minimumFrameDwellMs": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "default": null,
+          "minimum": 0
+        },
+        "overviewDwellMs": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "default": null,
+          "minimum": 0
+        },
+        "panoramaCrossfadeMs": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "default": null,
+          "minimum": 0
+        },
+        "pauseLabel": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "replayLabel": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "resumeLabel": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "routeDirection": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "shortGapState": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "streetViewZoom": {
+          "type": "number",
+          "format": "double"
+        },
+        "targetDurationMs": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "default": null,
+          "minimum": 0
+        },
+        "transitionMs": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "unavailableState": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "waypointSpacingM": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "kind",
+        "routeDirection",
+        "waypointSpacingM",
+        "overviewDwellMs",
+        "dwellMs",
+        "anchorLookAheadM",
+        "anchorPitch",
+        "anchorInteriorPitch",
+        "anchorInteriorDwellMs",
+        "anchorPoseTransitionMs",
+        "cameraAltitudeM",
+        "cameraRangeM",
+        "cameraTilt",
+        "cameraFov",
+        "streetViewZoom",
+        "transitionMs",
+        "targetDurationMs",
+        "minimumDurationMs",
+        "maximumDurationMs",
+        "minimumFrameDwellMs",
+        "panoramaCrossfadeMs",
+        "entranceDwellMs",
+        "maximumPanoramaGapM",
+        "shortGapState",
+        "endsHereState",
+        "unavailableState",
+        "pauseLabel",
+        "resumeLabel",
+        "replayLabel"
+      ]
+    },
+    "UiSurfaceSceneExperienceConfig": {
+      "type": "object",
+      "properties": {
+        "backToSocietyLabel": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "boundaryPadding": {
+          "type": "number",
+          "format": "double"
+        },
+        "finalHeading": {
+          "type": "number",
+          "format": "double"
+        },
+        "finalRangeM": {
+          "type": "number",
+          "format": "double"
+        },
+        "finalTilt": {
+          "type": "number",
+          "format": "double"
+        },
+        "googleUnavailableState": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "missingBoundaryState": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "mobileBoundaryPadding": {
+          "type": "number",
+          "format": "double"
+        },
+        "revealDurationMs": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "rotationArcDegrees": {
+          "type": "number",
+          "format": "double"
+        },
+        "searchContextLabel": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "searchContextViewHomeLabel": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "societyPauseLabel": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "societyPlayLabel": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "societyResumeLabel": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "startRangeM": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "revealDurationMs",
+        "startRangeM",
+        "finalRangeM",
+        "finalTilt",
+        "finalHeading",
+        "rotationArcDegrees",
+        "boundaryPadding",
+        "mobileBoundaryPadding",
+        "missingBoundaryState",
+        "googleUnavailableState",
+        "societyPlayLabel",
+        "societyPauseLabel",
+        "societyResumeLabel",
+        "searchContextLabel",
+        "searchContextViewHomeLabel",
+        "backToSocietyLabel"
+      ]
+    }
+  }
+}

@@ -15,7 +15,7 @@ use super::intent::{SearchIntent, SourceSpan};
 use super::tokens::{decode_signed, encode_hex, encode_signed, tagged_digest};
 use super::SearchRuntimeVersion;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum SearchRevisionOperation {
     Initial,

@@ -87,8 +87,8 @@ test("API chain sends signed parents, stable mutation IDs, selection, and exact 
   const proof = {
     propertyId: "home", factKey: "nearby_schools", targetEntityId: "school",
     targetLabel: "Fixture School", value: { type: "Numeric", data: 0.8 }, unit: "km",
-    destination: { surfaceId: "around_this_home", layerId: "schools", kind: "scene", targetId: "around-this-home" },
-    sourceObservations: [{ observationId: "exact", sourceUrl: "https://example.test/exact" }],
+    contractVersion: 1, snapshotIdentity: "fixture", semanticFingerprint: "fixture", branchId: "branch", predicateId: "predicate", subjectEntityId: "society:home", relation: "near", resolutionStatus: "resolved", derivationChain: [],
+    sourceObservations: [{ provider: "fixture", providerObservationId: "exact", subjectEntityId: "society:home", observedAt: "2026-07-14T12:00:00Z", assetLineage: ["fixture/v1"], observationId: "exact", sourceUrl: "https://example.test/exact" }],
   };
   const original = globalThis.fetch;
   globalThis.fetch = async (input, options) => {

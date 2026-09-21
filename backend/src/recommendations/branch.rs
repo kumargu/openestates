@@ -2,7 +2,7 @@ use serde::Serialize;
 
 use crate::models::PropertyCard;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BranchLens {
     Proof,
@@ -11,7 +11,7 @@ pub enum BranchLens {
     Commute,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RecommendationStatus {
     Pending,
@@ -19,13 +19,14 @@ pub enum RecommendationStatus {
     Unavailable,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize)]
 pub struct RecommendationEnvelope {
     pub status: RecommendationStatus,
     pub cache_key: String,
     pub engine_version: String,
     pub scoring_policy_version: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub serving_bundle_version: Option<String>,
 }
 
@@ -39,13 +40,13 @@ pub struct RecommendationResponse {
     pub items: Vec<RecommendationBranch>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize)]
 pub struct RecallChannelHit {
     pub channel: String,
     pub score: f64,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize)]
 pub struct EvidenceDelta {
     pub fact_count: usize,
     pub gap_count: usize,
@@ -54,7 +55,7 @@ pub struct EvidenceDelta {
     pub gap_delta: i32,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize)]
 pub struct RecommendationBranch {
     pub branch_id: String,
     pub lens: BranchLens,
@@ -62,6 +63,7 @@ pub struct RecommendationBranch {
     pub property: PropertyCard,
     pub contrast: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub tradeoff: Option<String>,
     pub evidence_delta: EvidenceDelta,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

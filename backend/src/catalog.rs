@@ -1803,7 +1803,17 @@ mod tests {
             model: None,
             skill_id: None,
             learned_at,
-            observation: None,
+            observation: Some(
+                crate::serving::SourceObservation::new(
+                    "Catalog",
+                    format!("fixture:{fact_key}"),
+                    entity_id,
+                    learned_at,
+                    None,
+                    vec!["fixture/v1".to_string()],
+                )
+                .unwrap(),
+            ),
         }
     }
 }

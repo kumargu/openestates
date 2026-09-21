@@ -1,0 +1,70 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ProofResolutionFailure",
+  "type": "object",
+  "properties": {
+    "code": {
+      "type": "string"
+    },
+    "contractVersion": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "message": {
+      "type": "string"
+    },
+    "resolutionStatus": {
+      "$ref": "#/definitions/ProofFailureStatus"
+    },
+    "runtimeVersion": {
+      "$ref": "#/definitions/SearchRuntimeVersion"
+    }
+  },
+  "required": [
+    "contractVersion",
+    "resolutionStatus",
+    "code",
+    "message",
+    "runtimeVersion"
+  ],
+  "definitions": {
+    "ProofFailureStatus": {
+      "type": "string",
+      "enum": [
+        "staleSnapshot",
+        "missingEvidence",
+        "invalidReference"
+      ]
+    },
+    "SearchRuntimeVersion": {
+      "type": "object",
+      "properties": {
+        "scoringPolicyVersion": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "searchEngineVersion": {
+          "type": "string"
+        },
+        "semanticContractDigest": {
+          "type": "string"
+        },
+        "servingBundleVersion": {
+          "type": "string"
+        },
+        "snapshotIdentity": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "snapshotIdentity",
+        "servingBundleVersion",
+        "scoringPolicyVersion",
+        "searchEngineVersion",
+        "semanticContractDigest"
+      ]
+    }
+  }
+}

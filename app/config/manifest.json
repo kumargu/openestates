@@ -11,31 +11,45 @@
     "dag": {
       "path": "app/config/dag",
       "manifest": "app/config/dag/manifest.json",
-      "purpose": "Control plane: ontology, leaves, asset graph, enrichment, UI surfaces, crawl policies"
+      "purpose": "Domain control plane: ontology, leaves, asset graph, enrichment and crawl policies"
     },
     "bootstrap": {
       "path": "app/config/bootstrap",
-      "files": ["policy.json", "edge_inference.json"],
+      "files": [
+        "policy.json",
+        "edge_inference.json"
+      ],
       "purpose": "How importers infer nodes/edges. Output goes to lake only."
     },
     "lake": {
       "path": "app/config/lake",
-      "files": ["layout.json", "sync.json"],
+      "files": [
+        "layout.json",
+        "sync.json"
+      ],
       "purpose": "Parquet zone layout and S3/local sync contract"
     },
     "runtime": {
       "path": "app/config/runtime",
-      "files": ["defaults.json"],
+      "files": [
+        "defaults.json"
+      ],
       "purpose": "Environment variable names and local-only path defaults"
     },
     "product": {
       "path": "app/config/product",
-      "files": ["discovery_home.json"],
+      "files": [
+        "discovery_home.json"
+      ],
       "purpose": "Landing copy and curated shelves; evidence section ownership moved to app/config/dag/evidence_sections.json"
     },
     "ui": {
       "path": "app/config/ui",
-      "files": ["home-atlas.json", "search-journey.json"],
+      "files": [
+        "home-atlas.json",
+        "search-journey.json",
+        "property-context.json"
+      ],
       "purpose": "Presentation and browser navigation policies; search meaning and proof remain backend-owned"
     },
     "coverage": {
@@ -44,10 +58,10 @@
     }
   },
   "separation": {
-    "app_config": "Schemas, policies, registries — versioned in Git",
-    "data_lake": "Enriched entities, facts, edges, serving bundles — Parquet in data/lake or S3",
-    "data_cache": "Rebuildable local caches — never synced, never source of truth",
-    "data_validation": "Eval baselines and QA reports — optional, not runtime input"
+    "app_config": "Schemas, policies, registries \u2014 versioned in Git",
+    "data_lake": "Enriched entities, facts, edges, serving bundles \u2014 Parquet in data/lake or S3",
+    "data_cache": "Rebuildable local caches \u2014 never synced, never source of truth",
+    "data_validation": "Eval baselines and QA reports \u2014 optional, not runtime input"
   },
   "agent_routing": {
     "read_first": "app/config/manifest.json",

@@ -1,3 +1,4 @@
+use crate::surfaces::proof_focus::{resolved_proof_focus, ResolvedProofFocus};
 use std::sync::Arc;
 
 use axum::extract::{Json as RequestJson, Query};
@@ -8,9 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::dag_config::ui_surfaces_config;
 use crate::routes::enrichment::kg_entity_refs_for_property;
-use crate::search::proof::{
-    resolve_proof_token, resolved_proof_focus, ProofResolutionError, ResolvedProofFocus,
-};
+use crate::search::proof::{resolve_proof_token, ProofResolutionError};
 use crate::security::security_tuning;
 use crate::state::AppState;
 use crate::surfaces::{build_surface_scene_with_focus, ProofFocusStatus, SurfaceSceneResponse};
@@ -25,6 +24,7 @@ pub struct ErrorResponse {
 pub struct SurfaceListQuery {
     pub ids: Option<String>,
     pub proof_token: Option<String>,
+    pub snapshot_identity: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -32,6 +32,7 @@ pub struct SurfaceListQuery {
 pub struct SurfaceBatchRequest {
     pub property_ids: Vec<String>,
     pub surface_ids: Vec<String>,
+    pub snapshot_identity: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -68,6 +69,7 @@ pub async fn get_property_surface(
     Query(query): Query<SurfaceListQuery>,
 ) -> Result<Json<SurfaceSceneResponse>, (StatusCode, Json<ErrorResponse>)> {
     let runtime = state.search_runtime.load_full();
+    check_snapshot(&runtime, query.snapshot_identity.as_deref())?;
     let focus = resolve_surface_focus(&runtime, &property_id, query.proof_token.as_deref())
         .map_err(route_error)?;
     let response = build_property_surfaces_response(
@@ -98,6 +100,7 @@ pub async fn list_property_surfaces(
 ) -> Result<Json<PropertySurfacesResponse>, (StatusCode, Json<ErrorResponse>)> {
     let surface_ids = parse_surface_ids(query.ids.as_deref())?;
     let runtime = state.search_runtime.load_full();
+    check_snapshot(&runtime, query.snapshot_identity.as_deref())?;
     let focus = resolve_surface_focus(&runtime, &property_id, query.proof_token.as_deref())
         .map_err(route_error)?;
     build_property_surfaces_response(&state, runtime, &property_id, &surface_ids, &focus)
@@ -122,6 +125,7 @@ pub async fn get_property_surfaces_batch(
     }
     let surface_ids = validate_surface_ids(request.surface_ids).map_err(route_error)?;
     let runtime = state.search_runtime.load_full();
+    check_snapshot(&runtime, request.snapshot_identity.as_deref())?;
     let mut items = Vec::new();
     for property_id in request.property_ids {
         items.push(
@@ -140,6 +144,18 @@ pub async fn get_property_surfaces_batch(
         contract_version: crate::surfaces::SURFACE_SCENE_CONTRACT_VERSION,
         items,
     }))
+}
+
+fn check_snapshot(
+    runtime: &crate::state::SearchRuntimeSnapshot,
+    expected: Option<&str>,
+) -> Result<(), (StatusCode, Json<ErrorResponse>)> {
+    if expected
+        .is_some_and(|expected| expected != runtime.bundle.manifest.proof_snapshot_identity())
+    {
+        return Err(error(StatusCode::CONFLICT, "stale_snapshot"));
+    }
+    Ok(())
 }
 
 async fn build_property_surfaces_response(
@@ -274,9 +290,7 @@ fn resolve_surface_focus(
                 ProofResolutionError::MissingEvidence => {
                     (ProofFocusStatus::Retired, messages.retired.clone())
                 }
-                ProofResolutionError::WrongProperty
-                | ProofResolutionError::WrongSubject
-                | ProofResolutionError::DestinationMismatch => {
+                ProofResolutionError::WrongProperty | ProofResolutionError::WrongSubject => {
                     (ProofFocusStatus::Mismatch, messages.mismatch.clone())
                 }
                 ProofResolutionError::InvalidToken => unreachable!(),

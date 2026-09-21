@@ -26,7 +26,7 @@ pub enum LivabilityLens {
     Judgment,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LivabilityBriefBlock {
     pub lens: String,
     pub title: String,
@@ -36,13 +36,15 @@ pub struct LivabilityBriefBlock {
     pub fact_keys: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LivabilityBrief {
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub summary_paragraph: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub blocks: Vec<LivabilityBriefBlock>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub lifecycle_flag: Option<String>,
     #[serde(skip_serializing)]
     pub confidence_label: String,

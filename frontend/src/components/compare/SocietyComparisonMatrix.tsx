@@ -220,7 +220,7 @@ function projectScale(listings: PropertyCard[]): string | null {
 }
 
 function homeHeaderSummary(listings: PropertyCard[]): string[] {
-  const price = numericRange(listings, (listing) => listing.price, formatPrice);
+  const price = numericRange(listings, (listing) => listing.price ?? null, formatPrice);
   const sqft = numericRange(
     listings,
     usableSqft,
@@ -228,7 +228,7 @@ function homeHeaderSummary(listings: PropertyCard[]): string[] {
   );
   const pricePerSqft = numericRange(
     listings,
-    (listing) => listing.price_per_sqft,
+    (listing) => listing.price_per_sqft ?? null,
     (value) => `₹${Math.round(value).toLocaleString("en-IN")}/sqft`,
   );
   return [price, sqft, pricePerSqft].filter((item): item is string => item != null);
@@ -636,7 +636,7 @@ export function SocietyComparisonMatrix({
     [details],
   );
   const availableBhks = [...new Set(columns.flatMap((column) =>
-    column.listings.map((listing) => listing.bhk)
+    column.listings.flatMap((listing) => listing.bhk === undefined ? [] : [listing.bhk])
   ))].sort((left, right) => left - right);
   const requestedBhk = Number(searchParams.get("bhk"));
   const preferredBhk = selectedHomes[0]?.bhk;

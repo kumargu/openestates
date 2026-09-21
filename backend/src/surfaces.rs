@@ -12,30 +12,36 @@ use crate::knowledge::FactValue;
 use crate::models::{KgEntityRefs, Property};
 use crate::related_societies::related_society_entity_ids_with_entities;
 use crate::search::geo::{extract_first_distance_km, haversine_km};
-use crate::search::proof::ResolvedProofFocus;
+pub mod proof_focus;
+use self::proof_focus::ResolvedProofFocus;
 use crate::serving::{
     resolve_serving_coordinates, LoadedServingBundle, ServingEntityFactRows, ServingFactRecord,
 };
 
 pub const SURFACE_SCENE_CONTRACT_VERSION: u32 = 1;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SurfaceSceneResponse {
+    pub snapshot_identity: String,
     pub contract_version: u32,
     pub surface_id: String,
     pub property_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub serving_bundle_version: Option<String>,
     pub entity_refs: KgEntityRefs,
     pub anchor: SceneAnchor,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "UiSurfaceSceneExperienceConfig")]
     pub experience: Option<UiSurfaceSceneExperienceConfig>,
     pub viewport: SceneViewport,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "ResolvedProofFocus")]
     pub proof_focus: Option<ResolvedProofFocus>,
     pub proof_focus_status: ProofFocusStatus,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub proof_focus_message: Option<String>,
     pub layers: Vec<SceneLayer>,
     pub features: Vec<SceneFeature>,
@@ -46,7 +52,7 @@ pub struct SurfaceSceneResponse {
     pub gaps: Vec<SceneGap>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ProofFocusStatus {
     NotRequested,
@@ -57,42 +63,49 @@ pub enum ProofFocusStatus {
     Unavailable,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SceneAnchor {
     pub entity_id: String,
     pub label: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub area: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "SceneGeometry")]
     pub geometry: Option<SceneGeometry>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "SceneBoundary")]
     pub boundary: Option<SceneBoundary>,
     pub coordinate_quality: CoordinateQuality,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SceneBoundary {
     pub geometry: SceneGeometry,
     pub source_type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub source_url: Option<String>,
     pub confidence: f32,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SceneViewport {
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "[f64; 2]")]
     pub center: Option<[f64; 2]>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "SceneBounds")]
     pub bounds: Option<SceneBounds>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "u32")]
     pub radius_m: Option<u32>,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SceneBounds {
     pub west: f64,
@@ -101,7 +114,7 @@ pub struct SceneBounds {
     pub north: f64,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SceneLayer {
     pub id: String,
@@ -109,10 +122,13 @@ pub struct SceneLayer {
     pub family: String,
     pub render_kind: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub map_presentation: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "UiSurfaceLayerExperienceConfig")]
     pub experience: Option<UiSurfaceLayerExperienceConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub empty_state: Option<String>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub feature_value_labels: HashMap<String, HashMap<String, String>>,
@@ -124,22 +140,25 @@ pub struct SceneLayer {
     pub fill_state: FillState,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SceneFeature {
     pub id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub entity_id: Option<String>,
     pub layer_id: String,
     pub kind: String,
     pub label: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub short_label: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub details: Vec<String>,
     pub geometry: SceneGeometry,
     pub coordinate_quality: CoordinateQuality,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "SceneMetrics")]
     pub metrics: Option<SceneMetrics>,
     pub display: SceneFeatureDisplay,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
@@ -148,31 +167,37 @@ pub struct SceneFeature {
     pub receipt_ids: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SceneMetrics {
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "u32")]
     pub distance_m: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "u32")]
     pub travel_time_min: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "f64")]
     pub rating: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "u32")]
     pub review_count: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub severity: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SceneFeatureDisplay {
     pub tone: DisplayTone,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub icon: Option<String>,
     pub priority: u32,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SceneRelation {
     pub from_id: String,
@@ -181,12 +206,13 @@ pub struct SceneRelation {
     pub relation_class: String,
     pub direct: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "u32")]
     pub distance_m: Option<u32>,
     pub confidence: f32,
     pub receipt_ids: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SceneCallout {
     pub id: String,
@@ -196,23 +222,26 @@ pub struct SceneCallout {
     pub receipt_ids: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SceneReceipt {
+    pub evidence: crate::serving::EvidenceRef,
     pub id: String,
     pub entity_id: String,
     pub fact_key: String,
     pub claim: String,
     pub source_type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub source_url: Option<String>,
     pub learned_at: DateTime<Utc>,
     pub confidence: f32,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub scope: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SceneFillRate {
     pub filled_layers: usize,
@@ -223,14 +252,14 @@ pub struct SceneFillRate {
     pub value: f32,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SceneGap {
     pub layer_id: String,
     pub fill_state: FillState,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize, PartialEq)]
 #[serde(tag = "type", rename_all = "PascalCase")]
 pub enum SceneGeometry {
     Point {
@@ -247,7 +276,7 @@ pub enum SceneGeometry {
     },
 }
 
-#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[derive(schemars::JsonSchema, Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum CoordinateQuality {
     Exact,
@@ -256,7 +285,7 @@ pub enum CoordinateQuality {
     Missing,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[derive(schemars::JsonSchema, Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum DisplayTone {
     Positive,
@@ -265,7 +294,7 @@ pub enum DisplayTone {
     Risk,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[derive(schemars::JsonSchema, Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum FillState {
     Filled,
@@ -497,6 +526,7 @@ pub fn build_surface_scene_with_focus(
         .collect();
     let viewport = scene_viewport(anchor_coords, &features);
     Some(SurfaceSceneResponse {
+        snapshot_identity: bundle.manifest.proof_snapshot_identity().to_string(),
         contract_version: SURFACE_SCENE_CONTRACT_VERSION,
         surface_id: surface.id.clone(),
         property_id: property.id.clone(),
@@ -559,6 +589,7 @@ fn derived_focus_candidate(
         properties: HashMap::new(),
         confidence: evidence.derivation.confidence,
         receipt: SceneReceipt {
+            evidence: crate::serving::EvidenceRef::for_derivation(&evidence.derivation),
             id: evidence.derivation.derivation_id.as_str().to_string(),
             entity_id: evidence.derivation.subject_entity_id.clone(),
             fact_key: focus.fact_key.clone(),
@@ -822,6 +853,7 @@ fn features_for_layer(
                 anchor_coords,
                 place_index,
                 &edge_places,
+                bundle.manifest.proof_snapshot_identity(),
             )
         })
         .filter(|candidate| candidate_matches_name_policy(layer_rule, candidate))
@@ -845,8 +877,11 @@ fn feature_candidate_from_fact(
     anchor_coords: Option<(f64, f64)>,
     place_index: &ScenePlaceIndex,
     edge_places: &[&PlaceLookup],
+    snapshot_identity: &str,
 ) -> Option<SceneFeatureCandidate> {
     let fact = source.fact;
+    let observation = fact.observation.as_ref()?;
+    observation.validate().ok()?;
     let claim = fact_claim(fact)?;
     let parsed = parse_nearby_display(&claim);
     let place = source
@@ -890,6 +925,7 @@ fn feature_candidate_from_fact(
         .and_then(|place| place.review_count)
         .or(parsed.review_count);
     let receipt = SceneReceipt {
+        evidence: crate::serving::EvidenceRef::for_observation(snapshot_identity, observation),
         id: receipt_id(fact, source.index),
         entity_id: fact.entity_id.clone(),
         fact_key: fact.fact_key.clone(),
@@ -2323,7 +2359,7 @@ mod tests {
                 }],
             }),
         };
-        let focus = crate::search::proof::ResolvedProofFocus {
+        let focus = crate::surfaces::proof_focus::ResolvedProofFocus {
             observation_ids: Vec::new(),
             scene_evidence: None,
             surface_id: "around_this_home".to_string(),
@@ -2908,6 +2944,14 @@ mod tests {
         } else {
             "test"
         };
+        let observation_key = if fact_key.starts_with("geo.") {
+            format!("fixture:coordinates:{entity_id}")
+        } else {
+            format!(
+                "fixture:{fact_key}:{}",
+                serde_json::to_string(&value).unwrap()
+            )
+        };
         ServingFactRecord {
             entity_id: entity_id.to_string(),
             fact_key: fact_key.to_string(),
@@ -2920,7 +2964,17 @@ mod tests {
             model: None,
             skill_id: None,
             learned_at: Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
-            observation: None,
+            observation: Some(
+                crate::serving::SourceObservation::new(
+                    source_type,
+                    observation_key,
+                    entity_id.to_string(),
+                    Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
+                    source_url.map(str::to_string),
+                    vec!["fixture/source-v1".to_string()],
+                )
+                .unwrap(),
+            ),
         }
     }
 

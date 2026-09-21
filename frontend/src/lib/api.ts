@@ -1,3 +1,5 @@
+import journeyPolicy from "../../../app/config/ui/search-journey.json" with { type: "json" };
+import { validateWire } from "./wire.ts";
 import type {
   PropertyCard,
   PropertyDetailResponse,
@@ -16,10 +18,6 @@ import type {
   SurfaceBatchResponse,
   SurfaceSceneResponse,
 } from "./types.ts";
-import {
-  filterListableProperties,
-  isListableProperty,
-} from "./property-filters.ts";
 import { API_ORIGIN } from "./runtimeConfig.ts";
 import { projectSearchJourney } from "./search-journey.ts";
 
@@ -45,6 +43,7 @@ const GET_RETRY_DELAY_MS = 200;
 type ApiFetchOptions = {
   signal?: AbortSignal;
   timeoutMs?: number;
+  snapshotIdentity?: string;
 };
 
 type PropertyCatalogFetchOptions = ApiFetchOptions & {
@@ -97,6 +96,16 @@ function withCallerAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<
   });
 }
 
+function decodeWire<T>(path: string, value: unknown): T {
+  const route = path.split("?")[0];
+  if (["/api/search", "/api/search/revisions", "/api/search/resume"].includes(route)) return validateWire<T>("journey", value);
+  if (route === "/api/search/proofs/resolve") return validateWire<T>("proof", value);
+  if (route === "/api/properties/batch") return validateWire<T>("summaries", value);
+  if (/^\/api\/properties\/[^/]+$/.test(route)) return validateWire<T>("detail", value);
+  if (/^\/api\/properties\/[^/]+\/surfaces\/[^/]+$/.test(route)) return validateWire<T>("context", value);
+  return value as T;
+}
+
 async function fetchJson<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
   const localFixture = await getDevFixture<T>(path);
   if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
@@ -106,15 +115,14 @@ async function fetchJson<T>(path: string, options: ApiFetchOptions = {}): Promis
       const res = await fetch(`${API_ORIGIN}${path}`, {
         signal: requestSignal(options),
       });
-      if (res.ok) return res.json();
+      if (res.ok) return decodeWire<T>(path, await res.json());
 
       const fixture = await getDevFixture<T>(path);
       if (fixture !== null) return fixture;
 
-      const text = await res.text().catch(() => "");
-      throw new Error(
-        `API ${res.status}: ${text || res.statusText}`
-      );
+      const payload = await res.json().catch(() => ({}));
+      if (res.status === 409) invalidateSnapshotCaches();
+      throw new ApiError(res.status, payload);
     } catch (error) {
       if (isAbortError(error) || options.signal?.aborted) throw error;
       const fixture = await getDevFixture<T>(path);
@@ -125,6 +133,25 @@ async function fetchJson<T>(path: string, options: ApiFetchOptions = {}): Promis
     }
   }
   throw new Error("API request failed");
+}
+
+function invalidateSnapshotCaches() {
+  cachedPropertyCatalog = null;
+  cachedDiscovery = null;
+  propertyCatalogRequestGeneration += 1;
+  inFlightSearches.clear();
+  inFlightResumes.clear();
+  inFlightSurfaceBatches.clear();
+}
+
+export class ApiError extends Error {
+  status: number;
+  code?: string;
+  constructor(status: number, payload: { code?: string; error?: string }) {
+    super(`API ${status}: ${payload.code ?? payload.error ?? "request_failed"}`);
+    this.status = status;
+    this.code = payload.code ?? payload.error;
+  }
 }
 
 async function postJson<T>(path: string, body: unknown, options: ApiFetchOptions = {}): Promise<T> {
@@ -144,10 +171,14 @@ async function postJson<T>(path: string, body: unknown, options: ApiFetchOptions
     const fixture = await getDevFixture<T>(path);
     if (fixture !== null) return fixture;
 
-    const text = await res.text().catch(() => "");
-    throw new Error(`API ${res.status}: ${text || res.statusText}`);
+    const payload = await res.json().catch(() => ({}));
+    if (res.status === 409) invalidateSnapshotCaches();
+    if (path === "/api/search/proofs/resolve" && "resolutionStatus" in payload) {
+      validateWire("proofFailure", payload);
+    }
+    throw new ApiError(res.status, payload);
   }
-  return res.json();
+  return decodeWire<T>(path, await res.json());
 }
 
 export function getHealth(): Promise<{
@@ -166,7 +197,6 @@ function requestPropertyCatalog(
   generation: number,
 ): Promise<PropertyCard[]> {
   return fetchJson<PropertyCard[]>("/api/properties", options)
-    .then(filterListableProperties)
     .then((value) => {
       if (generation === propertyCatalogRequestGeneration) {
         cachedPropertyCatalog = { loadedAt: Date.now(), value };
@@ -203,28 +233,46 @@ export function getProperties(options: PropertyCatalogFetchOptions = {}): Promis
   return withCallerAbort(request, options.signal);
 }
 
+export async function getPropertyCardsByIds(ids: readonly string[], options?: ApiFetchOptions): Promise<PropertyCard[]> {
+  const propertyIds = [...new Set(ids)].filter(Boolean);
+  if (propertyIds.length === 0) return [];
+  const items: PropertyCard[] = [];
+  let snapshotIdentity = options?.snapshotIdentity;
+  for (let start = 0; start < propertyIds.length; start += journeyPolicy.summaryBatchLimit) {
+    const response = await postJson<{ snapshotIdentity: string; items: PropertyCard[] }>(
+      "/api/properties/batch", { propertyIds: propertyIds.slice(start, start + journeyPolicy.summaryBatchLimit), snapshotIdentity }, options,
+    );
+    snapshotIdentity = response.snapshotIdentity;
+    items.push(...response.items);
+  }
+  return items;
+}
+
 export function getProperty(id: string, options?: ApiFetchOptions): Promise<PropertyDetailResponse> {
-  return fetchJson(`/api/properties/${encodeURIComponent(id)}`, options);
+  return fetchJson(`/api/properties/${encodeURIComponent(id)}${options?.snapshotIdentity ? `?snapshotIdentity=${encodeURIComponent(options.snapshotIdentity)}` : ""}`, options);
 }
 
-export function getPropertyRecommendations(id: string): Promise<RecommendationResponse> {
-  return fetchJson(`/api/properties/${encodeURIComponent(id)}/recommendations`);
+export function getPropertyRecommendations(id: string, options?: ApiFetchOptions): Promise<RecommendationResponse> {
+  return fetchJson(`/api/properties/${encodeURIComponent(id)}/recommendations${options?.snapshotIdentity ? `?snapshotIdentity=${encodeURIComponent(options.snapshotIdentity)}` : ""}`, options);
 }
 
-export function getPropertyEvidence(id: string): Promise<PropertyEvidenceResponse> {
-  return fetchJson(`/api/properties/${encodeURIComponent(id)}/evidence`);
+export function getPropertyEvidence(id: string, options?: ApiFetchOptions): Promise<PropertyEvidenceResponse> {
+  return fetchJson(`/api/properties/${encodeURIComponent(id)}/evidence${options?.snapshotIdentity ? `?snapshotIdentity=${encodeURIComponent(options.snapshotIdentity)}` : ""}`, options);
 }
 
-export function getPropertyRera(id: string): Promise<ReraEvidenceReportResponse> {
-  return fetchJson(`/api/properties/${encodeURIComponent(id)}/rera`);
+export function getPropertyRera(id: string, options?: ApiFetchOptions): Promise<ReraEvidenceReportResponse> {
+  return fetchJson(`/api/properties/${encodeURIComponent(id)}/rera${options?.snapshotIdentity ? `?snapshotIdentity=${encodeURIComponent(options.snapshotIdentity)}` : ""}`, options);
 }
 
 export function getPropertySurface(
   id: string,
   surfaceId: string,
   focus?: ProofFocus,
+  options?: ApiFetchOptions,
 ): Promise<SurfaceSceneResponse> {
-  return fetchJson(propertySurfacePath(id, surfaceId, focus));
+  const path = propertySurfacePath(id, surfaceId, focus);
+  const separator = path.includes("?") ? "&" : "?";
+  return fetchJson(`${path}${options?.snapshotIdentity ? `${separator}snapshotIdentity=${encodeURIComponent(options.snapshotIdentity)}` : ""}`, options);
 }
 
 export function propertyDetailPath(
@@ -261,12 +309,13 @@ export function getPropertySurfacesBatch(
   surfaceIds: string[] = ["around_this_home"],
   options?: ApiFetchOptions,
 ): Promise<SurfaceBatchResponse> {
-  const key = JSON.stringify([propertyIds, surfaceIds]);
+  const key = JSON.stringify([propertyIds, surfaceIds, options?.snapshotIdentity]);
   const existing = inFlightSurfaceBatches.get(key);
   if (existing) return withCallerAbort(existing, options?.signal);
   const request = postJson<SurfaceBatchResponse>("/api/properties/surfaces/batch", {
     propertyIds,
     surfaceIds,
+    snapshotIdentity: options?.snapshotIdentity,
   }, { timeoutMs: options?.timeoutMs }).finally(() => {
     if (inFlightSurfaceBatches.get(key) === request) inFlightSurfaceBatches.delete(key);
   });
@@ -351,13 +400,7 @@ export function getDiscovery(options?: ApiFetchOptions): Promise<DiscoveryRespon
   }
   const request = inFlightDiscovery ?? fetchJson<DiscoveryResponse>("/api/discovery", {
     timeoutMs: options?.timeoutMs,
-  }).then((response) => ({
-    ...response,
-    shelves: response.shelves.map((shelf) => ({
-      ...shelf,
-      cards: shelf.cards.filter((card) => isListableProperty(card.property)),
-    })),
-  })).then((value) => {
+  }).then((value) => {
     cachedDiscovery = { loadedAt: Date.now(), value };
     return value;
   });

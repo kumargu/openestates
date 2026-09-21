@@ -4,7 +4,7 @@ use crate::dag_config::{search_guardrail_config, SearchGuidanceTemplate};
 
 use super::intent::{self, SearchIntent};
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchGuidance {
     pub mode: String,

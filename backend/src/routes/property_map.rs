@@ -32,73 +32,87 @@ const DEFAULT_MAP_LAYER_CAP: usize = 3;
 const METRO_MAP_RADIUS_KM: f64 = 10.0;
 const METRO_MAP_STATION_CAP: usize = 8;
 
-#[derive(Serialize, Clone, Debug, PartialEq)]
+#[derive(schemars::JsonSchema, Serialize, Clone, Debug, PartialEq)]
 pub struct PropertyMapContext {
     pub home: MapHomeAnchor,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub places: Vec<MapPlacePin>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "MapWaterContext")]
     pub water: Option<MapWaterContext>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub metro_lines: Vec<crate::routes::map_overlays::MapOverlayLine>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub access_lines: Vec<crate::routes::map_overlays::MapOverlayLine>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub red_flag_lines: Vec<crate::routes::map_overlays::MapOverlayLine>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub green_patches: Vec<crate::routes::map_overlays::MapOverlayPolygon>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub lakes: Vec<crate::routes::map_overlays::MapOverlayPolygon>,
 }
 
-#[derive(Serialize, Clone, Debug, PartialEq)]
+#[derive(schemars::JsonSchema, Serialize, Clone, Debug, PartialEq)]
 pub struct MapHomeAnchor {
     pub entity_id: String,
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub area: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "f64")]
     pub latitude: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "f64")]
     pub longitude: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "crate::routes::map_overlays::MapOverlayPolygon")]
     pub boundary: Option<crate::routes::map_overlays::MapOverlayPolygon>,
 }
 
-#[derive(Serialize, Clone, Debug, PartialEq)]
+#[derive(schemars::JsonSchema, Serialize, Clone, Debug, PartialEq)]
 pub struct MapPlacePin {
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub place_entity_id: Option<String>,
     pub layer: String,
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "f64")]
     pub latitude: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "f64")]
     pub longitude: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "f64")]
     pub distance_km: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "f64")]
     pub rating: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "u32")]
     pub review_count: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub note: Option<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub lines: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub source_url: Option<String>,
     pub source_type: String,
     #[serde(skip)]
     sort_priority: usize,
 }
 
-#[derive(Serialize, Clone, Debug, PartialEq)]
+#[derive(schemars::JsonSchema, Serialize, Clone, Debug, PartialEq)]
 pub struct MapWaterContext {
     pub groundwater_class: String,
     pub summary: String,
     pub scope_radius_km: f64,
     pub source_type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub source_url: Option<String>,
     /// Soft zone fill is UI geometry; class/summary are source-backed.
     pub illustrative_zone: bool,
@@ -1400,6 +1414,7 @@ mod tests {
     #[test]
     fn map_context_projects_from_surface_scene_without_parsing_claims() {
         let scene = SurfaceSceneResponse {
+            snapshot_identity: "fixture".to_string(),
             contract_version: 1,
             surface_id: "around_this_home".to_string(),
             property_id: "sample-3bhk".to_string(),
@@ -1489,6 +1504,18 @@ mod tests {
             relations: Vec::new(),
             callouts: Vec::new(),
             receipts: vec![SceneReceipt {
+                evidence: crate::serving::EvidenceRef::for_observation(
+                    "fixture",
+                    &crate::serving::SourceObservation::new(
+                        "Fixture",
+                        "fixture-map",
+                        "society:one",
+                        chrono::Utc::now(),
+                        None,
+                        vec!["fixture/map".to_string()],
+                    )
+                    .unwrap(),
+                ),
                 id: "receipt:school".to_string(),
                 entity_id: "society:sample".to_string(),
                 fact_key: "nearby_schools".to_string(),
@@ -1529,6 +1556,7 @@ mod tests {
     #[test]
     fn map_context_projects_evidence_lines_from_surface_scene() {
         let scene = SurfaceSceneResponse {
+            snapshot_identity: "fixture".to_string(),
             contract_version: 1,
             surface_id: "around_this_home".to_string(),
             property_id: "sample-3bhk".to_string(),
@@ -1637,6 +1665,18 @@ mod tests {
             callouts: Vec::new(),
             receipts: vec![
                 SceneReceipt {
+                    evidence: crate::serving::EvidenceRef::for_observation(
+                        "fixture",
+                        &crate::serving::SourceObservation::new(
+                            "Fixture",
+                            "fixture-map",
+                            "society:one",
+                            chrono::Utc::now(),
+                            None,
+                            vec!["fixture/map".to_string()],
+                        )
+                        .unwrap(),
+                    ),
                     id: "receipt:line".to_string(),
                     entity_id: "society:sample".to_string(),
                     fact_key: "high_voltage_transmission_line_nearby".to_string(),
@@ -1648,6 +1688,18 @@ mod tests {
                     scope: Some("within 100 m".to_string()),
                 },
                 SceneReceipt {
+                    evidence: crate::serving::EvidenceRef::for_observation(
+                        "fixture",
+                        &crate::serving::SourceObservation::new(
+                            "Fixture",
+                            "fixture-map",
+                            "society:one",
+                            chrono::Utc::now(),
+                            None,
+                            vec!["fixture/map".to_string()],
+                        )
+                        .unwrap(),
+                    ),
                     id: "receipt:access".to_string(),
                     entity_id: "society:sample".to_string(),
                     fact_key: "approach_road".to_string(),

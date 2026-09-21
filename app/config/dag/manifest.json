@@ -26,8 +26,7 @@
     "search_guardrails.json",
     "search_intent.json",
     "serving_eligibility.json",
-    "source_adapters/",
-    "ui_surfaces.json"
+    "source_adapters/"
   ],
   "pending": [],
   "contract_only": [],
@@ -42,7 +41,7 @@
     "add_source": "source_adapters/ + resolution_policies.json",
     "add_crawl_asset": "asset_registry.json + crawl_policies/",
     "enrich_leaf": "enrichment_targets.json",
-    "add_ui_surface": "ui_surfaces.json",
+    "add_ui_surface": "app/config/ui/property-context.json",
     "add_rera_report_fact": "rera_report_surface.json + fact_registry.json",
     "bootstrap_policy": "app/config/bootstrap/",
     "bootstrap_edge_inference": "app/config/bootstrap/edge_inference.json"

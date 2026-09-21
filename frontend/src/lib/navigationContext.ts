@@ -147,8 +147,8 @@ export type DiscoveryMapCandidate = {
   rank: number;
   preview: {
     area: string;
-    bhk: number;
-    price: number;
+    bhk?: number;
+    price?: number;
     title: string;
   };
   proofFocus?: ProofFocus;

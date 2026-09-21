@@ -75,7 +75,7 @@ pub struct UiSurfaceSceneConfig {
     pub layers: Vec<UiSurfaceLayerRule>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UiSurfaceSceneExperienceConfig {
     pub reveal_duration_ms: u32,
@@ -165,7 +165,7 @@ pub struct UiSurfaceLayerRule {
     pub rank: Option<u32>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UiSurfaceLayerExperienceConfig {
     pub kind: String,
@@ -224,7 +224,10 @@ fn default_enabled() -> bool {
 }
 
 pub fn ui_surfaces_path() -> PathBuf {
-    dag_root().join("ui_surfaces.json")
+    dag_root()
+        .parent()
+        .expect("config root")
+        .join("ui/property-context.json")
 }
 
 pub fn load_ui_surfaces() -> Result<UiSurfacesFile, DagConfigError> {

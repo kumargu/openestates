@@ -21,7 +21,7 @@ async function mockJourneyApi(page: Page, staleProof = false) {
   const calls: Array<{ path: string; body: Record<string, unknown> }> = [];
   const initial = openAtlasFromFirstResult(journeyFixture());
   const updated = openAtlasFromFirstResult(journeyFixture("revision-2", "3 BHK, under ₹2.5Cr"));
-  updated.attempt = { kind: "revision", outcome: "activated" };
+  updated.attempt = { operation: "refine", catalogRebased: false, kind: "revision", outcome: "activated" };
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     const body = route.request().postDataJSON() ?? {};
@@ -30,15 +30,15 @@ async function mockJourneyApi(page: Page, staleProof = false) {
     if (path === "/api/search/revisions") return route.fulfill({ json: body.utterance === "Only 4BHK" ? retainedFixture(initial) : updated });
     if (path === "/api/search/resume") {
       const envelope = structuredClone(body.parentToken === "signed:revision-2" ? updated : initial);
-      envelope.attempt = { kind: "resume", outcome: "resumed" };
+      envelope.attempt = { operation: "resume", catalogRebased: false, kind: "resume", outcome: "resumed" };
       return route.fulfill({ json: envelope });
     }
     if (path === "/api/search/proofs/resolve") {
-      if (staleProof) return route.fulfill({ status: 409, json: { code: "stale_proof" } });
+      if (staleProof) return route.fulfill({ status: 409, json: { code: "stale_proof_snapshot" } });
       return route.fulfill({ json: {
-        propertyId: body.propertyId, factKey: "project_size", value: { type: "Text", data: "Exact receipt value" },
-        destination: { surfaceId: "project_facts", kind: "section", targetId: "property-search-match" },
-        sourceObservations: [{ observationId: "exact", sourceUrl: "https://example.test/exact-receipt" }],
+        propertyId: body.propertyId, factKey: "water_supply", value: { type: "Text", data: "Exact receipt value" },
+        contractVersion: 1, snapshotIdentity: "dev-fixture-v1", semanticFingerprint: "fixture", branchId: "branch", predicateId: "predicate", subjectEntityId: "society:home", relation: "supports", resolutionStatus: "resolved", derivationChain: [],
+        sourceObservations: [{ provider: "fixture", providerObservationId: "exact", subjectEntityId: "society:home", observedAt: "2026-07-14T12:00:00Z", assetLineage: ["fixture/v1"], observationId: "exact", sourceUrl: "https://example.test/exact-receipt" }],
       } });
     }
     if (path === "/api/properties/surfaces/batch") {
@@ -60,6 +60,12 @@ async function mockJourneyApi(page: Page, staleProof = false) {
         featured.image = "/landing/tiles/03-map-evidence-960.webp";
       }
       return route.fulfill({ json: discovery });
+    }
+    if (path === "/api/properties/batch") {
+      const catalog = structuredClone(getFixtureResponse("/api/properties")) as Array<{ id: string }>;
+      catalog[0].id = atlasFixtureId;
+      const ids = body.propertyIds as string[];
+      return route.fulfill({ json: { contractVersion: 1, snapshotIdentity: "dev-fixture-v1", items: ids.flatMap((id) => catalog.filter((card) => card.id === id)), missingIds: ids.filter((id) => !catalog.some((card) => card.id === id)) } });
     }
     if (path === "/api/properties") {
       const catalog = structuredClone(getFixtureResponse(path)) as Array<{ id: string }>;
@@ -247,7 +253,7 @@ for (const stale of [false, true]) {
     await expect(backToResults).toBeVisible();
     await expect(backToResults).toHaveAttribute("href", /journey=revision-2/);
     if (stale) {
-      await expect(page.getByText("This search receipt is no longer available. You can still explore the home.")).toBeVisible();
+      await expect(page.getByText("This evidence changed since your search. Search again to see the latest homes.")).toBeVisible();
       await expect(page.locator("#property-atlas")).toBeVisible();
     } else {
       await expect(page.locator("#property-search-match")).toContainText("Exact receipt value");
@@ -319,7 +325,7 @@ test("Undo restores intent after refresh and an unrelated history entry", async 
     const envelope = openAtlasFromFirstResult(journeyFixture(updated ? "revision-2" : "revision-1",
       updated ? "3 BHK, under ₹2.5Cr" : "3 BHK, under ₹2.4Cr"));
     envelope.active.revision.id += "-resumed";
-    envelope.attempt = { kind: "resume", outcome: "resumed" };
+    envelope.attempt = { operation: "resume", catalogRebased: false, kind: "resume", outcome: "resumed" };
     return route.fulfill({ json: envelope });
   });
   await page.goto("/workspace");
@@ -400,8 +406,8 @@ test("ambiguous edits disclose targets only when needed and submit the signed id
     if (body.target && edits.length === 2) return route.fulfill({ status: 503, json: { error: "temporary failure" } });
     const envelope = journeyFixture(body.target ? "revision-2" : "clarification");
     envelope.active.latestUtterance = "Under 2.5Cr";
-    envelope.attempt = body.target ? { kind: "revision", outcome: "activated" } : {
-      kind: "revision", outcome: "clarificationRequired",
+    envelope.attempt = body.target ? { operation: "refine", catalogRebased: false, kind: "revision", outcome: "activated" } : {
+      operation: "refine", catalogRebased: false, kind: "revision", outcome: "clarificationRequired",
       clarification: { code: "clarificationRequired", message: "Choose the condition." },
     };
     return route.fulfill({ json: envelope });
@@ -429,7 +435,7 @@ test("catalog refresh keeps backend order without client-side rebucketing", asyn
   await page.goto("/?q=3BHK");
   await expect(page.getByRole("button", { name: /Change search. Current search/ })).toBeVisible();
   const updated = openAtlasFromFirstResult(journeyFixture());
-  updated.attempt = { kind: "resume", outcome: "resumed", catalogRebased: true,
+  updated.attempt = { operation: "resume", catalogRebased: true, kind: "resume", outcome: "resumed",
     catalogDelta: { added: [atlasFixtureId], removed: [], retained: [], moved: [] } };
   await page.route("**/api/search/resume", (route) => route.fulfill({ json: updated }));
   await page.reload();
@@ -644,7 +650,7 @@ test("zero exact results carry contextual homes through detail, workspace and co
 });
 
 test("live bundle API and UI agree through two edits, proof and resume", async ({ page, request }, testInfo) => {
-  test.skip(!process.env.SEARCH_LIVE_API, "Set SEARCH_LIVE_API to run against a rebuilt API");
+  expect(process.env.SEARCH_LIVE_API, "Promotion gate requires SEARCH_LIVE_API").toBeTruthy();
   const bank = JSON.parse(readFileSync(new URL("../../../data/validation/search_query_bank.json", import.meta.url), "utf8"));
   const suite = bank.suites.find((suite: { id: string }) => suite.id === "proof_handoff_live");
   const scenario = bank.cases.find((scenario: { group: string }) => scenario.group === "proof_handoff_live");

@@ -8,14 +8,14 @@ use crate::routes::enrichment::ReraInfo;
 
 use super::policy::{CandidateScore, FactAvailability};
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize)]
 pub struct TransparencyComponent {
     pub label: String,
     pub score: f64,
     pub max_score: f64,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize)]
 pub struct TransparencyScore {
     pub overall: f64,
     pub components: Vec<TransparencyComponent>,

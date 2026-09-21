@@ -33,7 +33,7 @@ jobs:
       - name: Search journey contracts
         # Keep the fixed latency budgets meaningful on the shared runner:
         # optimize application code, without rebuilding the heavy dependency graph.
-        run: cargo test --config 'profile.test.package.backend.opt-level=1' --test search_revision_api_contract --test search_conversational_semantics_contract --test search_efficiency_contract
+        run: cargo test --config 'profile.test.package.backend.opt-level=1' --test search_revision_api_contract --test search_conversational_semantics_contract --test search_efficiency_contract --test project_enrichment_vertical_contract --test serving_bundle_contract
 
   frontend-build:
     name: Frontend Build
@@ -63,3 +63,30 @@ jobs:
         with:
           name: search-journey-browser
           path: frontend/test-results/search-journey
+
+  domain-contracts:
+    name: Generated and Materialized Browser Contracts
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.97.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run contracts:check
+      - run: npx playwright install --with-deps chrome
+      - run: npm run test:contract-browser
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: materialized-browser-contracts
+          path: frontend/test-results/contracts

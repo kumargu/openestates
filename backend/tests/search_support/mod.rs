@@ -28,6 +28,7 @@ pub fn inventory_options(properties: &[Property]) -> HashMap<String, InventoryOp
             (
                 property.id.clone(),
                 InventoryOption {
+                    confidence: 1.0,
                     property_id: property.id.clone(),
                     society_id,
                     bhk: Some(property.bhk),

@@ -8,7 +8,7 @@ import { SocietyComparisonMatrix } from "../components/compare/SocietyComparison
 import { PageTitle } from "../components/PageTitle.tsx";
 import { useSearchSpan } from "../components/workspace/SearchSpanContext.ts";
 import { LabelPill } from "../components/ui/LabelPill.tsx";
-import { getProperties, getProperty } from "../lib/api.ts";
+import { getPropertyCardsByIds, getProperty } from "../lib/api.ts";
 import { PUBLIC_BRAND_NAME } from "../lib/brand.ts";
 import {
   hrefWithSearchSpan,
@@ -148,6 +148,7 @@ export function WorkspacePage() {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const searchSpan = useSearchSpan();
+  const snapshotIdentity = searchSpan?.runtimeVersion.snapshotIdentity;
   const mode = workspaceMode(location.pathname);
   const {
     notes,
@@ -176,7 +177,7 @@ export function WorkspacePage() {
 
   useEffect(() => {
     const controller = new AbortController();
-    getProperties({ signal: controller.signal })
+    getPropertyCardsByIds([...propertyIds, ...compareIds, ...parseComparedIds(searchParams.get("ids"))], { signal: controller.signal, snapshotIdentity })
       .then((properties) => {
         setHomes(properties);
         setCatalogStatus("ready");
@@ -186,7 +187,7 @@ export function WorkspacePage() {
         setCatalogStatus("error");
       });
     return () => controller.abort();
-  }, [retryKey]);
+  }, [retryKey, propertyIds, compareIds, searchParams, snapshotIdentity]);
 
   const byId = useMemo(
     () => new Map(homes.map((home) => [home.id, home])),
@@ -255,7 +256,7 @@ export function WorkspacePage() {
 
     const controller = new AbortController();
     Promise.allSettled(
-      selectedHomes.map((home) => getProperty(home.id, { signal: controller.signal })),
+      selectedHomes.map((home) => getProperty(home.id, { signal: controller.signal, snapshotIdentity })),
     )
       .then((results) => {
         if (controller.signal.aborted) return;
@@ -268,7 +269,7 @@ export function WorkspacePage() {
       });
 
     return () => controller.abort();
-  }, [compareKey, mode, retryKey, selectedHomes]);
+  }, [compareKey, mode, retryKey, selectedHomes, snapshotIdentity]);
 
   function removeCompareHomes(propertyIdsToRemove: string[]) {
     const removeSet = new Set(propertyIdsToRemove);

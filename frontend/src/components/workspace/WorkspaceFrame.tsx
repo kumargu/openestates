@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { getProperties } from "../../lib/api.ts";
+import { getPropertyCardsByIds } from "../../lib/api.ts";
 import {
   FOCUS_STORAGE_KEY,
   parseShortlistIds,
@@ -134,7 +134,7 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
     const controller = new AbortController();
     const refresh = searchCatalogVersion !== null
       && loadedCatalogBundleVersion !== searchCatalogVersion;
-    getProperties({ signal: controller.signal, refresh })
+    getPropertyCardsByIds([...shortlistIds, ...queryIds, ...(storedPropertySearchContext?.results.map((result) => result.propertyId) ?? []), ...(propertyId ? [propertyId] : [])], { signal: controller.signal, snapshotIdentity: storedPropertySearchContext?.runtimeVersion.snapshotIdentity })
       .then((nextProperties) => {
         setProperties(nextProperties);
         setLoadedCatalogBundleVersion(searchCatalogVersion);
@@ -145,7 +145,7 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
         if (!refresh) setProperties([]);
       });
     return () => controller.abort();
-  }, [loadedCatalogBundleVersion, searchCatalogVersion, shouldLoadPropertyCatalog]);
+  }, [loadedCatalogBundleVersion, searchCatalogVersion, shouldLoadPropertyCatalog, shortlistIds, queryIds, propertyId, storedPropertySearchContext]);
 
   useEffect(() => {
     function refresh() {

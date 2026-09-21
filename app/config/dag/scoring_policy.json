@@ -6,19 +6,6 @@
     "log_gap": true,
     "never_zero_fill": true
   },
-  "area_tracker": {
-    "min_listing_count": 2,
-    "ready_possession_statuses": ["ready"],
-    "near_metro_max_minutes": 15,
-    "demand": {
-      "search_count_normalizer": 10.0,
-      "search_count_cap": 0.7,
-      "evidence_gap_normalizer": 20.0,
-      "evidence_gap_cap": 0.2,
-      "listing_count_normalizer": 50.0,
-      "listing_count_cap": 0.1
-    }
-  },
   "search_ranking": {
     "min_support_evidence_confidence": 0.6,
     "min_llm_evidence_confidence": 0.75,

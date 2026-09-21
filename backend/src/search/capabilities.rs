@@ -24,16 +24,17 @@ impl SearchCapabilityIndex {
                 .insert(entity.entity_type.trim().to_ascii_lowercase());
         }
         for (_, rows) in facts.rows() {
-            for fact in &rows.facts {
-                index
-                    .fact_keys
-                    .insert(fact.fact_key.trim().to_ascii_lowercase());
-            }
+            let eligible_keys = rows
+                .facts
+                .iter()
+                .filter(|fact| fact.observation.is_some() && fact.validate_observation().is_ok())
+                .map(|fact| fact.fact_key.trim().to_ascii_lowercase())
+                .collect::<HashSet<_>>();
+            index.fact_keys.extend(eligible_keys.iter().cloned());
             for metadata in &rows.search_metadata {
-                if !index
-                    .fact_keys
-                    .contains(&metadata.fact_key.trim().to_ascii_lowercase())
-                {
+                // A different entity's witness cannot admit this metadata. This
+                // must also be independent of the index's row iteration order.
+                if !eligible_keys.contains(&metadata.fact_key.trim().to_ascii_lowercase()) {
                     continue;
                 }
                 for preference in &metadata.answers_preferences {
@@ -59,10 +60,6 @@ impl SearchCapabilityIndex {
     pub fn supports_fact_key(&self, fact_key: &str) -> bool {
         let requested = fact_key.trim().to_ascii_lowercase();
         self.fact_keys.contains(&requested)
-            || self.fact_keys.iter().any(|available| {
-                available.starts_with(&format!("{requested}_"))
-                    || requested.starts_with(&format!("{available}_"))
-            })
     }
 
     pub fn supports_entity_type(&self, entity_type: &str) -> bool {
@@ -96,7 +93,17 @@ mod tests {
                 model: None,
                 skill_id: None,
                 learned_at: Utc::now(),
-                observation: None,
+                observation: Some(
+                    crate::serving::SourceObservation::new(
+                        "Computed",
+                        "noise-observation",
+                        "society:one",
+                        Utc::now(),
+                        None,
+                        vec!["fixture/v1".to_string()],
+                    )
+                    .unwrap(),
+                ),
             }],
             vec![ServingSearchMetadataRecord {
                 entity_id: "society:one".to_string(),

@@ -2486,6 +2486,7 @@ mod tests {
         .unwrap();
         let evidence = EvidenceRef::for_observation(snapshot, &observation);
         let option = InventoryOption {
+            confidence: 1.0,
             property_id: "property:one".to_string(),
             society_id: subject.to_string(),
             bhk: Some(3),
@@ -2630,6 +2631,7 @@ mod tests {
                 (
                     property.id.clone(),
                     InventoryOption {
+                        confidence: 1.0,
                         property_id: property.id.clone(),
                         society_id,
                         bhk: (property.bhk > 0).then_some(property.bhk),

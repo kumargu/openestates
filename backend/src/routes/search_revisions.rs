@@ -18,7 +18,10 @@ use crate::search::journey::{
     SearchJourneyResults, SearchJourneyRevision, SearchRevisionTarget, SelectedPropertyCause,
     SelectedPropertyConsequence, SelectedPropertyOutcome, SEARCH_JOURNEY_CONTRACT_VERSION,
 };
-use crate::search::proof::{resolve_proof_token, ProofResolution, ProofResolutionError};
+use crate::search::proof::{
+    resolve_proof_token, ProofFailureStatus, ProofResolution, ProofResolutionError,
+    ProofResolutionFailure,
+};
 use crate::search::{
     apply_typed_revision, compile_typed_revision, decode_signed_search_context, guard_search_query,
     issue_signed_search_context, reissue_signed_search_context, result_membership_fingerprint,
@@ -1051,8 +1054,7 @@ impl SearchJourneyService {
             ProofResolutionError::InvalidToken => StatusCode::BAD_REQUEST,
             ProofResolutionError::StaleSnapshot
             | ProofResolutionError::WrongProperty
-            | ProofResolutionError::WrongSubject
-            | ProofResolutionError::DestinationMismatch => StatusCode::CONFLICT,
+            | ProofResolutionError::WrongSubject => StatusCode::CONFLICT,
             ProofResolutionError::MissingEvidence => StatusCode::NOT_FOUND,
         };
         self.error(
@@ -1176,7 +1178,24 @@ pub async fn resolve_search_proof(
     };
     match service.resolve_proof(request) {
         Ok(resolution) => Json(resolution).into_response(),
-        Err(error) => error.into_response(),
+        Err(error) => {
+            let resolution_status = match error.body.code.as_str() {
+                "stale_proof_snapshot" => ProofFailureStatus::StaleSnapshot,
+                "proof_evidence_missing" => ProofFailureStatus::MissingEvidence,
+                _ => ProofFailureStatus::InvalidReference,
+            };
+            (
+                error.status,
+                Json(ProofResolutionFailure {
+                    contract_version: 1,
+                    resolution_status,
+                    code: error.body.code,
+                    message: error.body.message,
+                    runtime_version: *error.body.runtime_version,
+                }),
+            )
+                .into_response()
+        }
     }
 }
 
@@ -1536,6 +1555,7 @@ mod tests {
         assert_eq!(plan.semantic_fingerprint, renamed.semantic_fingerprint);
 
         let runtime = SearchRuntimeVersion {
+            snapshot_identity: "test-bundle".to_string(),
             serving_bundle_version: "cache-test-bundle".to_string(),
             scoring_policy_version: 1,
             search_engine_version: "cache-test-engine".to_string(),

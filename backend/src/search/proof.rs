@@ -4,7 +4,6 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::dag_config::ui_surfaces_config;
 use crate::knowledge::FactValue;
 use crate::serving::{DerivedEvidence, EvidenceId, EvidenceRef, ObservationId, SourceObservation};
 use crate::state::SearchRuntimeSnapshot;
@@ -13,19 +12,19 @@ use super::tokens::{decode_signed, encode_signed};
 
 const PROOF_TOKEN_PURPOSE: &str = "search-proof-v1";
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ProofDestination {
-    pub surface_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub layer_id: Option<String>,
-    pub kind: String,
-    pub target_id: String,
+pub struct EvaluatedClaim {
+    pub dimension: String,
+    pub value: f64,
+    pub unit: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ProofTokenIdentity {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    claim: Option<EvaluatedClaim>,
     version: u32,
     snapshot_identity: String,
     semantic_fingerprint: String,
@@ -44,6 +43,7 @@ struct ProofTokenIdentity {
 
 #[derive(Debug, Clone)]
 pub struct ProofIssueRequest<'a> {
+    pub claim: Option<EvaluatedClaim>,
     pub constraint: Option<&'a super::intent::HardConstraint>,
     pub snapshot_identity: &'a str,
     pub semantic_fingerprint: &'a str,
@@ -57,9 +57,12 @@ pub struct ProofIssueRequest<'a> {
     pub evidence_refs: &'a [EvidenceRef],
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProofResolution {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "EvaluatedClaim")]
+    pub claim: Option<EvaluatedClaim>,
     pub contract_version: u32,
     pub snapshot_identity: String,
     pub semantic_fingerprint: String,
@@ -68,27 +71,31 @@ pub struct ProofResolution {
     pub predicate_id: String,
     pub subject_entity_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub target_entity_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub target_label: Option<String>,
     pub fact_key: String,
     pub relation: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "super::intent::HardConstraint")]
     pub constraint: Option<super::intent::HardConstraint>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "FactValue")]
     pub value: Option<FactValue>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub unit: Option<String>,
     pub source_observations: Vec<ResolvedSourceObservation>,
     pub derivation_chain: Vec<DerivedEvidence>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "Value")]
     pub geometry: Option<Value>,
     pub resolution_status: ProofResolutionStatus,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub destination: Option<ProofDestination>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResolvedSourceObservation {
     pub observation_id: ObservationId,
@@ -97,6 +104,7 @@ pub struct ResolvedSourceObservation {
     pub subject_entity_id: String,
     pub observed_at: DateTime<Utc>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub source_url: Option<String>,
     pub asset_lineage: Vec<String>,
 }
@@ -115,48 +123,28 @@ impl From<&SourceObservation> for ResolvedSourceObservation {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ProofResolutionStatus {
     Resolved,
 }
 
-/// Server-owned focus passed from proof resolution to a configured detail
-/// surface. It is serializable in the scene but cannot be client-authored.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ResolvedProofFocus {
-    /// Exact source identities; display text is never a substitute for these.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub observation_ids: Vec<String>,
-    pub surface_id: String,
-    pub layer_id: String,
-    pub fact_key: String,
-    pub destination_kind: String,
-    pub target_id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub entity_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub feature_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub receipt_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub matched_label: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub matched_value: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub distance_m: Option<u32>,
-    #[serde(skip)]
-    pub scene_evidence: Option<ResolvedSceneEvidence>,
+pub struct ProofResolutionFailure {
+    pub contract_version: u32,
+    pub resolution_status: ProofFailureStatus,
+    pub code: String,
+    pub message: String,
+    pub runtime_version: super::SearchRuntimeVersion,
 }
 
-/// Exact derived evidence for a scene overlay. Never reconstructed from a
-/// nearby display row, and never accepted from a client-authored focus.
-#[derive(Debug, Clone, PartialEq)]
-pub struct ResolvedSceneEvidence {
-    pub coordinates: [f64; 2],
-    pub derivation: DerivedEvidence,
-    pub source: ResolvedSourceObservation,
+#[derive(schemars::JsonSchema, Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ProofFailureStatus {
+    StaleSnapshot,
+    MissingEvidence,
+    InvalidReference,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -166,7 +154,6 @@ pub enum ProofResolutionError {
     WrongProperty,
     WrongSubject,
     MissingEvidence,
-    DestinationMismatch,
 }
 
 impl ProofResolutionError {
@@ -177,12 +164,14 @@ impl ProofResolutionError {
             Self::WrongProperty => "proof_property_mismatch",
             Self::WrongSubject => "proof_subject_mismatch",
             Self::MissingEvidence => "proof_evidence_missing",
-            Self::DestinationMismatch => "proof_destination_mismatch",
         }
     }
 }
 
-pub fn issue_proof_token(request: ProofIssueRequest<'_>) -> Result<String, String> {
+pub fn issue_proof_token(
+    snapshot: &SearchRuntimeSnapshot,
+    request: ProofIssueRequest<'_>,
+) -> Result<String, String> {
     if request.evidence_refs.is_empty()
         || request.snapshot_identity.trim().is_empty()
         || request.semantic_fingerprint.trim().is_empty()
@@ -201,6 +190,7 @@ pub fn issue_proof_token(request: ProofIssueRequest<'_>) -> Result<String, Strin
             .map_err(|error| format!("invalid proof evidence identity: {error}"))?;
     }
     let identity = ProofTokenIdentity {
+        claim: request.claim,
         version: 1,
         snapshot_identity: request.snapshot_identity.to_string(),
         semantic_fingerprint: request.semantic_fingerprint.to_string(),
@@ -214,6 +204,8 @@ pub fn issue_proof_token(request: ProofIssueRequest<'_>) -> Result<String, Strin
         evidence_refs: request.evidence_refs.to_vec(),
         constraint: request.constraint.cloned(),
     };
+    resolve_identity(snapshot, identity.clone(), Some(request.property_id))
+        .map_err(|error| format!("proof cannot resolve: {}", error.code()))?;
     encode_signed(
         PROOF_TOKEN_PURPOSE,
         &identity,
@@ -236,6 +228,14 @@ pub fn resolve_proof_token(
             .proof_token_max_bytes,
     )
     .map_err(|_| ProofResolutionError::InvalidToken)?;
+    resolve_identity(snapshot, identity, expected_property_id)
+}
+
+fn resolve_identity(
+    snapshot: &SearchRuntimeSnapshot,
+    identity: ProofTokenIdentity,
+    expected_property_id: Option<&str>,
+) -> Result<ProofResolution, ProofResolutionError> {
     if identity.version != 1
         || identity.snapshot_identity != snapshot.bundle.manifest.proof_snapshot_identity()
     {
@@ -316,8 +316,8 @@ pub fn resolve_proof_token(
             .and_then(|index| snapshot.bundle.entities.get(*index))
             .map(|entity| entity.name.clone())
     });
-    let destination = proof_destination_for_fact_key(&identity.fact_key);
     Ok(ProofResolution {
+        claim: identity.claim,
         contract_version: 1,
         snapshot_identity: identity.snapshot_identity,
         semantic_fingerprint: identity.semantic_fingerprint,
@@ -339,7 +339,6 @@ pub fn resolve_proof_token(
         derivation_chain: derivations,
         geometry,
         resolution_status: ProofResolutionStatus::Resolved,
-        destination,
     })
 }
 
@@ -374,104 +373,6 @@ fn recompute_search_derivation(
         distance.evidence_refs,
     )
     .ok()
-}
-
-pub fn resolved_proof_focus(
-    snapshot: &SearchRuntimeSnapshot,
-    resolution: &ProofResolution,
-) -> Option<ResolvedProofFocus> {
-    let destination = resolution.destination.as_ref()?;
-    let layer_id = destination.layer_id.clone()?;
-    let matched_value = resolution.value.as_ref().map(fact_value_display);
-    let distance_m = match (&resolution.value, resolution.unit.as_deref()) {
-        (Some(FactValue::Numeric(value)), Some("km")) if value.is_finite() && *value >= 0.0 => {
-            Some((value * 1000.0).round() as u32)
-        }
-        (Some(FactValue::Numeric(value)), Some("m")) if value.is_finite() && *value >= 0.0 => {
-            Some(value.round() as u32)
-        }
-        _ => None,
-    };
-    let scene_evidence = distance_m.and_then(|_| {
-        let target = resolution.target_entity_id.as_deref()?;
-        let rows = snapshot.bundle.fact_index.entity(target)?;
-        let source = resolution.source_observations.iter().find(|source| {
-            rows.facts.iter().any(|fact| {
-                fact.observation
-                    .as_ref()
-                    .is_some_and(|observation| observation.observation_id == source.observation_id)
-            })
-        })?;
-        let coordinates = resolution
-            .geometry
-            .as_ref()?
-            .get("coordinates")?
-            .as_array()?;
-        Some(ResolvedSceneEvidence {
-            coordinates: [
-                coordinates.first()?.as_f64()?,
-                coordinates.get(1)?.as_f64()?,
-            ],
-            derivation: resolution.derivation_chain.first()?.clone(),
-            source: source.clone(),
-        })
-    });
-    Some(ResolvedProofFocus {
-        observation_ids: resolution
-            .source_observations
-            .iter()
-            .map(|source| source.observation_id.as_str().to_string())
-            .collect(),
-        scene_evidence,
-        surface_id: destination.surface_id.clone(),
-        layer_id,
-        fact_key: resolution.fact_key.clone(),
-        destination_kind: destination.kind.clone(),
-        target_id: destination.target_id.clone(),
-        entity_id: resolution.target_entity_id.clone(),
-        feature_id: None,
-        receipt_id: None,
-        matched_label: resolution.target_label.clone(),
-        matched_value,
-        distance_m,
-    })
-}
-
-pub fn proof_destination_for_fact_key(fact_key: &str) -> Option<ProofDestination> {
-    let config = ui_surfaces_config().ok()?;
-    for surface in &config.surfaces {
-        let Some(handoff) = surface.proof_handoff.as_ref() else {
-            continue;
-        };
-        if let Some(layer) = surface.scene.as_ref().and_then(|scene| {
-            scene.layers.iter().find(|layer| {
-                layer
-                    .fact_keys
-                    .iter()
-                    .any(|candidate| candidate.eq_ignore_ascii_case(fact_key))
-            })
-        }) {
-            return Some(ProofDestination {
-                surface_id: surface.id.clone(),
-                layer_id: Some(layer.id.clone()),
-                kind: handoff.kind.clone(),
-                target_id: handoff.target_id.clone(),
-            });
-        }
-        if handoff
-            .fact_keys
-            .iter()
-            .any(|candidate| candidate.eq_ignore_ascii_case(fact_key))
-        {
-            return Some(ProofDestination {
-                surface_id: surface.id.clone(),
-                layer_id: None,
-                kind: handoff.kind.clone(),
-                target_id: handoff.target_id.clone(),
-            });
-        }
-    }
-    None
 }
 
 fn subject_belongs_to_property(
@@ -566,14 +467,4 @@ fn proof_geometry(
         "type": "Point",
         "coordinates": [longitude, latitude],
     }))
-}
-
-fn fact_value_display(value: &FactValue) -> String {
-    match value {
-        FactValue::Numeric(value) => value.to_string(),
-        FactValue::Text(value) => value.clone(),
-        FactValue::Bool(value) => value.to_string(),
-        FactValue::Tags(values) => values.join(", "),
-        FactValue::Score { value, .. } => value.to_string(),
-    }
 }

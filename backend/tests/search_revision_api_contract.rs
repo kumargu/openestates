@@ -491,19 +491,23 @@ async fn regression_surface_keeps_exact_resolved_receipt() {
         "review-exact",
         exact.observation.as_ref().unwrap(),
     )];
-    let token = issue_proof_token(ProofIssueRequest {
-        constraint: None,
-        snapshot_identity: "review-exact",
-        semantic_fingerprint: "review",
-        property_id: "fixture-home-3bhk",
-        branch_id: "review-branch",
-        predicate_id: "review-predicate",
-        subject_entity_id: "society:fixture-home",
-        target_entity_id: Some("place:fixture-school-6"),
-        fact_key: "nearby_schools",
-        relation: "supports",
-        evidence_refs: &references,
-    })
+    let token = issue_proof_token(
+        &state.search_runtime.load_full(),
+        ProofIssueRequest {
+            claim: None,
+            constraint: None,
+            snapshot_identity: "review-exact",
+            semantic_fingerprint: "review",
+            property_id: "fixture-home-3bhk",
+            branch_id: "review-branch",
+            predicate_id: "review-predicate",
+            subject_entity_id: "society:fixture-home",
+            target_entity_id: Some("place:fixture-school-6"),
+            fact_key: "nearby_schools",
+            relation: "supports",
+            evidence_refs: &references,
+        },
+    )
     .unwrap();
     let resolved = post_proof(&app, json!({"proofToken":token}), 187).await;
     assert_eq!(resolved.0, StatusCode::OK);
@@ -1076,27 +1080,48 @@ async fn proof_tokens_reject_tampering_stale_snapshots_wrong_properties_and_miss
     )
     .unwrap();
     let fake_reference = EvidenceRef::for_observation("journey-fixture-v1", &fake_observation);
-    let missing_token = issue_proof_token(ProofIssueRequest {
-        constraint: None,
-        snapshot_identity: "journey-fixture-v1",
-        semantic_fingerprint: "sha256:missing-proof",
-        property_id: "fixture-home-3bhk",
-        branch_id: "branch-1",
-        predicate_id: "predicate:missing",
-        subject_entity_id: "society:fixture-home",
-        target_entity_id: None,
-        fact_key: "nearby_schools",
-        relation: "supports",
-        evidence_refs: &[fake_reference],
-    })
-    .unwrap();
-    let missing = post_proof(&app, json!({"proofToken": missing_token.clone()}), 96).await;
+    let refused = issue_proof_token(
+        &state.search_runtime.load_full(),
+        ProofIssueRequest {
+            claim: None,
+            constraint: None,
+            snapshot_identity: "journey-fixture-v1",
+            semantic_fingerprint: "sha256:missing-proof",
+            property_id: "fixture-home-3bhk",
+            branch_id: "branch-1",
+            predicate_id: "predicate:missing",
+            subject_entity_id: "society:fixture-home",
+            target_entity_id: None,
+            fact_key: "nearby_schools",
+            relation: "supports",
+            evidence_refs: &[fake_reference],
+        },
+    );
+    assert!(refused.is_err(), "issuer must reject absent evidence");
+
+    // A damaged snapshot must return a distinct missing-evidence outcome for an
+    // already-issued receipt, rather than reclassifying it as stale or invalid.
+    let intact = state.search_runtime.load_full();
+    let damaged_root = tempfile::tempdir().unwrap();
+    let mut damaged_bundle =
+        test_bundle_with_options(damaged_root.path(), true, "journey-fixture-v1", false, true);
+    damaged_bundle.evidence_index = backend::serving::ServingEvidenceIndex::default();
+    state
+        .search_runtime
+        .store(Arc::new(SearchRuntimeSnapshot::new(
+            Arc::new(damaged_bundle),
+            test_properties(false),
+            Vec::new(),
+            Vec::new(),
+            SearchIndex::build(&test_properties(false)),
+        )));
+    let missing = post_proof(&app, json!({"proofToken": token}), 96).await;
     assert_eq!(missing.0, StatusCode::NOT_FOUND);
-    assert_eq!(missing.1["code"], "proof_evidence_missing");
-    let retired_surface = get_surface(&app, "fixture-home-3bhk", Some(&missing_token), 196).await;
+    assert_eq!(missing.1["resolutionStatus"], "missingEvidence");
+    let retired_surface = get_surface(&app, "fixture-home-3bhk", Some(&token), 196).await;
     assert_eq!(retired_surface.0, StatusCode::OK);
-    assert_eq!(retired_surface.1["proofFocus"], Value::Null);
     assert_eq!(retired_surface.1["proofFocusStatus"], "retired");
+    state.search_runtime.store(intact);
 
     let current = state.search_runtime.load_full();
     let mut remapped_properties = test_properties(false);
@@ -1331,6 +1356,11 @@ fn install_runtime_without_second_home(state: &Arc<AppState>, bundle_version: &s
 
 fn runtime_version(snapshot: &SearchRuntimeSnapshot) -> SearchRuntimeVersion {
     SearchRuntimeVersion {
+        snapshot_identity: snapshot
+            .bundle
+            .manifest
+            .proof_snapshot_identity()
+            .to_string(),
         serving_bundle_version: snapshot.version_key.serving_bundle_version.clone(),
         scoring_policy_version: snapshot.version_key.scoring_policy_version,
         search_engine_version: snapshot.version_key.search_engine_version.clone(),

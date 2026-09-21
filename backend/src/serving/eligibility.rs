@@ -38,6 +38,44 @@ pub(crate) fn classify_and_prune(
     bundle_version: &str,
     config: &ServingEligibilityFile,
 ) -> Result<EligibleServingRecords, serde_json::Error> {
+    let mut excluded_claims = Vec::new();
+    let facts = facts
+        .into_iter()
+        .filter(|fact| {
+            let required = config
+                .observation_required_fact_keys
+                .contains(&fact.fact_key)
+                || config
+                    .observation_required_prefixes
+                    .iter()
+                    .any(|prefix| fact.fact_key.starts_with(prefix));
+            let admitted = !required
+                || fact.observation.as_ref().is_some_and(|observation| {
+                    observation.subject_entity_id == fact.entity_id
+                        && observation.validate().is_ok()
+                });
+            if !admitted {
+                excluded_claims.push(super::types::ExcludedServingClaim {
+                    entity_id: fact.entity_id.clone(),
+                    fact_key: fact.fact_key.clone(),
+                    reason: "missing_eligible_observation".to_string(),
+                });
+            }
+            admitted
+        })
+        .collect::<Vec<_>>();
+    excluded_claims.sort_by(|a, b| (&a.entity_id, &a.fact_key).cmp(&(&b.entity_id, &b.fact_key)));
+    excluded_claims.dedup();
+    let admitted_keys = facts
+        .iter()
+        .map(|fact| (fact.entity_id.as_str(), fact.fact_key.as_str()))
+        .collect::<HashSet<_>>();
+    let search_metadata = search_metadata
+        .into_iter()
+        .filter(|metadata| {
+            admitted_keys.contains(&(metadata.entity_id.as_str(), metadata.fact_key.as_str()))
+        })
+        .collect::<Vec<_>>();
     let mut groups = society_groups(&entities);
     let runtime_id_by_entity_id = groups
         .iter()
@@ -111,7 +149,8 @@ pub(crate) fn classify_and_prune(
         &mut groups,
     );
 
-    let quarantine = quarantine_report(bundle_version, config.version, groups);
+    let mut quarantine = quarantine_report(bundle_version, config.version, groups);
+    quarantine.excluded_claims = excluded_claims;
     let removed_society_ids = quarantine
         .societies
         .iter()
@@ -503,6 +542,7 @@ fn quarantine_report(
         excluded_society_count: societies.len() as u64,
         reason_counts,
         societies,
+        excluded_claims: Vec::new(),
     }
 }
 
@@ -585,6 +625,8 @@ mod tests {
 
     fn policy() -> ServingEligibilityFile {
         ServingEligibilityFile {
+            observation_required_fact_keys: Vec::new(),
+            observation_required_prefixes: Vec::new(),
             version: 1,
             minimum_projected_properties: 1,
             missing_projection_reason_code: "missing_property_projection".to_string(),
@@ -593,11 +635,6 @@ mod tests {
                     reason_code: "missing_property_area".to_string(),
                     predicate: EligibilityValuePredicate::AnyNonEmpty,
                     fields: vec!["area".to_string()],
-                },
-                ProjectedPropertyRequirement {
-                    reason_code: "missing_property_size".to_string(),
-                    predicate: EligibilityValuePredicate::AnyPositive,
-                    fields: vec!["carpet_area_sqft".to_string()],
                 },
                 ProjectedPropertyRequirement {
                     reason_code: "missing_property_builder".to_string(),
@@ -786,11 +823,17 @@ mod tests {
         assert_eq!(quarantined.runtime_society_id, "soc-incomplete");
         assert_eq!(
             quarantined.reason_codes,
-            vec!["missing_property_media".to_string()]
+            vec![
+                "missing_property_builder".to_string(),
+                "missing_property_media".to_string()
+            ]
         );
         assert_eq!(
             quarantined.property_entity_ids,
-            vec!["property:incomplete-2bhk".to_string()]
+            vec![
+                "property:discovered-incomplete".to_string(),
+                "property:incomplete-2bhk".to_string()
+            ]
         );
     }
 

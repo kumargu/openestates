@@ -142,6 +142,11 @@ fn build_search_output(
 
 pub(crate) fn search_runtime_version(snapshot: &SearchRuntimeSnapshot) -> SearchRuntimeVersion {
     SearchRuntimeVersion {
+        snapshot_identity: snapshot
+            .bundle
+            .manifest
+            .proof_snapshot_identity()
+            .to_string(),
         serving_bundle_version: snapshot.version_key.serving_bundle_version.clone(),
         scoring_policy_version: snapshot.version_key.scoring_policy_version,
         search_engine_version: snapshot.version_key.search_engine_version.clone(),
@@ -804,6 +809,7 @@ mod tests {
         let inventory_options = std::collections::HashMap::from([(
             "no-kg-prop".to_string(),
             InventoryOption {
+                confidence: 1.0,
                 property_id: "no-kg-prop".to_string(),
                 society_id: society_entity_id.to_string(),
                 bhk: Some(3),

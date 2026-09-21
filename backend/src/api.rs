@@ -123,6 +123,10 @@ pub fn build_app_router_with_lake(state: Arc<AppState>, lake: LakeStore) -> Rout
     let batch_routes = security.protect_batch_reads(
         Router::new()
             .route(
+                "/api/properties/batch",
+                post(routes::properties::property_summaries),
+            )
+            .route(
                 "/api/properties/surfaces/batch",
                 post(routes::surfaces::get_property_surfaces_batch),
             )

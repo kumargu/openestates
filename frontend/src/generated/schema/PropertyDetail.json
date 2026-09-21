@@ -1,0 +1,3309 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PropertyDetail",
+  "type": "object",
+  "properties": {
+    "area": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/AreaProfile"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "area_intelligence": {
+      "description": "Area intelligence from Reddit and other sources (None if not yet enriched).",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/AreaIntelligence"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "area_price_range_high": {
+      "description": "Highest price_per_sqft among properties in the same area.",
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0
+    },
+    "area_price_range_low": {
+      "description": "Lowest price_per_sqft among properties in the same area.",
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0
+    },
+    "availability": {
+      "$ref": "#/definitions/InventoryAvailability"
+    },
+    "builder_portfolio": {
+      "description": "Other locally tracked projects tied to the same normalized legal promoter name.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/BuilderPortfolio"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "builder_trust": {
+      "description": "Builder delivery track record from knowledge graph",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/BuilderTrust"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "contract_version": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "data_freshness": {
+      "description": "Data freshness — how recently and richly the society data was updated",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/DataFreshness"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "decision_check_summary": {
+      "description": "Grouped project-check read model for the buyer-facing detail page.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/DecisionCheckSummary"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "decision_labels": {
+      "description": "Config-derived labels intended for notes and compare surfaces.",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/DecisionLabel"
+      }
+    },
+    "detail_signals": {
+      "description": "Buyer-facing positive themes from external reviews and resident feedback.",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/DetailSignal"
+      }
+    },
+    "entity_refs": {
+      "description": "Stable graph IDs the UI can dereference to render dynamic KG-backed sections.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/KgEntityRefs"
+        }
+      ]
+    },
+    "evidence": {
+      "description": "Canonical UI read model for dynamic proof-backed cards on the property page.\n\nNew UI should render optional property-page sections from this field\ninstead of hardcoding cards or calling legacy KG endpoints directly.\n`source_panels` below is retained as a compatibility field for the\ncurrent frontend while it migrates.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/PropertyEvidenceResponse"
+        }
+      ]
+    },
+    "external_reviews": {
+      "description": "Current external review evidence projected from the Parquet serving bundle.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ExternalReviews"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "home_state_display": {
+      "description": "Compact buyer-facing state signal for first-scan UI.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "interest_count": {
+      "description": "Number of buyers who have expressed interest.",
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    },
+    "livability_brief": {
+      "description": "Receipt-backed livability diligence brief composed from DAG facts and mined themes.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/LivabilityBrief"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "map_context": {
+      "description": "Schematic neighborhood plate: home pin, nearby POIs, optional water context.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/PropertyMapContext"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "plans": {
+      "description": "Buyer-facing site overview + floor plans (RERA brochure promotions).",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ProjectPlansView"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "project_status": {
+      "description": "Machine-readable project status: \"ready_to_move\", \"under_construction\", etc.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "project_status_display": {
+      "description": "Human-readable project status from skill's display_template",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "property": {
+      "$ref": "#/definitions/Property"
+    },
+    "recommendation_branches": {
+      "description": "Counterfactual branches — why you might consider an alternative instead.",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/RecommendationBranch"
+      }
+    },
+    "recommendations": {
+      "description": "Async recommendation status. The detail page should fetch the branch cards\nfrom `/api/properties/{id}/recommendations` instead of doing this work inline.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/RecommendationEnvelope"
+        }
+      ]
+    },
+    "rera": {
+      "description": "RERA regulatory data from the knowledge graph (None if not yet enriched).",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ReraInfo"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "rera_report_ref": {
+      "description": "Compact link to the dedicated RERA evidence report.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/ReraReportRef"
+        }
+      ]
+    },
+    "root_source": {
+      "description": "Where the society data originally came from: \"rera\", \"seller\", \"discovered\", \"legacy\"",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "similar_properties": {
+      "description": "Similar properties from locally precomputed society embeddings.",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/PropertyCard"
+      }
+    },
+    "snapshot_identity": {
+      "type": "string"
+    },
+    "society": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/Society"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "availability",
+    "contract_version",
+    "snapshot_identity",
+    "property",
+    "entity_refs",
+    "evidence",
+    "society",
+    "area",
+    "similar_properties",
+    "recommendations",
+    "rera_report_ref",
+    "area_price_range_low",
+    "area_price_range_high",
+    "interest_count"
+  ],
+  "definitions": {
+    "AreaIntelligence": {
+      "type": "object",
+      "properties": {
+        "community_vibe": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "commute_reality": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "deal_breakers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "green_cover": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "grocery_shopping": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "healthcare_access": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hidden_gems": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "last_updated": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "noise_level": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "overall_sentiment": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "recurring_complaints": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "safety": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "school_quality": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        },
+        "walkability": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "water_supply": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "safety",
+        "commute_reality",
+        "water_supply",
+        "noise_level",
+        "green_cover",
+        "community_vibe",
+        "walkability",
+        "school_quality",
+        "grocery_shopping",
+        "healthcare_access",
+        "recurring_complaints",
+        "hidden_gems",
+        "deal_breakers",
+        "overall_sentiment",
+        "source_count",
+        "last_updated"
+      ]
+    },
+    "AreaProfile": {
+      "type": "object",
+      "properties": {
+        "airport_noise_summary": {
+          "type": "string"
+        },
+        "city": {
+          "type": "string"
+        },
+        "community_notes": {
+          "type": "string"
+        },
+        "externality_tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "id": {
+          "type": "string"
+        },
+        "infrastructure_tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "last_updated": {
+          "type": "string"
+        },
+        "livability_summary": {
+          "type": "string"
+        },
+        "median_price_per_sqft": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "metro_access_summary": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "price_range_per_sqft": {
+          "$ref": "#/definitions/PriceRange"
+        },
+        "reddit_signals": {
+          "$ref": "#/definitions/RedditSignals"
+        },
+        "sample_size": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "traffic_summary": {
+          "type": "string"
+        },
+        "trend_direction": {
+          "type": "string"
+        },
+        "trend_summary": {
+          "type": "string"
+        },
+        "waterlogging_summary": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "city",
+        "median_price_per_sqft",
+        "price_range_per_sqft",
+        "trend_direction",
+        "trend_summary",
+        "metro_access_summary",
+        "airport_noise_summary",
+        "traffic_summary",
+        "waterlogging_summary",
+        "livability_summary",
+        "externality_tags",
+        "infrastructure_tags",
+        "reddit_signals",
+        "community_notes",
+        "sample_size",
+        "last_updated"
+      ]
+    },
+    "Availability": {
+      "type": "string",
+      "enum": [
+        "available",
+        "unavailable"
+      ]
+    },
+    "BranchLens": {
+      "type": "string",
+      "enum": [
+        "proof",
+        "value",
+        "trust",
+        "commute"
+      ]
+    },
+    "BuilderPortfolio": {
+      "type": "object",
+      "properties": {
+        "builder_name": {
+          "type": "string"
+        },
+        "complaint_projects": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "delayed_projects": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "projects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/BuilderProjectRecord"
+          }
+        },
+        "rera_registered_projects": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "revocations": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "tracked_projects": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "builder_name",
+        "tracked_projects",
+        "rera_registered_projects",
+        "delayed_projects",
+        "complaint_projects",
+        "projects"
+      ]
+    },
+    "BuilderProjectRecord": {
+      "type": "object",
+      "properties": {
+        "area": {
+          "type": "string"
+        },
+        "complaints_count": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "completion_date": {
+          "type": "string"
+        },
+        "current": {
+          "type": "boolean"
+        },
+        "delay_months": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "project_name": {
+          "type": "string"
+        },
+        "project_status_display": {
+          "type": "string"
+        },
+        "property_id": {
+          "type": "string"
+        },
+        "rera_number": {
+          "type": "string"
+        },
+        "rera_portal_url": {
+          "type": "string"
+        },
+        "rera_registered": {
+          "type": "boolean"
+        },
+        "rera_status": {
+          "type": "string"
+        },
+        "start_date": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "property_id",
+        "project_name",
+        "area",
+        "rera_registered",
+        "current"
+      ]
+    },
+    "BuilderTrust": {
+      "type": "object",
+      "properties": {
+        "delivery_display": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "delivery_rate": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "project_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "delivery_rate",
+        "project_count",
+        "delivery_display"
+      ]
+    },
+    "CommunityPulse": {
+      "type": "object",
+      "properties": {
+        "concerns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "paragraph": {
+          "type": "string"
+        },
+        "positives": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "quotes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CommunityPulseQuote"
+          }
+        },
+        "sentiment_band": {
+          "type": "string"
+        },
+        "source_label": {
+          "type": "string"
+        },
+        "source_urls": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "source_label",
+        "sentiment_band",
+        "paragraph",
+        "positives",
+        "concerns",
+        "quotes",
+        "source_urls"
+      ]
+    },
+    "CommunityPulseQuote": {
+      "type": "object",
+      "properties": {
+        "polarity": {
+          "type": "string"
+        },
+        "source_type": {
+          "type": "string"
+        },
+        "source_url": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "source_type",
+        "polarity"
+      ]
+    },
+    "DataFreshness": {
+      "description": "Legacy optional API shape. Search and detail responses do not calculate\nfreshness or age from timestamps.",
+      "type": "object",
+      "properties": {
+        "days_ago": {
+          "description": "How many days ago the node was last updated",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "fact_count": {
+          "description": "Total number of facts on the node",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "freshness_label": {
+          "description": "Human-readable label: \"Fresh\", \"Recent\", \"Stale\", \"Very stale\"",
+          "type": "string"
+        },
+        "last_enriched": {
+          "description": "ISO timestamp of last enrichment",
+          "type": "string"
+        },
+        "source_breakdown": {
+          "description": "Breakdown of facts by source type, e.g. {\"Rera\": 5, \"Reddit\": 3}",
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          }
+        }
+      },
+      "required": [
+        "last_enriched",
+        "days_ago",
+        "freshness_label",
+        "fact_count",
+        "source_breakdown"
+      ]
+    },
+    "DecisionCheckSummary": {
+      "type": "object",
+      "properties": {
+        "groups": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/DecisionLabelGroup"
+          }
+        },
+        "primaryCount": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "primaryLabels": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/DecisionLabel"
+          }
+        },
+        "registrationNumber": {
+          "type": "string"
+        },
+        "registrationNumberCompact": {
+          "type": "string"
+        },
+        "registryUrl": {
+          "type": "string"
+        },
+        "tileCaption": {
+          "type": "string"
+        },
+        "tileLabel": {
+          "type": "string"
+        },
+        "tone": {
+          "type": "string"
+        },
+        "totalCount": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "tileLabel",
+        "tone",
+        "primaryCount",
+        "totalCount"
+      ]
+    },
+    "DecisionLabel": {
+      "type": "object",
+      "properties": {
+        "compareGroup": {
+          "type": "string"
+        },
+        "confidence": {
+          "type": "number",
+          "format": "float"
+        },
+        "groupId": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "notebookLabels": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "placement": {
+          "type": "string"
+        },
+        "priority": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "scope": {
+          "type": "string"
+        },
+        "severity": {
+          "type": "string"
+        },
+        "sourceFactKeys": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "surfaces": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "unit": {
+          "type": "string"
+        },
+        "value": {
+          "type": "number",
+          "format": "double"
+        },
+        "valueText": {
+          "type": "string"
+        },
+        "visualId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "label",
+        "severity",
+        "scope",
+        "visualId",
+        "priority",
+        "confidence",
+        "groupId",
+        "placement"
+      ]
+    },
+    "DecisionLabelGroup": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "labels": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/DecisionLabel"
+          }
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "labels"
+      ]
+    },
+    "DetailSignal": {
+      "type": "object",
+      "properties": {
+        "count": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "icon": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "label",
+        "icon"
+      ]
+    },
+    "EvidenceDelta": {
+      "type": "object",
+      "properties": {
+        "confidence_pct": {
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        },
+        "fact_count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "fact_delta": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "gap_count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "gap_delta": {
+          "type": "integer",
+          "format": "int32"
+        }
+      },
+      "required": [
+        "fact_count",
+        "gap_count",
+        "confidence_pct",
+        "fact_delta",
+        "gap_delta"
+      ]
+    },
+    "EvidenceId": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "observation"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "derivation"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ]
+        }
+      ]
+    },
+    "EvidenceMediaFrame": {
+      "type": "object",
+      "properties": {
+        "capture_date": {
+          "type": "string"
+        },
+        "distance_from_gate_m": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "fov": {
+          "type": "number",
+          "format": "double"
+        },
+        "heading": {
+          "type": "number",
+          "format": "double"
+        },
+        "image_url": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "pitch": {
+          "type": "number",
+          "format": "double"
+        },
+        "source_url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "label",
+        "distance_from_gate_m",
+        "image_url",
+        "heading",
+        "pitch",
+        "fov",
+        "capture_date",
+        "source_url"
+      ]
+    },
+    "EvidenceMediaStrip": {
+      "type": "object",
+      "properties": {
+        "caption": {
+          "type": "string"
+        },
+        "capture_date_label": {
+          "type": "string"
+        },
+        "coverage_quality": {
+          "type": "string"
+        },
+        "frames": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/EvidenceMediaFrame"
+          }
+        },
+        "kind": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "provider",
+        "title",
+        "caption",
+        "capture_date_label",
+        "coverage_quality",
+        "frames"
+      ]
+    },
+    "EvidencePresentation": {
+      "type": "object",
+      "properties": {
+        "density": {
+          "type": "string"
+        },
+        "max_preview_items": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "variant": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "variant",
+        "density",
+        "max_preview_items"
+      ]
+    },
+    "EvidenceRef": {
+      "type": "object",
+      "properties": {
+        "evidence_id": {
+          "$ref": "#/definitions/EvidenceId"
+        },
+        "snapshot_identity": {
+          "type": "string"
+        },
+        "subject_entity_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "snapshot_identity",
+        "subject_entity_id",
+        "evidence_id"
+      ]
+    },
+    "EvidenceSection": {
+      "type": "object",
+      "properties": {
+        "community_pulse": {
+          "$ref": "#/definitions/CommunityPulse"
+        },
+        "confidence_pct": {
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        },
+        "constellation": {
+          "type": "string"
+        },
+        "entity_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "header_meta": {
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SourceItem"
+          }
+        },
+        "kind": {
+          "type": "string"
+        },
+        "media": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/EvidenceMediaStrip"
+          }
+        },
+        "missing": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "presentation": {
+          "$ref": "#/definitions/EvidencePresentation"
+        },
+        "priority": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "relationship": {
+          "type": "string"
+        },
+        "scope": {
+          "type": "string"
+        },
+        "source_types": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "subtitle": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "title",
+        "summary",
+        "subtitle",
+        "scope",
+        "priority",
+        "constellation",
+        "header_meta",
+        "confidence_pct",
+        "source_types",
+        "entity_ids",
+        "presentation",
+        "items",
+        "missing"
+      ]
+    },
+    "ExternalReviewCard": {
+      "type": "object",
+      "properties": {
+        "author": {
+          "type": "string"
+        },
+        "date_label": {
+          "type": "string"
+        },
+        "helpful_count": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "id": {
+          "type": "string"
+        },
+        "rating": {
+          "type": "number",
+          "format": "double"
+        },
+        "source": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "tone": {
+          "$ref": "#/definitions/ReviewTone"
+        }
+      },
+      "required": [
+        "id",
+        "source",
+        "text",
+        "tone"
+      ]
+    },
+    "ExternalReviews": {
+      "type": "object",
+      "properties": {
+        "google_rating": {
+          "type": "number",
+          "format": "double"
+        },
+        "google_review_count": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "google_reviews_url": {
+          "type": "string"
+        },
+        "reviews": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ExternalReviewCard"
+          }
+        }
+      }
+    },
+    "FiledPlanPreview": {
+      "type": "object",
+      "properties": {
+        "artifact_id": {
+          "type": "string"
+        },
+        "confidence": {
+          "type": "number",
+          "format": "double"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "page": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "preview_url": {
+          "type": "string"
+        },
+        "source_url": {
+          "type": "string"
+        },
+        "thumbnail_url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifact_id",
+        "kind",
+        "label",
+        "preview_url",
+        "confidence"
+      ]
+    },
+    "FloorPlanVariant": {
+      "type": "object",
+      "properties": {
+        "artifact_id": {
+          "type": "string"
+        },
+        "bedroom_count": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "carpet_area_sqft": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "carpet_area_sqm": {
+          "type": "number",
+          "format": "double"
+        },
+        "confidence": {
+          "type": "number",
+          "format": "double"
+        },
+        "configuration_type": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "page": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "preview_url": {
+          "type": "string"
+        },
+        "sale_area_sqft": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "sale_area_sqm": {
+          "type": "number",
+          "format": "double"
+        },
+        "source_url": {
+          "type": "string"
+        },
+        "tab_label": {
+          "type": "string"
+        },
+        "thumbnail_url": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "unit_type_label": {
+          "type": "string"
+        },
+        "usable_area_ratio": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "id",
+        "artifact_id",
+        "configuration_type",
+        "bedroom_count",
+        "tab_label",
+        "title",
+        "preview_url",
+        "confidence"
+      ]
+    },
+    "InventoryAvailability": {
+      "type": "object",
+      "properties": {
+        "area": {
+          "$ref": "#/definitions/Availability"
+        },
+        "bedrooms": {
+          "$ref": "#/definitions/Availability"
+        },
+        "price": {
+          "$ref": "#/definitions/Availability"
+        }
+      },
+      "required": [
+        "bedrooms",
+        "price",
+        "area"
+      ]
+    },
+    "KgEntityRefs": {
+      "description": "Minimal entity identity bundle attached to property/search/detail responses.\n\nThese fields are stable API identifiers, not display copy and not a complete\nserving export. They exist so the UI can ask follow-up endpoints for richer\ncontext when a user shows intent: opens a property, expands a card, compares\nhomes, clicks a source trail, or requests a nearby/risk/community breakdown.\n\nCurrent usage pattern:\n1. Render fast listing data from `PropertyCard` or `PropertyDetailResponse`.\n2. Use `source_entity_ids` as opaque provenance handles for the property,\n   society, area, and builder.\n3. Use source/evidence read models when the UI needs a larger drill-down\n   such as builder portfolio, nearby projects, or lineage.\n4. Build optional UI sections from facts with source/confidence metadata.\n5. Hide sections that have no backed facts instead of rendering empty cards.\n\nImportant distinction: these are KG node IDs, not necessarily canonical RERA\nIDs. Some societies have an alias node such as `society:prestige-park-grove`\nwhile lake artifacts may also contain a RERA-rooted canonical ID. The UI\nshould not infer canonicalization from the string shape. It should treat the\nIDs as opaque handles and follow the API.",
+      "type": "object",
+      "properties": {
+        "area_entity_id": {
+          "description": "Area/locality node for traffic, waterlogging, metro, schools, price trend,\nand other externalities.",
+          "type": "string"
+        },
+        "builder_entity_id": {
+          "description": "Builder node when the society has a known BuiltBy edge in the KG.",
+          "type": "string"
+        },
+        "property_entity_id": {
+          "description": "Listing-level node for facts specific to this flat/unit/listing.",
+          "type": "string"
+        },
+        "society_entity_id": {
+          "description": "Society/project node for RERA, reviews, nearby places, amenities, and\ncommunity evidence.",
+          "type": "string"
+        },
+        "source_entity_ids": {
+          "description": "Existing graph nodes the UI can safely prefetch first.\n\nThis list is backend-filtered to nodes present in the current KG, sorted,\nand deduplicated. It may omit an otherwise valid field ID if that node has\nnot been materialized yet. UI code should treat it as a convenient fetch\nplan, not as a complete semantic model.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "property_entity_id",
+        "society_entity_id",
+        "area_entity_id"
+      ]
+    },
+    "LivabilityBrief": {
+      "type": "object",
+      "properties": {
+        "blocks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/LivabilityBriefBlock"
+          }
+        },
+        "lifecycle_flag": {
+          "type": "string"
+        },
+        "source_urls": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "summary_paragraph": {
+          "type": "string"
+        }
+      }
+    },
+    "LivabilityBriefBlock": {
+      "type": "object",
+      "properties": {
+        "fact_keys": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "lens": {
+          "type": "string"
+        },
+        "paragraph": {
+          "type": "string"
+        },
+        "themes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "lens",
+        "title",
+        "paragraph",
+        "themes"
+      ]
+    },
+    "MapHomeAnchor": {
+      "type": "object",
+      "properties": {
+        "area": {
+          "type": "string"
+        },
+        "boundary": {
+          "$ref": "#/definitions/MapOverlayPolygon"
+        },
+        "entity_id": {
+          "type": "string"
+        },
+        "latitude": {
+          "type": "number",
+          "format": "double"
+        },
+        "longitude": {
+          "type": "number",
+          "format": "double"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "entity_id",
+        "name"
+      ]
+    },
+    "MapOverlayLine": {
+      "type": "object",
+      "properties": {
+        "coordinates": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            },
+            "maxItems": 2,
+            "minItems": 2
+          }
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "distance_km": {
+          "type": "number",
+          "format": "double"
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "source_type": {
+          "type": "string"
+        },
+        "source_url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "kind",
+        "coordinates",
+        "source_type"
+      ]
+    },
+    "MapOverlayPolygon": {
+      "type": "object",
+      "properties": {
+        "coordinates": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            },
+            "maxItems": 2,
+            "minItems": 2
+          }
+        },
+        "distance_km": {
+          "type": "number",
+          "format": "double"
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "source_type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "kind",
+        "coordinates",
+        "source_type"
+      ]
+    },
+    "MapPlacePin": {
+      "type": "object",
+      "properties": {
+        "distance_km": {
+          "type": "number",
+          "format": "double"
+        },
+        "latitude": {
+          "type": "number",
+          "format": "double"
+        },
+        "layer": {
+          "type": "string"
+        },
+        "lines": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "longitude": {
+          "type": "number",
+          "format": "double"
+        },
+        "name": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        },
+        "place_entity_id": {
+          "type": "string"
+        },
+        "rating": {
+          "type": "number",
+          "format": "double"
+        },
+        "review_count": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "source_type": {
+          "type": "string"
+        },
+        "source_url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "layer",
+        "name",
+        "lines",
+        "source_type"
+      ]
+    },
+    "MapWaterContext": {
+      "type": "object",
+      "properties": {
+        "groundwater_class": {
+          "type": "string"
+        },
+        "illustrative_zone": {
+          "description": "Soft zone fill is UI geometry; class/summary are source-backed.",
+          "type": "boolean"
+        },
+        "scope_radius_km": {
+          "type": "number",
+          "format": "double"
+        },
+        "source_type": {
+          "type": "string"
+        },
+        "source_url": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "groundwater_class",
+        "summary",
+        "scope_radius_km",
+        "source_type",
+        "illustrative_zone"
+      ]
+    },
+    "Measurement": {
+      "description": "A measurement is never a display number: its basis, scope and receipt travel together.",
+      "type": "object",
+      "properties": {
+        "basis": {
+          "type": "string"
+        },
+        "entityId": {
+          "type": "string"
+        },
+        "evidence": {
+          "$ref": "#/definitions/EvidenceRef"
+        },
+        "maximum": {
+          "type": "number",
+          "format": "double"
+        },
+        "minimum": {
+          "type": "number",
+          "format": "double"
+        },
+        "unit": {
+          "type": "string"
+        },
+        "value": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "value",
+        "unit",
+        "basis",
+        "entityId",
+        "evidence"
+      ]
+    },
+    "PriceRange": {
+      "type": "object",
+      "properties": {
+        "high": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "low": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "low",
+        "high"
+      ]
+    },
+    "ProjectPlansView": {
+      "type": "object",
+      "properties": {
+        "coverage_quality": {
+          "type": "string"
+        },
+        "filed_plan_previews": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/FiledPlanPreview"
+          }
+        },
+        "floor_plans": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/FloorPlanVariant"
+          }
+        },
+        "provider": {
+          "type": "string"
+        },
+        "registration_number": {
+          "type": "string"
+        },
+        "site_overview": {
+          "$ref": "#/definitions/SiteOverviewPlan"
+        },
+        "source_url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "coverage_quality"
+      ]
+    },
+    "Property": {
+      "type": "object",
+      "properties": {
+        "airport_noise_score": {
+          "type": "number",
+          "format": "double"
+        },
+        "area": {
+          "type": "string"
+        },
+        "area_id": {
+          "type": "string"
+        },
+        "area_measurement": {
+          "$ref": "#/definitions/Measurement"
+        },
+        "bhk": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "builder_name": {
+          "type": "string"
+        },
+        "builder_quality_score": {
+          "type": "number",
+          "format": "double"
+        },
+        "carpet_area_sqft": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "city": {
+          "type": "string"
+        },
+        "days_on_market": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "description_summary": {
+          "type": "string"
+        },
+        "document_completeness_score": {
+          "type": "number",
+          "format": "double"
+        },
+        "facing": {
+          "type": "string"
+        },
+        "floor": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "greenery_score": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double",
+          "default": null
+        },
+        "hero_image": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "images": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "interest_level": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "listing_type": {
+          "type": "string"
+        },
+        "litigation_risk": {
+          "type": "number",
+          "format": "double"
+        },
+        "maintenance_cost_monthly": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "metro_distance_mins": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "noise_score": {
+          "type": "number",
+          "format": "double"
+        },
+        "offers_last_7d": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "default": null,
+          "minimum": 0
+        },
+        "open_space_score": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double",
+          "default": null
+        },
+        "possession_status": {
+          "type": "string"
+        },
+        "price": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "price_max": {
+          "description": "Inclusive listing band when the source is a range, not a point asking price.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "price_min": {
+          "description": "Inclusive listing band when the source is a range, not a point asking price.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "price_per_sqft": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "property_type": {
+          "type": "string"
+        },
+        "resale_strength_score": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double",
+          "default": null
+        },
+        "saves_last_7d": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "default": null,
+          "minimum": 0
+        },
+        "society_id": {
+          "type": "string"
+        },
+        "society_quality_score": {
+          "type": "number",
+          "format": "double"
+        },
+        "source_reference": {
+          "type": "string"
+        },
+        "sunlight_score": {
+          "type": "number",
+          "format": "double"
+        },
+        "super_builtup_sqft": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "title": {
+          "type": "string"
+        },
+        "total_floors": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "traffic_score": {
+          "type": "number",
+          "format": "double"
+        },
+        "transparency_tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "waterlogging_risk_score": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "area",
+        "area_id",
+        "city",
+        "society_id",
+        "builder_name",
+        "property_type",
+        "listing_type",
+        "floor",
+        "total_floors",
+        "facing",
+        "possession_status",
+        "metro_distance_mins",
+        "maintenance_cost_monthly",
+        "days_on_market",
+        "greenery_score",
+        "open_space_score",
+        "resale_strength_score",
+        "interest_level",
+        "saves_last_7d",
+        "offers_last_7d",
+        "images",
+        "hero_image",
+        "description_summary",
+        "transparency_tags",
+        "source_reference"
+      ]
+    },
+    "PropertyCard": {
+      "description": "UI-ready property card for the results page.",
+      "type": "object",
+      "properties": {
+        "area": {
+          "type": "string"
+        },
+        "area_measurement": {
+          "$ref": "#/definitions/Measurement"
+        },
+        "availability": {
+          "$ref": "#/definitions/InventoryAvailability"
+        },
+        "bhk": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "builder_delivery_display": {
+          "description": "Human-readable builder delivery track record, e.g. \"Builder delivers on time: 100% of projects\"",
+          "type": "string"
+        },
+        "builder_name": {
+          "type": "string"
+        },
+        "carpet_area_sqft": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "data_freshness": {
+          "description": "Data freshness — how recent and rich the underlying data is",
+          "allOf": [
+            {
+              "$ref": "#/definitions/DataFreshness"
+            }
+          ]
+        },
+        "decision_check_summary": {
+          "description": "Grouped compact check summary for property details, compare, and notes.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/DecisionCheckSummary"
+            }
+          ]
+        },
+        "decision_labels": {
+          "description": "Config-derived decision labels for compare, notes, and compact review surfaces.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/DecisionLabel"
+          }
+        },
+        "description_summary": {
+          "type": "string"
+        },
+        "facing": {
+          "type": "string"
+        },
+        "floor": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "floor_plan_preview_url": {
+          "description": "Representative floor-plan preview for this listing's BHK (compare-ready).",
+          "type": "string"
+        },
+        "google_rating": {
+          "type": "number",
+          "format": "double"
+        },
+        "google_review_count": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "google_reviews_url": {
+          "type": "string"
+        },
+        "hero_image": {
+          "type": "string"
+        },
+        "home_state_display": {
+          "description": "Compact buyer-facing state signal for result tiles, e.g. \"Delivered · 5-10 yrs old\".",
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "images": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "kg_entity_refs": {
+          "description": "Stable entity handles attached to the serving bundle.\n\nThis is the contract that keeps cards and detail pages from becoming a\nfixed list of hardcoded sections. The flat fields in `PropertyCard`\nsupport fast first paint and search-result scanning. `kg_entity_refs`\nsupports the second layer: expandable evidence, compare rows, side\npanels, source drill-down, and dynamic sections that only appear when\nfacts actually exist.\n\nBackend rules:\n- Populate these IDs from app-owned entity identity, never from UI labels.\n- Add new fact families to serving/source panels instead of adding\n  one-off card fields unless the value is needed on the hot first-paint path.\n- It is okay for some referenced concepts to have sparse facts. The UI\n  should render from fact availability and confidence.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/KgEntityRefs"
+            }
+          ]
+        },
+        "metro_distance_mins": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "open_space_pct": {
+          "description": "RERA-backed open-area percentage. Omitted when the source did not expose it clearly.",
+          "type": "number",
+          "format": "double"
+        },
+        "plan_carpet_area_sqft": {
+          "description": "Plan carpet area (sqft) for the matched configuration.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "plan_configuration_type": {
+          "description": "Matched configuration label, e.g. \"3BHK\".",
+          "type": "string"
+        },
+        "plan_sale_area_sqft": {
+          "description": "Plan sale / super built-up area (sqft) for usable-space compare.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "possession_status": {
+          "type": "string"
+        },
+        "price": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "price_max": {
+          "description": "Inclusive listing band when the source is a range, not a point asking price.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "price_min": {
+          "description": "Inclusive listing band when the source is a range, not a point asking price.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "price_per_sqft": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "project_status": {
+          "description": "Machine-readable project status: \"ready_to_move\", \"under_construction\", etc.",
+          "type": "string"
+        },
+        "project_status_display": {
+          "description": "Human-readable project status from skill's display_template, e.g. \"Ready to Move — delivered 31/01/2020\"",
+          "type": "string"
+        },
+        "root_source": {
+          "description": "Where the society data originally came from: \"rera\", \"seller\", \"discovered\", \"legacy\"",
+          "type": "string"
+        },
+        "society_land_acres": {
+          "description": "RERA-backed project land extent. Kept on the card because compare needs it at first paint.",
+          "type": "number",
+          "format": "double"
+        },
+        "society_name": {
+          "type": "string"
+        },
+        "sqft": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "super_builtup_sqft": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "title": {
+          "type": "string"
+        },
+        "total_floors": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "transparency_tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "availability",
+        "id",
+        "kg_entity_refs",
+        "title",
+        "area",
+        "society_name",
+        "builder_name",
+        "hero_image",
+        "transparency_tags",
+        "description_summary",
+        "possession_status",
+        "metro_distance_mins",
+        "floor",
+        "total_floors",
+        "facing"
+      ]
+    },
+    "PropertyEvidenceResponse": {
+      "type": "object",
+      "properties": {
+        "entity_refs": {
+          "$ref": "#/definitions/KgEntityRefs"
+        },
+        "property_id": {
+          "type": "string"
+        },
+        "sections": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/EvidenceSection"
+          }
+        },
+        "serving_bundle_version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "property_id",
+        "entity_refs",
+        "sections"
+      ]
+    },
+    "PropertyMapContext": {
+      "type": "object",
+      "properties": {
+        "access_lines": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/definitions/MapOverlayLine"
+          }
+        },
+        "green_patches": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/definitions/MapOverlayPolygon"
+          }
+        },
+        "home": {
+          "$ref": "#/definitions/MapHomeAnchor"
+        },
+        "lakes": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/definitions/MapOverlayPolygon"
+          }
+        },
+        "metro_lines": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/definitions/MapOverlayLine"
+          }
+        },
+        "places": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/definitions/MapPlacePin"
+          }
+        },
+        "red_flag_lines": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/definitions/MapOverlayLine"
+          }
+        },
+        "water": {
+          "$ref": "#/definitions/MapWaterContext"
+        }
+      },
+      "required": [
+        "home",
+        "places",
+        "metro_lines",
+        "access_lines",
+        "red_flag_lines",
+        "green_patches",
+        "lakes"
+      ]
+    },
+    "RecallChannelHit": {
+      "type": "object",
+      "properties": {
+        "channel": {
+          "type": "string"
+        },
+        "score": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "channel",
+        "score"
+      ]
+    },
+    "RecommendationBranch": {
+      "type": "object",
+      "properties": {
+        "branch_id": {
+          "type": "string"
+        },
+        "channels": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RecallChannelHit"
+          }
+        },
+        "contrast": {
+          "type": "string"
+        },
+        "evidence_delta": {
+          "$ref": "#/definitions/EvidenceDelta"
+        },
+        "headline": {
+          "type": "string"
+        },
+        "lens": {
+          "$ref": "#/definitions/BranchLens"
+        },
+        "magnitude": {
+          "description": "Normalized 0..1 strength of this branch on its lens — how far it departs\nfrom the current property. Drives spatial distance in the decision compass.",
+          "type": "number",
+          "format": "float"
+        },
+        "property": {
+          "$ref": "#/definitions/PropertyCard"
+        },
+        "tradeoff": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "branch_id",
+        "lens",
+        "headline",
+        "property",
+        "contrast",
+        "evidence_delta",
+        "magnitude"
+      ]
+    },
+    "RecommendationEnvelope": {
+      "type": "object",
+      "properties": {
+        "cache_key": {
+          "type": "string"
+        },
+        "engine_version": {
+          "type": "string"
+        },
+        "scoring_policy_version": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "serving_bundle_version": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/definitions/RecommendationStatus"
+        }
+      },
+      "required": [
+        "status",
+        "cache_key",
+        "engine_version",
+        "scoring_policy_version"
+      ]
+    },
+    "RecommendationStatus": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "ready",
+        "unavailable"
+      ]
+    },
+    "RedditSignals": {
+      "type": "object",
+      "properties": {
+        "decision_drivers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "last_updated": {
+          "type": "string"
+        },
+        "recurring_concerns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sentiment_label": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "decision_drivers",
+        "recurring_concerns",
+        "sentiment_label",
+        "last_updated"
+      ]
+    },
+    "ReraComplaintScopeSummary": {
+      "type": "object",
+      "properties": {
+        "confidence": {
+          "type": "number",
+          "format": "double",
+          "default": 0.0
+        },
+        "disposed_count": {
+          "type": "integer",
+          "format": "int32",
+          "default": 0
+        },
+        "open_count": {
+          "type": "integer",
+          "format": "int32",
+          "default": 0
+        },
+        "row_count_parsed": {
+          "type": "integer",
+          "format": "int32",
+          "default": 0
+        },
+        "sample_subjects": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
+        "scope": {
+          "type": "string",
+          "default": ""
+        },
+        "theme_counts": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "default": {}
+        },
+        "total_count_from_tab_label": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "validation_notes": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "scope",
+        "total_count_from_tab_label",
+        "row_count_parsed",
+        "disposed_count",
+        "open_count",
+        "theme_counts",
+        "sample_subjects",
+        "confidence",
+        "validation_notes"
+      ]
+    },
+    "ReraDecisionAction": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "label"
+      ]
+    },
+    "ReraDecisionCard": {
+      "type": "object",
+      "properties": {
+        "actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ReraDecisionAction"
+          }
+        },
+        "confidence": {
+          "type": "number",
+          "format": "double"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "facts": true,
+        "id": {
+          "type": "string"
+        },
+        "labels": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "source": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "tone": {
+          "type": "string"
+        },
+        "validation_notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "detail",
+        "tone",
+        "source",
+        "labels",
+        "facts",
+        "actions",
+        "confidence",
+        "validation_notes"
+      ]
+    },
+    "ReraDocumentGroupSummary": {
+      "type": "object",
+      "properties": {
+        "count": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "group": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "group",
+        "count"
+      ]
+    },
+    "ReraDocumentManifestItem": {
+      "type": "object",
+      "properties": {
+        "artifact_id": {
+          "type": "string",
+          "default": ""
+        },
+        "bedroom_count": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double",
+          "default": null
+        },
+        "buyer_visibility": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "confidence": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double",
+          "default": null
+        },
+        "configuration_type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "document_group": {
+          "type": "string",
+          "default": ""
+        },
+        "kind": {
+          "type": "string",
+          "default": ""
+        },
+        "label": {
+          "type": "string",
+          "default": ""
+        },
+        "preview_policy": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "source_field_label": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "source_tab": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "source_url": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "artifact_id",
+        "kind",
+        "label",
+        "source_url",
+        "source_tab",
+        "source_field_label",
+        "document_group",
+        "buyer_visibility",
+        "preview_policy",
+        "configuration_type",
+        "bedroom_count",
+        "confidence"
+      ]
+    },
+    "ReraEvidenceAvailability": {
+      "type": "string",
+      "enum": [
+        "available",
+        "partial",
+        "unavailable"
+      ]
+    },
+    "ReraInfo": {
+      "type": "object",
+      "properties": {
+        "affidavit_only_visible": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "builder_revocations": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        },
+        "builder_states": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "builder_total_projects": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        },
+        "complaint_summaries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ReraComplaintScopeSummary"
+          }
+        },
+        "complaints_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        },
+        "complaints_resolved_pct": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "completion_date": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "construction_cost_inr": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "cost_per_unit_inr": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "decision_cards": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ReraDecisionCard"
+          }
+        },
+        "delay_months": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        },
+        "document_groups": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ReraDocumentGroupSummary"
+          }
+        },
+        "document_manifest": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ReraDocumentManifestItem"
+          }
+        },
+        "escrow_bank": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "has_borrowing": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "has_mortgage": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "land_cost_inr": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "land_litigation": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "last_verified": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "open_area_pct": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "original_completion_date": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "project_complaints_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        },
+        "project_complaints_disposed_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        },
+        "project_complaints_open_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        },
+        "promoter_complaints_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        },
+        "promoter_complaints_disposed_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        },
+        "promoter_complaints_open_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        },
+        "registered": {
+          "type": "boolean"
+        },
+        "registration_number": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rera_portal_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "schedule_sections": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ReraScheduleSection"
+          }
+        },
+        "start_date": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "total_land_area_acres": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "total_land_area_sqm": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "total_project_cost_inr": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "total_units": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        }
+      },
+      "required": [
+        "registered",
+        "registration_number",
+        "status",
+        "start_date",
+        "completion_date",
+        "original_completion_date",
+        "delay_months",
+        "total_units",
+        "total_land_area_sqm",
+        "total_land_area_acres",
+        "open_area_pct",
+        "total_project_cost_inr",
+        "land_cost_inr",
+        "construction_cost_inr",
+        "cost_per_unit_inr",
+        "complaints_count",
+        "complaints_resolved_pct",
+        "project_complaints_count",
+        "project_complaints_open_count",
+        "project_complaints_disposed_count",
+        "promoter_complaints_count",
+        "promoter_complaints_open_count",
+        "promoter_complaints_disposed_count",
+        "complaint_summaries",
+        "document_manifest",
+        "document_groups",
+        "schedule_sections",
+        "affidavit_only_visible",
+        "builder_total_projects",
+        "builder_revocations",
+        "builder_states",
+        "land_litigation",
+        "escrow_bank",
+        "has_borrowing",
+        "has_mortgage",
+        "rera_portal_url",
+        "last_verified",
+        "decision_cards"
+      ]
+    },
+    "ReraReportRef": {
+      "type": "object",
+      "properties": {
+        "availability": {
+          "$ref": "#/definitions/ReraEvidenceAvailability"
+        },
+        "href": {
+          "type": "string"
+        },
+        "registration_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "registration_ids",
+        "href",
+        "availability"
+      ]
+    },
+    "ReraScheduleRow": {
+      "type": "object",
+      "properties": {
+        "area_sqm": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double",
+          "default": null
+        },
+        "available": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "confidence": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double",
+          "default": null
+        },
+        "label": {
+          "type": "string",
+          "default": ""
+        },
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "label",
+        "available",
+        "area_sqm",
+        "value",
+        "confidence"
+      ]
+    },
+    "ReraScheduleSection": {
+      "type": "object",
+      "properties": {
+        "group": {
+          "type": "string",
+          "default": ""
+        },
+        "label": {
+          "type": "string",
+          "default": ""
+        },
+        "rows": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/definitions/ReraScheduleRow"
+          }
+        }
+      },
+      "required": [
+        "group",
+        "label",
+        "rows"
+      ]
+    },
+    "ReviewTone": {
+      "type": "string",
+      "enum": [
+        "positive",
+        "concern",
+        "neutral"
+      ]
+    },
+    "SiteOverviewPlan": {
+      "type": "object",
+      "properties": {
+        "artifact_id": {
+          "type": "string"
+        },
+        "confidence": {
+          "type": "number",
+          "format": "double"
+        },
+        "label": {
+          "type": "string"
+        },
+        "page": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "preview_url": {
+          "type": "string"
+        },
+        "source_url": {
+          "type": "string"
+        },
+        "thumbnail_url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifact_id",
+        "label",
+        "preview_url",
+        "confidence"
+      ]
+    },
+    "Society": {
+      "type": "object",
+      "properties": {
+        "area": {
+          "type": "string"
+        },
+        "builder_name": {
+          "type": "string"
+        },
+        "city": {
+          "type": "string"
+        },
+        "common_complaints": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "common_positives": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "future_google_place_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "future_google_place_name": {
+          "type": "string"
+        },
+        "future_review_enrichment_status": {
+          "type": "string"
+        },
+        "google_reviews_url": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "livability_sentiment": {
+          "type": "string"
+        },
+        "maintenance_sentiment": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "review_summary": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "total_units": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "year_built": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "area",
+        "city",
+        "builder_name",
+        "year_built",
+        "total_units",
+        "summary",
+        "maintenance_sentiment",
+        "livability_sentiment",
+        "common_positives",
+        "common_complaints",
+        "review_summary",
+        "future_google_place_name",
+        "future_google_place_id",
+        "future_review_enrichment_status"
+      ]
+    },
+    "SourceAttribution": {
+      "type": "object",
+      "properties": {
+        "learned_at": {
+          "type": "string"
+        },
+        "source_type": {
+          "type": "string"
+        },
+        "source_url": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "value",
+        "source_type",
+        "learned_at"
+      ]
+    },
+    "SourceItem": {
+      "type": "object",
+      "properties": {
+        "attributions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SourceAttribution"
+          }
+        },
+        "entity_id": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "learned_at": {
+          "type": "string"
+        },
+        "relationship": {
+          "type": "string"
+        },
+        "scope": {
+          "type": "string"
+        },
+        "source_type": {
+          "type": "string"
+        },
+        "source_url": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "entity_id",
+        "key",
+        "label",
+        "value",
+        "scope",
+        "source_type",
+        "learned_at"
+      ]
+    }
+  }
+}
