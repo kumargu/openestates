@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, OnceLock};
@@ -13,7 +13,6 @@ use crate::dag_config::{
 };
 use crate::discovery::load_discovery_config;
 use crate::knowledge::fact::FactValue;
-use crate::knowledge::graph::KnowledgeGraph;
 use crate::models::area_profile::{PriceRange, RedditSignals};
 use crate::models::{AreaProfile, Property, Society};
 use crate::search::SearchIndex;
@@ -46,8 +45,6 @@ pub async fn load_app_state_with_execution(
         .await
         .unwrap_or_else(|err| panic!("Serving bundle startup contract failed: {err}"));
 
-    let graph = KnowledgeGraph::new();
-    println!("Runtime knowledge graph starts empty; serving bundle is the only startup corpus");
 
     let search_runtime = runtime_snapshot_from_serving_bundle(bundle.clone());
     let properties = search_runtime.properties.to_vec();
@@ -83,7 +80,6 @@ pub async fn load_app_state_with_execution(
     println!("Request-time network AI disabled: search uses only local artifacts");
     let discovery_config = load_discovery_config();
     let map_overlays = crate::routes::map_overlays::load_city_map_overlays(project_root);
-    let knowledge = Arc::new(RwLock::new(graph));
     let (search_event_tx, search_event_rx) = mpsc::channel(search_log_queue_capacity_from_env());
     let search_event_lake = LakeStoreLocation::from_env(project_root)
         .and_then(|location| location.open())
@@ -105,7 +101,6 @@ pub async fn load_app_state_with_execution(
         societies: RwLock::new(societies),
         discovery_config,
         map_overlays,
-        knowledge,
         project_root: project_root.to_path_buf(),
         process_started_at: chrono::Utc::now(),
         interest_counter: AtomicU64::new(0),
@@ -200,8 +195,24 @@ pub(crate) fn properties_from_serving_records_with_edges(
     let mut properties = entities
         .iter()
         .filter(|entity| entity.entity_type == "property")
-        .map(|entity| {
-            property_from_serving_entity(entity, fact_index, &area_lookup, bundle_version)
+        .filter_map(|entity| {
+            let societies = edges
+                .iter()
+                .filter(|edge| {
+                    edge.from_entity_id == entity.entity_id && edge.edge_type == "in_society"
+                })
+                .map(|edge| edge.to_entity_id.as_str())
+                .collect::<BTreeSet<_>>();
+            if societies.len() != 1 {
+                return None;
+            }
+            Some(property_from_serving_entity(
+                entity,
+                societies.into_iter().next().unwrap(),
+                fact_index,
+                &area_lookup,
+                bundle_version,
+            ))
         })
         .collect::<Vec<_>>();
     properties.extend(representative_properties_from_serving_societies(
@@ -258,7 +269,12 @@ fn representative_properties_from_serving_societies(
 
     fact_index
         .rows()
-        .filter(|(entity_id, rows)| entity_id.starts_with("society:") && !rows.facts.is_empty())
+        .filter(|(entity_id, rows)| {
+            entities_by_id
+                .get(entity_id)
+                .is_some_and(|entity| entity.entity_type == "society")
+                && !rows.facts.is_empty()
+        })
         .flat_map(|(entity_id, rows)| {
             let entity = entities_by_id.get(entity_id).copied();
             let bhks = serving_society_bhks(rows);
@@ -290,15 +306,19 @@ fn representative_property_from_serving_society(
         .map(|entity| entity.name.clone())
         .or_else(|| latest_text(Some(rows), "title"))
         .unwrap_or_else(|| title_case_slug(strip_entity_prefix(entity_id, "society:").as_str()));
-    let society_id = society_runtime_id_from_parts(entity_id, &society_name);
-    let society_slug = society_id.strip_prefix("soc-").unwrap_or(&society_id);
+    let society_id = entity_id.to_string();
+    let society_slug = society_id.strip_prefix("society:").unwrap_or(&society_id);
     let id = if bhk > 0 {
         format!("discovered-{society_slug}-{bhk}bhk")
     } else {
         format!("discovered-{society_slug}")
     };
     let area = resolve_serving_society_area(Some(rows), area_lookup, entity_id);
-    let area_slug = slug(&area);
+    let area_id = area_lookup
+        .area_id_by_society
+        .get(&society_id)
+        .cloned()
+        .unwrap_or_default();
     let pricing = serving_market_pricing(rows, bhk);
     let price = pricing
         .map(|pricing| pricing.representative_price())
@@ -359,7 +379,7 @@ fn representative_property_from_serving_society(
             society_name.clone()
         },
         area: area.clone(),
-        area_id: format!("area-{area_slug}"),
+        area_id,
         city: latest_text(Some(rows), "city").unwrap_or_else(|| "Bengaluru".to_string()),
         society_id,
         builder_name,
@@ -409,52 +429,6 @@ fn representative_property_from_serving_society(
     }
 }
 
-fn bhk_from_property_slug(property_id: &str) -> Option<u32> {
-    let suffix = property_id.rsplit('-').next()?;
-    let digits = suffix.strip_suffix("bhk")?;
-    digits
-        .parse::<u32>()
-        .ok()
-        .filter(|value| (1..=6).contains(value))
-}
-
-fn bhk_from_title_prefix(title: &str) -> Option<u32> {
-    let lower = title.trim().to_lowercase();
-    let mut chars = lower.chars().peekable();
-    let mut digits = String::new();
-    while let Some(ch) = chars.peek() {
-        if ch.is_ascii_digit() {
-            digits.push(*ch);
-            chars.next();
-        } else {
-            break;
-        }
-    }
-    if digits.is_empty() {
-        return None;
-    }
-    let rest: String = chars.collect();
-    let rest = rest.trim_start_matches([' ', '-', '_']);
-    if rest.starts_with("bhk") {
-        return digits.parse().ok().filter(|value| (1..=6).contains(value));
-    }
-    None
-}
-
-fn resolve_serving_property_bhk(
-    property_id: &str,
-    rows: Option<&ServingEntityFactRows>,
-    title: &str,
-) -> u32 {
-    let from_fact = latest_numeric(rows, "bhk").unwrap_or(0.0).round().max(0.0) as u32;
-    if from_fact > 0 {
-        return from_fact;
-    }
-    bhk_from_property_slug(property_id)
-        .or_else(|| bhk_from_title_prefix(title))
-        .unwrap_or(0)
-}
-
 fn resolve_serving_property_area(
     rows: Option<&ServingEntityFactRows>,
     fact_index: &ServingFactIndex,
@@ -472,19 +446,24 @@ fn resolve_serving_property_area(
 
 fn property_from_serving_entity(
     entity: &ServingEntityRecord,
+    society_entity_id: &str,
     fact_index: &ServingFactIndex,
     area_lookup: &ServingAreaLookup,
     bundle_version: &str,
 ) -> Property {
     let rows = fact_index.entity(&entity.entity_id);
     let id = strip_entity_prefix(&entity.entity_id, "property:");
-    let society_id = derive_society_id(&id);
+    let society_id = society_entity_id.to_string();
     let title = latest_text(rows, "title")
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| entity.name.clone());
     let area = resolve_serving_property_area(rows, fact_index, area_lookup, &society_id);
-    let area_slug = slug(&area);
-    let bhk = resolve_serving_property_bhk(&id, rows, &title);
+    let area_id = area_lookup
+        .area_id_by_society
+        .get(&society_id)
+        .cloned()
+        .unwrap_or_default();
+    let bhk = latest_numeric(rows, "bhk").unwrap_or(0.0).round().max(0.0) as u32;
     let mut price = latest_numeric(rows, "price")
         .unwrap_or(0.0)
         .round()
@@ -497,7 +476,7 @@ fn property_from_serving_entity(
     let mut price_min = None;
     let mut price_max = None;
 
-    if let Some(pricing) = market_pricing_for_serving_property(fact_index, &id, bhk) {
+    if let Some(pricing) = market_pricing_for_serving_property(fact_index, &society_id, bhk) {
         let price_confidence = latest_confidence(rows, "price").unwrap_or(0.0);
         let sqft_confidence = latest_confidence(rows, "carpet_area_sqft").unwrap_or(0.0);
         (price, carpet_area_sqft, price_min, price_max) = resolve_listing_pricing(
@@ -558,7 +537,7 @@ fn property_from_serving_entity(
         id,
         title,
         area: area.clone(),
-        area_id: format!("area-{area_slug}"),
+        area_id,
         city: latest_text(rows, "city").unwrap_or_else(|| "Bengaluru".to_string()),
         society_id,
         builder_name,
@@ -639,7 +618,7 @@ fn society_from_serving_entity(
     edges: &[crate::serving::ServingEdgeRecord],
 ) -> Society {
     let rows = fact_index.entity(&entity.entity_id);
-    let id = society_runtime_id(entity);
+    let id = entity.entity_id.clone();
     let google_place_id = latest_text(rows, "google_place_id");
     let area_lookup = ServingAreaLookup::new(std::slice::from_ref(entity), edges);
     Society {
@@ -795,18 +774,17 @@ fn median_u64(values: &[u64]) -> Option<u64> {
 
 fn market_pricing_for_serving_property(
     fact_index: &ServingFactIndex,
-    property_id: &str,
+    society_id: &str,
     bhk: u32,
 ) -> Option<MarketPricing> {
     if bhk == 0 {
         return None;
     }
-    let society_id = derive_society_id(property_id);
-    serving_society_text(fact_index, &society_id, &format!("listing_{}bhk", bhk))
+    serving_society_text(fact_index, society_id, &format!("listing_{}bhk", bhk))
         .and_then(|listing| parse_listing_pricing(&listing))
         .or_else(|| {
             let pricing =
-                serving_society_text(fact_index, &society_id, &format!("pricing_{}bhk", bhk))?;
+                serving_society_text(fact_index, society_id, &format!("pricing_{}bhk", bhk))?;
             parse_market_pricing(&pricing)
         })
 }
@@ -863,6 +841,9 @@ fn serving_society_text(
 }
 
 fn society_entity_id(society_id: &str) -> String {
+    if society_id.starts_with("society:") {
+        return society_id.to_string();
+    }
     let normalized = society_id.trim().to_lowercase().replace(['_', ' '], "-");
     if normalized.starts_with("society:") {
         normalized
@@ -871,19 +852,6 @@ fn society_entity_id(society_id: &str) -> String {
             "society:{}",
             normalized.strip_prefix("soc-").unwrap_or(&normalized)
         )
-    }
-}
-
-fn society_runtime_id(entity: &ServingEntityRecord) -> String {
-    society_runtime_id_from_parts(&entity.entity_id, &entity.name)
-}
-
-fn society_runtime_id_from_parts(entity_id: &str, name: &str) -> String {
-    let name_slug = slug(name);
-    if !name_slug.is_empty() {
-        format!("soc-{name_slug}")
-    } else {
-        format!("soc-{}", strip_entity_prefix(entity_id, "society:"))
     }
 }
 
@@ -909,17 +877,7 @@ fn project_name_from_title_or_id(title: &str, property_id: &str, bhk: u32) -> St
 fn resolution_policies() -> &'static ResolutionPoliciesFile {
     static POLICIES: OnceLock<ResolutionPoliciesFile> = OnceLock::new();
     POLICIES.get_or_init(|| {
-        load_resolution_policies().unwrap_or_else(|_| ResolutionPoliciesFile {
-            version: 1,
-            default_strategy: None,
-            source_tiers: Vec::new(),
-            never_default_fact_prefixes: Vec::new(),
-            source_caps: HashMap::new(),
-            coordinate_sources: HashMap::new(),
-            spatial_topology: Default::default(),
-            market_locality: Default::default(),
-            overrides: HashMap::new(),
-        })
+        load_resolution_policies().expect("resolution policies must validate before serving")
     })
 }
 
@@ -1038,31 +996,6 @@ fn title_case_slug(value: &str) -> String {
         })
         .collect::<Vec<_>>()
         .join(" ")
-}
-
-/// Derive society_id from a property slug.
-///
-/// Strips BHK suffix (e.g. "-3bhk") and "discovered-" prefix, then prepends "soc-".
-/// Examples:
-///   "discovered-prestige-park-grove-3bhk" → "soc-prestige-park-grove"
-///   "prop-w-001" → "soc-prop-w-001" (no BHK suffix or discovered- prefix)
-fn derive_society_id(property_id: &str) -> String {
-    let mut slug = property_id.to_string();
-
-    // Strip BHK suffix like "-3bhk", "-2bhk"
-    if let Some(pos) = slug.rfind("-") {
-        let suffix = &slug[pos + 1..];
-        if suffix.ends_with("bhk") && suffix[..suffix.len() - 3].parse::<u32>().is_ok() {
-            slug.truncate(pos);
-        }
-    }
-
-    // Strip "discovered-" prefix
-    if let Some(rest) = slug.strip_prefix("discovered-") {
-        slug = rest.to_string();
-    }
-
-    format!("soc-{}", slug)
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -1367,7 +1300,7 @@ mod tests {
     }
 
     #[test]
-    fn serving_records_project_runtime_property_with_alias_society_facts() {
+    fn serving_records_project_runtime_property_with_explicit_society_membership() {
         let entities = vec![
             ServingEntityRecord {
                 entity_id: "property:discovered-prestige-lavender-fields-3bhk".to_string(),
@@ -1431,7 +1364,7 @@ mod tests {
                     0.6,
                 ),
                 serving_fact(
-                    "society:prestige-lavender-fields",
+                    "society:rera-a19f2cf2456fc549",
                     "pricing_3bhk",
                     FactValue::Text(
                         r#"{"price_range_lakh":"240-360","sqft_range":"1800-2200"}"#.to_string(),
@@ -1439,7 +1372,7 @@ mod tests {
                     0.95,
                 ),
                 serving_fact(
-                    "society:prestige-lavender-fields",
+                    "society:rera-a19f2cf2456fc549",
                     "rera_status",
                     FactValue::Text("Completed".to_string()),
                     0.95,
@@ -1454,13 +1387,21 @@ mod tests {
             Vec::new(),
         );
 
-        let properties = properties_from_serving_records(&entities, &fact_index, "bundle-v1");
+        let properties = properties_from_serving_records_with_edges(
+            &entities,
+            &[membership(
+                "property:discovered-prestige-lavender-fields-3bhk",
+                "society:rera-a19f2cf2456fc549",
+            )],
+            &fact_index,
+            "bundle-v1",
+        );
         let property = properties
             .iter()
             .find(|property| property.id == "discovered-prestige-lavender-fields-3bhk")
             .unwrap();
         assert_eq!(property.id, "discovered-prestige-lavender-fields-3bhk");
-        assert_eq!(property.society_id, "soc-prestige-lavender-fields");
+        assert_eq!(property.society_id, "society:rera-a19f2cf2456fc549");
         assert_eq!(property.area, "Varthur");
         assert_eq!(property.price, 0);
         assert_eq!(property.price_min, None);
@@ -1470,7 +1411,7 @@ mod tests {
         assert_eq!(property.source_reference, "catalog_bundle:bundle-v1");
 
         let society = society_from_serving_entity(&entities[1], &fact_index, &[]);
-        assert_eq!(society.id, "soc-prestige-lavender-fields");
+        assert_eq!(society.id, "society:rera-a19f2cf2456fc549");
         assert_eq!(society.review_summary, "Google signal is mixed-positive.");
     }
 
@@ -1612,7 +1553,7 @@ mod tests {
 
         assert_eq!(properties.len(), 1);
         assert_eq!(properties[0].area, "Whitefield");
-        assert_eq!(properties[0].area_id, "area-whitefield");
+        assert_eq!(properties[0].area_id, "area:whitefield");
     }
 
     #[test]
@@ -1649,7 +1590,15 @@ mod tests {
             Vec::new(),
         );
 
-        let properties = properties_from_serving_records(&entities, &fact_index, "bundle-v1");
+        let properties = properties_from_serving_records_with_edges(
+            &entities,
+            &[membership(
+                "property:discovered-svamitva-soul-spring-3bhk",
+                "society:svamitva-soul-spring",
+            )],
+            &fact_index,
+            "bundle-v1",
+        );
         let property = properties
             .iter()
             .find(|property| property.id == "discovered-svamitva-soul-spring-3bhk")
@@ -1777,7 +1726,15 @@ mod tests {
             Vec::new(),
         );
 
-        let properties = properties_from_serving_records(&entities, &fact_index, "bundle-v1");
+        let properties = properties_from_serving_records_with_edges(
+            &entities,
+            &[membership(
+                "property:discovered-prestige-waterford-3bhk",
+                "society:prestige-waterford",
+            )],
+            &fact_index,
+            "bundle-v1",
+        );
         let ids = properties
             .iter()
             .map(|property| property.id.as_str())
@@ -1789,7 +1746,7 @@ mod tests {
     }
 
     #[test]
-    fn serving_representative_properties_are_deduped_by_runtime_id() {
+    fn same_name_societies_keep_distinct_canonical_identities() {
         let entities = vec![
             ServingEntityRecord {
                 entity_id: "society:prestige-elm-park".to_string(),
@@ -1827,6 +1784,24 @@ mod tests {
         );
 
         let properties = properties_from_serving_records(&entities, &fact_index, "bundle-v1");
+        assert_eq!(properties.len(), 2);
+        let mut renamed = entities.clone();
+        renamed.reverse();
+        for entity in &mut renamed {
+            entity.name = format!("Renamed {}", entity.entity_id);
+        }
+        let renamed_properties =
+            properties_from_serving_records(&renamed, &fact_index, "bundle-v1");
+        assert_eq!(
+            properties
+                .iter()
+                .map(|property| (&property.id, &property.society_id))
+                .collect::<Vec<_>>(),
+            renamed_properties
+                .iter()
+                .map(|property| (&property.id, &property.society_id))
+                .collect::<Vec<_>>()
+        );
         assert_eq!(
             properties
                 .iter()
@@ -1959,21 +1934,15 @@ mod tests {
         assert_eq!(parse_number_range("200"), Some((200.0, 200.0)));
     }
 
-    #[test]
-    fn test_derive_society_id() {
-        assert_eq!(
-            derive_society_id("discovered-prestige-park-grove-3bhk"),
-            "soc-prestige-park-grove"
-        );
-        assert_eq!(
-            derive_society_id("discovered-sobha-windsor-2bhk"),
-            "soc-sobha-windsor"
-        );
-        assert_eq!(derive_society_id("prop-w-001"), "soc-prop-w-001");
-        assert_eq!(
-            derive_society_id("discovered-some-project"),
-            "soc-some-project"
-        );
+    fn membership(property_id: &str, society_id: &str) -> crate::serving::ServingEdgeRecord {
+        crate::serving::ServingEdgeRecord {
+            from_entity_id: property_id.into(),
+            edge_type: "in_society".into(),
+            to_entity_id: society_id.into(),
+            confidence: 1.0,
+            source_type: "fixture".into(),
+            derivation: None,
+        }
     }
 
     fn listing_payload(price: f64, sqft: f64) -> String {
@@ -2127,7 +2096,15 @@ mod tests {
             Vec::new(),
         );
 
-        let properties = properties_from_serving_records(&entities, &fact_index, "bundle-v1");
+        let properties = properties_from_serving_records_with_edges(
+            &entities,
+            &[membership(
+                "property:discovered-prestige-lakeside-habitat-3bhk",
+                "society:prestige-lakeside-habitat",
+            )],
+            &fact_index,
+            "bundle-v1",
+        );
         assert_eq!(properties.len(), 1);
         assert_eq!(properties[0].bhk, 0);
         assert!(serde_json::to_value(&properties[0])

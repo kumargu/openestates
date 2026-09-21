@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import measurementPresentation from "../../../../app/config/ui/measurements.json";
 import { Link, useSearchParams } from "react-router-dom";
 import { useNotebook } from "../../hooks/useNotebook.ts";
 import { propertyHrefWithSearchSpan } from "../../lib/navigationContext.ts";
@@ -121,8 +122,7 @@ function compareNoteGroupPriority(left: NoteGroupId, right: NoteGroupId): number
 }
 
 function societyKey(property: PropertyCard): string {
-  return property.society_name?.trim().toLocaleLowerCase()
-    || property.title.trim().toLocaleLowerCase();
+  return property.kg_entity_refs.society_entity_id || property.id;
 }
 
 function buildSocietyColumns(
@@ -170,13 +170,26 @@ function numericRange(
   return low === high ? format(low) : `${format(low)}–${format(high)}`;
 }
 
-function usableSqft(property: PropertyCard): number | null {
-  return property.plan_carpet_area_sqft
-    ?? property.carpet_area_sqft
-    ?? property.plan_sale_area_sqft
-    ?? property.super_builtup_sqft
-    ?? property.sqft
-    ?? null;
+function measurementSummaries(listings: PropertyCard[]): string[] {
+  const groups = new Map<string, { basis: string; unit: string; values: number[] }>();
+  for (const listing of listings) {
+    const measurement = listing.area_measurement;
+    if (!measurement) continue;
+    const key = JSON.stringify([measurement.basis, measurement.unit]);
+    const group = groups.get(key) ?? { basis: measurement.basis, unit: measurement.unit, values: [] };
+    group.values.push(measurement.minimum ?? measurement.value, measurement.maximum ?? measurement.value);
+    groups.set(key, group);
+  }
+  const labels: Record<string, string> = measurementPresentation.areaBasisLabels;
+  return [...groups.values()].flatMap(({ basis, unit, values }) => {
+    const known = values.filter((value) => Number.isFinite(value) && value > 0);
+    if (!known.length) return [];
+    const low = Math.min(...known);
+    const high = Math.max(...known);
+    const format = (value: number) => Math.round(value).toLocaleString("en-IN");
+    const range = low === high ? format(low) : `${format(low)}–${format(high)}`;
+    return [`${range} ${unit} ${labels[basis] ?? basis}`];
+  });
 }
 
 function mostCommon(values: string[]): string | null {
@@ -221,17 +234,12 @@ function projectScale(listings: PropertyCard[]): string | null {
 
 function homeHeaderSummary(listings: PropertyCard[]): string[] {
   const price = numericRange(listings, (listing) => listing.price ?? null, formatPrice);
-  const sqft = numericRange(
-    listings,
-    usableSqft,
-    (value) => `${Math.round(value).toLocaleString("en-IN")} sqft`,
-  );
   const pricePerSqft = numericRange(
     listings,
     (listing) => listing.price_per_sqft ?? null,
     (value) => `₹${Math.round(value).toLocaleString("en-IN")}/sqft`,
   );
-  return [price, sqft, pricePerSqft].filter((item): item is string => item != null);
+  return [price, ...measurementSummaries(listings), pricePerSqft].filter((item): item is string => item != null);
 }
 
 function formatSqft(value: number | undefined): string | null {

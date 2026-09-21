@@ -12,7 +12,7 @@ use crate::scoring::{
     RecommendationFallbackBranchPolicy, RecommendationRecallChannelPolicy,
     RecommendationRecallOperator, RecommendationRecallPolicy, ScoredSignal,
 };
-use crate::serving::{unique_society_aliases, LoadedServingBundle, TantivyRecallHit};
+use crate::serving::{LoadedServingBundle, TantivyRecallHit};
 
 use super::branch::{
     compass_magnitude, BranchLens, EvidenceDelta, RecallChannelHit, RecommendationBranch,
@@ -182,7 +182,7 @@ fn recall_candidates(
         }
     }
 
-    let property_index = PropertyEntityIndex::new(properties, serving_bundle, &eligible_ids);
+    let property_index = PropertyEntityIndex::new(properties, &eligible_ids);
     add_serving_graph_recall(
         current,
         serving_bundle,
@@ -276,23 +276,12 @@ struct PropertyEntityIndex {
 }
 
 impl PropertyEntityIndex {
-    fn new(
-        properties: &[Property],
-        serving_bundle: Option<&LoadedServingBundle>,
-        eligible_ids: &HashSet<&str>,
-    ) -> Self {
-        let canonical_by_alias: HashMap<String, String> = serving_bundle
-            .map(|bundle| {
-                unique_society_aliases(&bundle.entities)
-                    .into_iter()
-                    .collect()
-            })
-            .unwrap_or_default();
+    fn new(properties: &[Property], eligible_ids: &HashSet<&str>) -> Self {
         let mut entity_by_property = HashMap::new();
         let mut properties_by_entity = HashMap::<String, Vec<String>>::new();
         for property in properties {
             let alias = society_node_id(&property.society_id);
-            let entity_id = canonical_by_alias.get(&alias).cloned().unwrap_or(alias);
+            let entity_id = alias;
             entity_by_property.insert(property.id.clone(), entity_id.clone());
             if eligible_ids.contains(property.id.as_str()) {
                 properties_by_entity

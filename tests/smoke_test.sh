@@ -401,27 +401,6 @@ else
   printf "  %s GET /api/areas/bad-id — expected 404, got %s\n" "$(red "✗")" "$AREA_404_CODE"
 fi
 
-# ── Society Search ──
-# Society search is local-first. Offline enrichment can improve evidence, but the
-# endpoint should not require a live LLM/API key.
-echo ""
-echo "Society Search"
-SOC_SEARCH_CODE=$(curl -s -o /tmp/oe_test_body.json -w "%{http_code}" "${BASE}/api/societies/search?q=best%20societies%20Whitefield" 2>/dev/null || echo "000")
-if [[ "$SOC_SEARCH_CODE" == "200" ]]; then
-  PASS=$((PASS + 1))
-  printf "  %s Society search returns 200\n" "$(green "✓")"
-  check "Society search has results array" \
-    "${BASE}/api/societies/search?q=best%20societies%20Whitefield" \
-    '.results | type == "array"' \
-    "expected results array"
-elif [[ "$SOC_SEARCH_CODE" == "503" ]]; then
-  FAIL=$((FAIL + 1))
-  printf "  %s Society search returned 503; local search should not require live Gemini\n" "$(red "✗")"
-else
-  FAIL=$((FAIL + 1))
-  printf "  %s Society search — unexpected HTTP %s\n" "$(red "✗")" "$SOC_SEARCH_CODE"
-fi
-
 # ── Search: Result-set Contract ──
 echo ""
 echo "Search Result-set Contract"

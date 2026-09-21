@@ -100,10 +100,7 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
   );
   const hasSearchSpanParams = hasSearchSpanUrlParams(location.search);
   const [properties, setProperties] = useState<PropertyCard[]>([]);
-  const [propertyCatalogReady, setPropertyCatalogReady] = useState(false);
-  const [loadedCatalogBundleVersion, setLoadedCatalogBundleVersion] = useState<
-    string | null
-  >(null);
+  const [loadedHydrationKey, setLoadedHydrationKey] = useState<string | null>(null);
   const [shortlistIds, setShortlistIds] = useState<string[]>(() => readShortlistIds());
   const [sidebarWidth, setSidebarWidth] = useState(readSidebarWidth);
   const [sidebarResizing, setSidebarResizing] = useState(false);
@@ -122,30 +119,31 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
     window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(nextWidth));
   }
 
-  const searchCatalogVersion = storedPropertySearchContext
-    ?.runtimeVersion.servingBundleVersion ?? null;
+  const snapshotIdentity = storedPropertySearchContext?.runtimeVersion.snapshotIdentity;
+  const hydrationIds = useMemo(() => [...new Set([
+    ...shortlistIds, ...queryIds,
+    ...(storedPropertySearchContext?.results.map((result) => result.propertyId) ?? []),
+    ...(propertyId ? [propertyId] : []),
+  ])], [shortlistIds, queryIds, storedPropertySearchContext, propertyId]);
+  const hydrationKey = JSON.stringify([hydrationIds, snapshotIdentity]);
   const shouldLoadPropertyCatalog = shellMode === "workspace"
     || shellMode === "property-context"
-    || shortlistIds.length > 0
-    || queryIds.length > 0;
+    || hydrationIds.length > 0;
 
   useEffect(() => {
     if (!shouldLoadPropertyCatalog) return undefined;
     const controller = new AbortController();
-    const refresh = searchCatalogVersion !== null
-      && loadedCatalogBundleVersion !== searchCatalogVersion;
-    getPropertyCardsByIds([...shortlistIds, ...queryIds, ...(storedPropertySearchContext?.results.map((result) => result.propertyId) ?? []), ...(propertyId ? [propertyId] : [])], { signal: controller.signal, snapshotIdentity: storedPropertySearchContext?.runtimeVersion.snapshotIdentity })
+    getPropertyCardsByIds(hydrationIds, { signal: controller.signal, snapshotIdentity })
       .then((nextProperties) => {
+        if (controller.signal.aborted) return;
         setProperties(nextProperties);
-        setLoadedCatalogBundleVersion(searchCatalogVersion);
-        setPropertyCatalogReady(true);
+        setLoadedHydrationKey(hydrationKey);
       })
-      .catch((error: unknown) => {
-        if (error instanceof DOMException && error.name === "AbortError") return;
-        if (!refresh) setProperties([]);
+      .catch(() => {
+        if (!controller.signal.aborted) setProperties([]);
       });
     return () => controller.abort();
-  }, [loadedCatalogBundleVersion, searchCatalogVersion, shouldLoadPropertyCatalog, shortlistIds, queryIds, propertyId, storedPropertySearchContext]);
+  }, [hydrationIds, hydrationKey, snapshotIdentity, shouldLoadPropertyCatalog]);
 
   useEffect(() => {
     function refresh() {
@@ -170,27 +168,11 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
     [properties],
   );
   const propertySearchContext = useMemo(
-    () => propertyCatalogReady && (
-      searchCatalogVersion === null
-      || loadedCatalogBundleVersion === searchCatalogVersion
-    )
+    () => loadedHydrationKey === hydrationKey
       ? reconcileSearchSpanAvailability(storedPropertySearchContext, catalogPropertyIds)
       : storedPropertySearchContext,
-    [
-      catalogPropertyIds,
-      loadedCatalogBundleVersion,
-      propertyCatalogReady,
-      searchCatalogVersion,
-      storedPropertySearchContext,
-    ],
+    [catalogPropertyIds, loadedHydrationKey, hydrationKey, storedPropertySearchContext],
   );
-
-  useEffect(() => {
-    if (properties.length === 0) return;
-    if (queryIds.length === 0 && !sameIds(shortlistIds, homeIds)) {
-      writeShortlistIds(homeIds);
-    }
-  }, [homeIds, properties.length, queryIds.length, shortlistIds]);
 
   const homes = useMemo(() => {
     const byId = new Map(properties.map((property) => [property.id, property]));

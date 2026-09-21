@@ -2,9 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::models::Property;
 use crate::routes::enrichment::society_node_id;
-use crate::serving::{
-    unique_society_aliases, ServingEdgeRecord, ServingEntityRecord, TantivyRecallHit,
-};
+use crate::serving::{ServingEdgeRecord, ServingEntityRecord, TantivyRecallHit};
 
 use super::analyzer;
 use super::ast::{ConstraintExpr, ConstraintTerm, IntentAst};
@@ -45,8 +43,7 @@ impl SearchIndex {
     }
 
     /// Build property recall mappings with canonical society identities from
-    /// the promoted serving bundle. Runtime properties retain readable society
-    /// slugs, while serving documents use canonical entity IDs.
+    /// the promoted serving bundle. Runtime properties carry canonical society IDs.
     pub fn build_with_serving_entities(
         properties: &[Property],
         entities: &[ServingEntityRecord],
@@ -74,23 +71,6 @@ impl SearchIndex {
             }
         }
         index.add_serving_society_memberships(entities, edges);
-        for (alias, canonical_id) in unique_society_aliases(entities) {
-            let Some(property_ids) = index.by_entity_node.get(&alias).cloned() else {
-                continue;
-            };
-            let canonical_property_ids = index
-                .by_entity_node
-                .entry(canonical_id.clone())
-                .or_default();
-            for property_id in &property_ids {
-                push_unique(canonical_property_ids, property_id);
-            }
-            for property_id in property_ids {
-                index
-                    .society_entity_by_property
-                    .insert(property_id, canonical_id.clone());
-            }
-        }
         index.add_serving_builder_memberships(entities, edges);
         index.add_serving_market_locality_memberships(entities, edges);
         index
@@ -1235,8 +1215,8 @@ mod tests {
     #[test]
     fn serving_aware_index_maps_canonical_society_hits_to_runtime_properties() {
         let properties = vec![
-            test_property("prop-2", "century-central"),
-            test_property("prop-1", "century-central"),
+            test_property("prop-2", "society:rera-af36618d49c94b92"),
+            test_property("prop-1", "society:rera-af36618d49c94b92"),
         ];
         let entities = vec![ServingEntityRecord {
             entity_id: "society:rera-af36618d49c94b92".to_string(),
@@ -1252,9 +1232,11 @@ mod tests {
             index.property_ids_for_entity_id("society:rera-af36618d49c94b92"),
             vec!["prop-2".to_string(), "prop-1".to_string()]
         );
-        assert_eq!(
-            index.property_ids_for_entity_id("society:century-central"),
-            vec!["prop-2".to_string(), "prop-1".to_string()]
+        assert!(
+            index
+                .property_ids_for_entity_id("society:century-central")
+                .is_empty(),
+            "display names are not identity aliases"
         );
     }
 
@@ -1295,7 +1277,7 @@ mod tests {
 
     #[test]
     fn serving_graph_market_locality_membership_participates_in_structured_recall() {
-        let mut property = test_property("graph-area-home", "century-central");
+        let mut property = test_property("graph-area-home", "society:rera-af36618d49c94b92");
         property.area = "Unknown".to_string();
         let entities = vec![
             ServingEntityRecord {

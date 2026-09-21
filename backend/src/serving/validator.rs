@@ -336,8 +336,7 @@ pub async fn validate_search_serving_candidate(
             Some(manifest.entity_alias_parquet_key.clone()),
         );
     }
-    let mut fact_index = ServingFactIndex::from_records(facts.clone(), metadata.clone());
-    fact_index.add_society_aliases(&entities);
+    let fact_index = ServingFactIndex::from_records(facts.clone(), metadata.clone());
     let properties = crate::data_loader::properties_from_serving_records_with_edges(
         &entities,
         &edges,

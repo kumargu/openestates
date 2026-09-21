@@ -13,7 +13,6 @@ use tokio::sync::mpsc;
 use tokio::sync::RwLock;
 
 use crate::discovery::{BrowsePropertyCard, DiscoveryConfig};
-use crate::knowledge::KnowledgeGraph;
 use crate::knowledge::SearchEvent;
 use crate::lake::{LakeKey, LakeStore};
 use crate::models::{AreaProfile, Property, Society};
@@ -807,8 +806,6 @@ pub struct AppState {
     pub discovery_config: DiscoveryConfig,
     /// Offline city map overlays (metro / parks / lakes) clipped per property detail.
     pub map_overlays: Arc<crate::routes::map_overlays::CityMapOverlays>,
-    /// The knowledge graph — the brain that learns from every search.
-    pub knowledge: Arc<RwLock<KnowledgeGraph>>,
     /// Project root path (for persistence operations).
     pub project_root: PathBuf,
     /// Runtime start timestamp, exposed for stale-backend detection in development.
@@ -1055,7 +1052,6 @@ mod tests {
         let written: SearchEvent = lake.get_json(&keys[0]).await.expect("event round trips");
         assert_eq!(written.query, event.query);
         assert_eq!(written.results_returned, event.results_returned);
-        assert_eq!(KnowledgeGraph::new().stats().search_events, 0);
     }
 
     #[tokio::test]

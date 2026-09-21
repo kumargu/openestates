@@ -11,7 +11,6 @@ use backend::api::build_app_router;
 use backend::data_loader::load_app_state;
 use backend::routes::enrichment::society_node_id;
 use backend::scoring::scoring_policy;
-use backend::serving::unique_society_aliases;
 use serde_json::Value;
 use tower::ServiceExt;
 
@@ -144,9 +143,6 @@ async fn promoted_bundle_recommendations_preserve_trust_invariants() {
 
     let runtime = state.search_runtime.load();
     let bundle = &runtime.bundle;
-    let aliases = unique_society_aliases(&bundle.entities)
-        .into_iter()
-        .collect::<BTreeMap<_, _>>();
     let runtime_properties = state.properties.read().await;
     let societies = runtime_properties
         .iter()
@@ -156,7 +152,7 @@ async fn promoted_bundle_recommendations_preserve_trust_invariants() {
         .iter()
         .filter(|society_id| {
             let alias = society_node_id(society_id);
-            let entity_id = aliases.get(&alias).map(String::as_str).unwrap_or(&alias);
+            let entity_id = alias.as_str();
             bundle.spatial_index.point_for_entity(entity_id).is_some()
         })
         .count();

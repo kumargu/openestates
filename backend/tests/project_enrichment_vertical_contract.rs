@@ -146,7 +146,7 @@ async fn materialized_contract(carpet: bool) {
         .await
         .unwrap();
     for project in &projects {
-        let alias = format!("society:{}", slug(project.name));
+        let alias = canonical_id(project.registration);
         let rows = loaded.fact_index.entity(&alias).unwrap();
         for fact_key in [
             "rera_number",
@@ -288,7 +288,6 @@ async fn materialized_contract(carpet: bool) {
         societies: RwLock::new(societies),
         discovery_config: backend::discovery::load_discovery_config(),
         map_overlays: Arc::new(backend::routes::map_overlays::CityMapOverlays::default()),
-        knowledge: Arc::new(RwLock::new(KnowledgeGraph::new())),
         project_root: root.path().to_path_buf(),
         process_started_at: Utc::now(),
         interest_counter: AtomicU64::new(0),

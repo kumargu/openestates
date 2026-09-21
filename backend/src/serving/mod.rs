@@ -70,11 +70,10 @@ pub use tantivy_index::{
 };
 pub use topology::{derive_spatial_topology, SpatialTopologyReport};
 pub use types::{
-    unique_society_aliases, validate_serving_edge_evidence, BundleArtifact, BundleArtifactKind,
-    QuarantinedSociety, ServingBundleManifest, ServingBundleSchema, ServingColumnSchema,
-    ServingEdgeRecord, ServingEntityFactRows, ServingEntityRecord, ServingEntityVisibility,
-    ServingFactIndex, ServingFactRecord, ServingQuarantineReport, ServingSearchMetadataRecord,
-    ServingTableSchema,
+    validate_serving_edge_evidence, BundleArtifact, BundleArtifactKind, QuarantinedSociety,
+    ServingBundleManifest, ServingBundleSchema, ServingColumnSchema, ServingEdgeRecord,
+    ServingEntityFactRows, ServingEntityRecord, ServingEntityVisibility, ServingFactIndex,
+    ServingFactRecord, ServingQuarantineReport, ServingSearchMetadataRecord, ServingTableSchema,
 };
 pub use validator::{
     validate_search_serving_candidate, ServingBundleValidationError, ServingBundleValidationIssue,

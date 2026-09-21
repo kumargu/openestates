@@ -26,11 +26,11 @@ use super::proximity::{derive_proximity_records, remove_derived_proximity_record
 use super::tantivy_index::{TantivyIndexError, TantivyRecallIndex};
 use super::{
     materialize_canonical_spatial_identities, materialize_society_aliases,
-    remove_canonical_spatial_identities, unique_society_aliases,
-    validate_canonical_spatial_identities, validate_serving_edge_evidence, BundleArtifact,
-    BundleArtifactKind, ServingBundleManifest, ServingBundleSchema, ServingColumnSchema,
-    ServingEdgeRecord, ServingEntityRecord, ServingFactRecord, ServingReraEvidenceRecord,
-    ServingSearchMetadataRecord, ServingTableSchema, SourceObservation,
+    remove_canonical_spatial_identities, validate_canonical_spatial_identities,
+    validate_serving_edge_evidence, BundleArtifact, BundleArtifactKind, ServingBundleManifest,
+    ServingBundleSchema, ServingColumnSchema, ServingEdgeRecord, ServingEntityRecord,
+    ServingFactRecord, ServingReraEvidenceRecord, ServingSearchMetadataRecord, ServingTableSchema,
+    SourceObservation,
 };
 
 pub const SERVING_BUNDLE_FORMAT_VERSION: u32 = 12;
@@ -746,17 +746,11 @@ fn catalog_scoped_rera_evidence(
     entities: &[ServingEntityRecord],
     evidence: Vec<ServingReraEvidenceRecord>,
 ) -> (Vec<ServingReraEvidenceRecord>, Vec<String>) {
-    let mut catalog_society_ids = entities
+    let catalog_society_ids = entities
         .iter()
         .filter(|entity| entity.entity_type == "society")
         .map(|entity| entity.entity_id.clone())
         .collect::<BTreeSet<_>>();
-    catalog_society_ids.extend(
-        unique_society_aliases(entities)
-            .into_iter()
-            .map(|(alias, _)| alias),
-    );
-
     let (included, excluded): (Vec<_>, Vec<_>) = evidence
         .into_iter()
         .partition(|record| catalog_society_ids.contains(&record.society_id));
@@ -1468,7 +1462,7 @@ mod tests {
     }
 
     #[test]
-    fn serving_rera_evidence_is_scoped_to_catalog_societies_and_aliases() {
+    fn serving_rera_evidence_requires_explicit_catalog_identity() {
         let entities = vec![ServingEntityRecord {
             entity_id: "society:rera-123".to_string(),
             entity_type: "society".to_string(),
@@ -1486,7 +1480,10 @@ mod tests {
             ],
         );
 
-        assert_eq!(included.len(), 2);
-        assert_eq!(excluded, vec!["society:rera-outside-catalog"]);
+        assert_eq!(included.len(), 1);
+        assert_eq!(
+            excluded,
+            vec!["society:catalog-society", "society:rera-outside-catalog"]
+        );
     }
 }

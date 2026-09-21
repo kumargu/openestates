@@ -1014,8 +1014,7 @@ fn loaded_bundle_core(
     let entity_index = SpatialEntityIndex::from_serving_bundle(&entities, &fact_index);
     let spatial_index =
         SpatialServingIndex::from_serving_bundle_with_edges(&entities, &fact_index, &edges);
-    let mut graph_index = GraphIndex::from_serving_bundle(&entities, &edges, "efficiency-contract");
-    graph_index.add_entity_aliases(&backend::serving::unique_society_aliases(&entities));
+    let graph_index = GraphIndex::from_serving_bundle(&entities, &edges, "efficiency-contract");
     let evidence_index =
         backend::serving::ServingEvidenceIndex::from_records(fact_index.all_facts(), &edges)
             .expect("efficiency fixture evidence index");

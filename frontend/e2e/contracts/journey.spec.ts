@@ -15,6 +15,8 @@ test("materialized evidence survives search, detail, selected-home reads and ret
   await expect(cards.first()).toBeVisible();
   const links = await cards.evaluateAll((elements) => elements.map((element) => new URL((element as HTMLAnchorElement).href).pathname));
   await page.screenshot({ path: info.outputPath("search-resting.png") });
+  const selected = await (await request.get(`${api}/api/properties/${links[0].split("/").pop()}`)).json();
+  const selectedPrice = `₹${(selected.property.price / 10_000_000).toFixed(2)}Cr`;
   await cards.first().click();
   await expect(page.locator("details.property-search-match")).toBeVisible();
   await expect(page.getByText(/receipt.*expired/i)).toHaveCount(0);
@@ -24,7 +26,7 @@ test("materialized evidence survives search, detail, selected-home reads and ret
   await page.screenshot({ path: info.outputPath("receipt-open.png") });
   await page.getByRole("link", { name: "EMI Plan", exact: true }).click();
   await expect(page.getByRole("region", { name: "Loan repayment assumptions" })).toBeVisible();
-  await expect(page.getByRole("heading", { level: 1 })).toContainText("₹2.43Cr");
+  await expect(page.getByRole("heading", { level: 1 })).toContainText(selectedPrice);
   await page.getByRole("link", { name: "RERA", exact: true }).click();
   await page.locator("summary").filter({ hasText: "Plans" }).click();
   const document = page.getByRole("link", { name: "Sanctioned plan", exact: true });
@@ -32,6 +34,26 @@ test("materialized evidence survives search, detail, selected-home reads and ret
   await expect(document).toHaveAttribute("target", "_blank");
   await page.getByRole("link", { name: /Back to results/i }).click();
   await expect(cards.first()).toBeVisible();
+  await expect.poll(() => cards.evaluateAll((elements) => elements.map((element) => new URL((element as HTMLAnchorElement).href).pathname))).toEqual(links);
+  const resultRail = page.locator(".landing-featured__results");
+  const homeNames = await cards.locator("h3").allTextContents();
+  for (const name of homeNames.slice(0, 2)) {
+    await resultRail.getByRole("button", { name: `Save ${name} for later`, exact: true }).click();
+    await expect(resultRail.getByRole("button", { name: `Remove ${name} from shortlist`, exact: true })).toBeVisible();
+  }
+  await page.getByRole("link", { name: "Workspace", exact: true }).click();
+  const selection = page.locator(".notion-compare-check input");
+  await expect(selection).toHaveCount(2);
+  await selection.nth(0).check();
+  await selection.nth(1).check();
+  await page.getByRole("navigation", { name: "Workspace view" }).getByRole("link", { name: "Compare", exact: true }).click();
+  const comparedHomes = page.locator(".compare-editorial__home");
+  await expect(comparedHomes).toHaveCount(2);
+  await expect(comparedHomes.first()).toContainText("super built-up");
+  const comparedLinks = await comparedHomes.locator("a").evaluateAll((elements) => elements.map((element) => new URL((element as HTMLAnchorElement).href).pathname));
+  expect(new Set(comparedLinks)).toEqual(new Set(links.slice(0, 2)));
+  await page.screenshot({ path: info.outputPath("compare-resting.png") });
+  await page.getByRole("link", { name: /Back to results/i }).click();
   await expect.poll(() => cards.evaluateAll((elements) => elements.map((element) => new URL((element as HTMLAnchorElement).href).pathname))).toEqual(links);
   expect(reads.filter((path) => path === "/api/properties")).toEqual([]);
   expect(errors).toEqual([]);

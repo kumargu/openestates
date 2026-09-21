@@ -87,18 +87,8 @@ pub(crate) fn classify_and_prune(
         })
         .collect::<BTreeMap<_, _>>();
 
-    for group in groups
-        .values_mut()
-        .filter(|group| group.entity_ids.len() > 1)
-    {
-        group
-            .reasons
-            .insert("ambiguous_canonical_identity".to_string());
-    }
-
     let mut property_runtime_ids = property_society_runtime_ids(&edges, &runtime_id_by_entity_id);
-    let mut fact_index = ServingFactIndex::from_records(facts.clone(), search_metadata.clone());
-    fact_index.add_society_aliases(&entities);
+    let fact_index = ServingFactIndex::from_records(facts.clone(), search_metadata.clone());
     let projected_properties = crate::data_loader::properties_from_serving_records_with_edges(
         &entities,
         &edges,
@@ -252,7 +242,7 @@ fn society_groups(entities: &[ServingEntityRecord]) -> BTreeMap<String, SocietyG
         .iter()
         .filter(|entity| entity.entity_type == "society")
     {
-        let runtime_id = format!("soc-{}", entity_slug(&entity.name));
+        let runtime_id = entity.entity_id.clone();
         let group = groups.entry(runtime_id).or_default();
         group.entity_ids.insert(entity.entity_id.clone());
         group.names.insert(entity.name.clone());
@@ -596,25 +586,6 @@ fn entities_to_remove(
     removed
 }
 
-fn entity_slug(value: &str) -> String {
-    value
-        .trim()
-        .to_ascii_lowercase()
-        .chars()
-        .map(|character| {
-            if character.is_ascii_alphanumeric() {
-                character
-            } else {
-                '-'
-            }
-        })
-        .collect::<String>()
-        .split('-')
-        .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>()
-        .join("-")
-}
-
 #[cfg(test)]
 mod tests {
     use chrono::Utc;
@@ -820,7 +791,7 @@ mod tests {
 
         assert_eq!(result.quarantine.societies.len(), 1);
         let quarantined = &result.quarantine.societies[0];
-        assert_eq!(quarantined.runtime_society_id, "soc-incomplete");
+        assert_eq!(quarantined.runtime_society_id, "society:incomplete");
         assert_eq!(
             quarantined.reason_codes,
             vec![

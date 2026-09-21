@@ -133,17 +133,6 @@ impl ReraEvidenceIndex {
         self.by_society.get(society_id)
     }
 
-    pub fn add_aliases(&mut self, aliases: &[(String, String)]) {
-        for (alias, canonical_id) in aliases {
-            if self.by_society.contains_key(alias) {
-                continue;
-            }
-            if let Some(record) = self.by_society.get(canonical_id).cloned() {
-                self.by_society.insert(alias.clone(), record);
-            }
-        }
-    }
-
     pub fn len(&self) -> usize {
         self.by_society.len()
     }

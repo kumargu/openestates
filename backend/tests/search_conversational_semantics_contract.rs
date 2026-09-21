@@ -3451,12 +3451,11 @@ impl FixtureBuilder {
             &edges,
         );
         let search_capabilities = SearchCapabilityIndex::from_bundle(&self.entities, &fact_index);
-        let mut graph_index = GraphIndex::from_serving_bundle(
+        let graph_index = GraphIndex::from_serving_bundle(
             &self.entities,
             &edges,
             "conversational-semantics-mock",
         );
-        graph_index.add_entity_aliases(&backend::serving::unique_society_aliases(&self.entities));
         let evidence_index =
             backend::serving::ServingEvidenceIndex::from_records(fact_index.all_facts(), &edges)
                 .expect("conversational fixture evidence index");

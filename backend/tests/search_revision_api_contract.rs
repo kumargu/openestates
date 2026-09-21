@@ -10,7 +10,7 @@ use axum::http::{header, Method, Request, StatusCode};
 use axum::Router;
 use backend::api::build_app_router_with_lake;
 use backend::graph::GraphIndex;
-use backend::knowledge::{FactValue, KnowledgeGraph};
+use backend::knowledge::FactValue;
 use backend::lake::LakeStore;
 use backend::models::Property;
 use backend::search::geo::SpatialEntityIndex;
@@ -1441,7 +1441,6 @@ async fn test_app_fixture_with_identity(
         societies: RwLock::new(Vec::new()),
         discovery_config: backend::discovery::load_discovery_config(),
         map_overlays: Arc::new(backend::routes::map_overlays::CityMapOverlays::default()),
-        knowledge: Arc::new(RwLock::new(KnowledgeGraph::new())),
         project_root: root,
         process_started_at: Utc::now(),
         interest_counter: AtomicU64::new(0),

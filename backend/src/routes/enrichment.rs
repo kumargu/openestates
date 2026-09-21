@@ -534,6 +534,9 @@ pub fn to_slug(id: &str) -> String {
 
 /// Build a society node ID for KG lookup.
 pub fn society_node_id(society_id: &str) -> String {
+    if society_id.starts_with("society:") {
+        return society_id.to_string();
+    }
     let normalized = society_id.trim().to_lowercase().replace(['_', ' '], "-");
     if normalized.starts_with("society:") {
         normalized

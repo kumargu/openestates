@@ -87,11 +87,6 @@ pub fn build_app_router_with_lake(state: Arc<AppState>, lake: LakeStore) -> Rout
             .route("/api/shortlist", get(routes::shortlist::get_shortlist))
             .route("/api/discovery", get(routes::discovery::discovery_home))
             .route(
-                "/api/societies/search",
-                get(routes::societies::search_societies),
-            )
-            .route("/api/societies/{slug}", get(routes::societies::get_society))
-            .route(
                 "/api/properties/{id}/interests/count",
                 get(routes::interests::get_interest_count),
             )
