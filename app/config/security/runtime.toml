@@ -36,11 +36,9 @@ max_result_id_bytes = 512
 max_target_id_bytes = 512
 max_intent_predicates = 64
 
-[surface_requests]
+[context_requests]
 batch_property_limit = 24
-surface_id_limit = 8
 max_property_id_bytes = 512
-max_surface_id_bytes = 256
 
 [requests]
 public_timeout_ms = 3000

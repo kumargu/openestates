@@ -1,6 +1,27 @@
 /* Generated from Rust public DTOs. Run npm run contracts:generate. */
 
 export type Availability = "available" | "unavailable";
+export type ContextGeometry =
+  | {
+      /**
+       * @minItems 2
+       * @maxItems 2
+       */
+      coordinates: [number, number];
+      type: "Point";
+    }
+  | {
+      coordinates: [number, number][];
+      type: "LineString";
+    }
+  | {
+      coordinates: [number, number][][];
+      type: "Polygon";
+    }
+  | {
+      coordinates: [number, number][][][];
+      type: "MultiPolygon";
+    };
 export type EvidenceId =
   | {
       id: string;
@@ -10,6 +31,35 @@ export type EvidenceId =
       id: string;
       kind: "derivation";
     };
+/**
+ * What kind of value a fact holds.
+ */
+export type FactValue =
+  | {
+      data: number;
+      type: "Numeric";
+    }
+  | {
+      data: string;
+      type: "Text";
+    }
+  | {
+      data: boolean;
+      type: "Bool";
+    }
+  | {
+      data: string[];
+      type: "Tags";
+    }
+  | {
+      data: {
+        explanation: string;
+        value: number;
+      };
+      type: "Score";
+    };
+export type ConstraintOperator = "min" | "max";
+export type ProofResolutionStatus = "resolved";
 export type ReviewTone = "positive" | "concern" | "neutral";
 export type BranchLens = "proof" | "value" | "trust" | "commute";
 export type RecommendationStatus = "pending" | "ready" | "unavailable";
@@ -29,6 +79,7 @@ export interface PropertyDetail {
    * Other locally tracked projects tied to the same normalized legal promoter name.
    */
   builder_portfolio?: BuilderPortfolio | null;
+  context: PropertyContext;
   contract_version: number;
   /**
    * Grouped project-check read model for the buyer-facing detail page.
@@ -71,10 +122,6 @@ export interface PropertyDetail {
    * Receipt-backed livability diligence brief composed from DAG facts and mined themes.
    */
   livability_brief?: LivabilityBrief | null;
-  /**
-   * Schematic neighborhood plate: home pin, nearby POIs, optional water context.
-   */
-  map_context?: PropertyMapContext | null;
   /**
    * Buyer-facing site overview + floor plans (RERA brochure promotions).
    */
@@ -141,46 +188,43 @@ export interface BuilderProjectRecord {
   rera_status?: string;
   start_date?: string;
 }
-export interface DecisionCheckSummary {
-  groups?: DecisionLabelGroup[];
-  primaryCount: number;
-  primaryLabels?: DecisionLabel[];
-  registrationNumber?: string;
-  registrationNumberCompact?: string;
-  registryUrl?: string;
-  tileCaption?: string;
-  tileLabel: string;
-  tone: string;
-  totalCount: number;
+export interface PropertyContext {
+  anchor: ContextEntity;
+  contractVersion: number;
+  entityRefs: KgEntityRefs;
+  features: ContextFeature[];
+  matchedProof: ProofResolution | null;
+  propertyId: string;
+  snapshotIdentity: string;
+  truncated: boolean;
 }
-export interface DecisionLabelGroup {
-  id: string;
-  labels: DecisionLabel[];
-  title: string;
+export interface ContextEntity {
+  entityId: string;
+  geometry: ContextGeometry | null;
+  geometryEvidence: EvidenceRef[];
+  geometrySource: ContextFact | null;
+  name: string;
+  /**
+   * @minItems 2
+   * @maxItems 2
+   */
+  point: [number, number] | null;
 }
-export interface DecisionLabel {
-  compareGroup?: string;
+export interface EvidenceRef {
+  evidence_id: EvidenceId;
+  snapshot_identity: string;
+  subject_entity_id: string;
+}
+export interface ContextFact {
   confidence: number;
-  groupId: string;
-  key: string;
-  label: string;
-  notebookLabels?: string[];
-  placement: string;
-  priority: number;
-  scope: string;
-  severity: string;
-  sourceFactKeys?: string[];
-  surfaces?: string[];
-  unit?: string;
-  value?: number;
-  valueText?: string;
-  visualId: string;
-}
-export interface DetailSignal {
-  count?: number;
-  icon: string;
-  key: string;
-  label: string;
+  entityId: string;
+  evidence: EvidenceRef;
+  factKey: string;
+  id: string;
+  observedAt: string;
+  sourceType: string;
+  sourceUrl: string | null;
+  value: FactValue;
 }
 /**
  * Minimal entity identity bundle attached to property/search/detail responses.
@@ -233,6 +277,111 @@ export interface KgEntityRefs {
    * plan, not as a complete semantic model.
    */
   source_entity_ids?: string[];
+}
+export interface ContextFeature {
+  attributes: ContextFact[];
+  distance: DerivedEvidence | null;
+  fact: ContextFact;
+  target: ContextEntity | null;
+}
+export interface DerivedEvidence {
+  algorithm_version: string;
+  confidence: number;
+  derivation_id: string;
+  input_evidence: EvidenceRef[];
+  metric: string;
+  relation: string;
+  snapshot_identity: string;
+  subject_entity_id: string;
+  target_entity_id: string | null;
+  unit: string | null;
+  value: number | null;
+}
+export interface ProofResolution {
+  branchId: string;
+  claim?: EvaluatedClaim;
+  constraint?: HardConstraint;
+  contractVersion: number;
+  derivationChain: DerivedEvidence[];
+  factKey: string;
+  geometry?: unknown;
+  predicateId: string;
+  propertyId: string;
+  relation: string;
+  resolutionStatus: ProofResolutionStatus;
+  semanticFingerprint: string;
+  snapshotIdentity: string;
+  sourceObservations: ResolvedSourceObservation[];
+  subjectEntityId: string;
+  targetEntityId?: string;
+  targetLabel?: string;
+  unit?: string;
+  value?: FactValue;
+}
+export interface EvaluatedClaim {
+  dimension: string;
+  unit: string;
+  value: number;
+}
+export interface HardConstraint {
+  /**
+   * Registry dimension, e.g. "land_area".
+   */
+  field: string;
+  operator: ConstraintOperator;
+  raw_text: string;
+  unit: string;
+  value: number;
+}
+export interface ResolvedSourceObservation {
+  assetLineage: string[];
+  observationId: string;
+  observedAt: string;
+  provider: string;
+  providerObservationId: string;
+  sourceUrl?: string;
+  subjectEntityId: string;
+}
+export interface DecisionCheckSummary {
+  groups?: DecisionLabelGroup[];
+  primaryCount: number;
+  primaryLabels?: DecisionLabel[];
+  registrationNumber?: string;
+  registrationNumberCompact?: string;
+  registryUrl?: string;
+  tileCaption?: string;
+  tileLabel: string;
+  tone: string;
+  totalCount: number;
+}
+export interface DecisionLabelGroup {
+  id: string;
+  labels: DecisionLabel[];
+  title: string;
+}
+export interface DecisionLabel {
+  compareGroup?: string;
+  confidence: number;
+  groupId: string;
+  key: string;
+  label: string;
+  notebookLabels?: string[];
+  placement: string;
+  priority: number;
+  scope: string;
+  severity: string;
+  sourceFactKeys?: string[];
+  surfaces?: string[];
+  unit?: string;
+  value?: number;
+  valueText?: string;
+  visualId: string;
+}
+export interface DetailSignal {
+  count?: number;
+  icon: string;
+  key: string;
+  label: string;
 }
 export interface PropertyEvidenceResponse {
   entity_refs: KgEntityRefs;
@@ -295,11 +444,6 @@ export interface SourceAttribution {
   source_url?: string;
   value: string;
 }
-export interface EvidenceRef {
-  evidence_id: EvidenceId;
-  snapshot_identity: string;
-  subject_entity_id: string;
-}
 export interface EvidenceMediaStrip {
   caption: string;
   capture_date_label: string;
@@ -352,68 +496,6 @@ export interface LivabilityBriefBlock {
   paragraph: string;
   themes: string[];
   title: string;
-}
-export interface PropertyMapContext {
-  access_lines: MapOverlayLine[];
-  green_patches: MapOverlayPolygon[];
-  home: MapHomeAnchor;
-  lakes: MapOverlayPolygon[];
-  metro_lines: MapOverlayLine[];
-  places: MapPlacePin[];
-  red_flag_lines: MapOverlayLine[];
-  water?: MapWaterContext;
-}
-export interface MapOverlayLine {
-  coordinates: [number, number][];
-  details?: string[];
-  distance_km?: number;
-  id: string;
-  kind: string;
-  label?: string;
-  name: string;
-  source_type: string;
-  source_url?: string;
-}
-export interface MapOverlayPolygon {
-  coordinates: [number, number][];
-  distance_km?: number;
-  id: string;
-  kind: string;
-  name: string;
-  source_type: string;
-}
-export interface MapHomeAnchor {
-  area?: string;
-  boundary?: MapOverlayPolygon;
-  entity_id: string;
-  latitude?: number;
-  longitude?: number;
-  name: string;
-}
-export interface MapPlacePin {
-  distance_km?: number;
-  latitude?: number;
-  layer: string;
-  lines: string[];
-  longitude?: number;
-  name: string;
-  note?: string;
-  place_entity_id?: string;
-  rating?: number;
-  review_count?: number;
-  source_type: string;
-  source_url?: string;
-}
-export interface MapWaterContext {
-  groundwater_class: string;
-  /**
-   * Soft zone fill is UI geometry; class/summary are source-backed.
-   */
-  illustrative_zone: boolean;
-  scope_radius_km: number;
-  source_type: string;
-  source_url?: string;
-  summary: string;
 }
 export interface ProjectPlansView {
   coverage_quality: string;

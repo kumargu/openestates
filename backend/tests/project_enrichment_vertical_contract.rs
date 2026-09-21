@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::future::IntoFuture;
 use std::net::SocketAddr;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
@@ -37,11 +38,54 @@ use tower::ServiceExt;
 
 #[tokio::test]
 async fn three_societies_reach_serving_with_listing_and_builder_evidence() {
-    materialized_contract(false).await;
-    materialized_contract(true).await;
+    let (_original_root, state, app) = materialized_contract(false).await;
+    let (_updated_root, updated_state, _) = materialized_contract(true).await;
+    if let Ok(address) = std::env::var("OPENESTATES_CONTRACT_SERVER_ADDR") {
+        // Test-only control listener; the application still uses the production router.
+        // Both snapshots have completed the same source -> Parquet -> API assertions.
+        let original = state.search_runtime.load_full();
+        let updated = updated_state.search_runtime.load_full();
+        assert_ne!(
+            original.bundle.manifest.proof_snapshot_identity(),
+            updated.bundle.manifest.proof_snapshot_identity()
+        );
+        let control = axum::Router::new().route(
+            "/snapshot/{version}",
+            axum::routing::post(
+                move |axum::extract::Path(version): axum::extract::Path<String>| {
+                    let state = state.clone();
+                    let snapshot = match version.as_str() {
+                        "original" => Some(original.clone()),
+                        "updated" => Some(updated.clone()),
+                        _ => None,
+                    };
+                    async move {
+                        let Some(snapshot) = snapshot else {
+                            return StatusCode::BAD_REQUEST;
+                        };
+                        state.search_runtime.store(snapshot);
+                        StatusCode::NO_CONTENT
+                    }
+                },
+            ),
+        );
+        let control_listener = tokio::net::TcpListener::bind("127.0.0.1:4017")
+            .await
+            .unwrap();
+        let listener = tokio::net::TcpListener::bind(address).await.unwrap();
+        tokio::try_join!(
+            axum::serve(control_listener, control).into_future(),
+            axum::serve(
+                listener,
+                app.into_make_service_with_connect_info::<SocketAddr>()
+            )
+            .into_future(),
+        )
+        .unwrap();
+    }
 }
 
-async fn materialized_contract(carpet: bool) {
+async fn materialized_contract(carpet: bool) -> (tempfile::TempDir, Arc<AppState>, axum::Router) {
     let root = tempdir().unwrap();
     let lake = LakeStore::local(root.path()).unwrap();
     let store = AssetMaterializationStore::new(lake.clone());
@@ -129,6 +173,11 @@ async fn materialized_contract(carpet: bool) {
     let gold = load_society_gold_records(&lake, &gold_manifest)
         .await
         .unwrap();
+    let bundle_version = if carpet {
+        "project-enrichment-fixture-carpet"
+    } else {
+        "project-enrichment-fixture"
+    };
     let records = CatalogRecords::from_society_gold(&gold, Vec::new()).unwrap();
     ServingBundleBuilder::new(lake.clone())
         .build_from_catalog_records(
@@ -137,12 +186,12 @@ async fn materialized_contract(carpet: bool) {
             records.search_metadata,
             records.edges,
             records.rera_evidence,
-            "project-enrichment-fixture",
+            bundle_version,
         )
         .await
         .unwrap();
     let loaded = ServingBundleLoader::new(lake.clone(), root.path().join("serving-cache"))
-        .load_search_bundle("project-enrichment-fixture")
+        .load_search_bundle(bundle_version)
         .await
         .unwrap();
     for project in &projects {
@@ -300,7 +349,7 @@ async fn materialized_contract(carpet: bool) {
         .manifest
         .proof_snapshot_identity()
         .to_string();
-    let app = build_app_router_with_lake(state, lake);
+    let app = build_app_router_with_lake(state.clone(), lake);
     let response = app
         .clone()
         .oneshot(
@@ -472,6 +521,19 @@ async fn materialized_contract(carpet: bool) {
                 }
             }
         }
+        let context = &detail["context"];
+        assert_eq!(context["snapshotIdentity"], snapshot_identity);
+        assert!(context.get("surfaceId").is_none());
+        assert!(context.get("layers").is_none());
+        for feature in context["features"].as_array().unwrap() {
+            let reference: backend::serving::EvidenceRef =
+                serde_json::from_value(feature["fact"]["evidence"].clone()).unwrap();
+            assert_eq!(reference.snapshot_identity, snapshot_identity);
+            let backend::serving::EvidenceId::Observation(id) = reference.evidence_id else {
+                panic!("context fact must retain its observation");
+            };
+            assert!(loaded.evidence_index.observation(&id).is_some());
+        }
         let measurement = &detail["property"]["area_measurement"];
         assert_eq!(
             measurement["evidence"]["snapshot_identity"],
@@ -533,17 +595,7 @@ async fn materialized_contract(carpet: bool) {
             "{resource} must reject mixed snapshots"
         );
     }
-    if !carpet {
-        if let Ok(address) = std::env::var("OPENESTATES_CONTRACT_SERVER_ADDR") {
-            let listener = tokio::net::TcpListener::bind(address).await.unwrap();
-            axum::serve(
-                listener,
-                app.into_make_service_with_connect_info::<SocketAddr>(),
-            )
-            .await
-            .unwrap();
-        }
-    }
+    (root, state, app)
 }
 
 struct ProjectFixture {

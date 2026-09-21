@@ -35,6 +35,9 @@
         }
       ]
     },
+    "context": {
+      "$ref": "#/definitions/PropertyContext"
+    },
     "contract_version": {
       "type": "integer",
       "format": "uint32",
@@ -110,17 +113,6 @@
       "anyOf": [
         {
           "$ref": "#/definitions/LivabilityBrief"
-        },
-        {
-          "type": "null"
-        }
-      ]
-    },
-    "map_context": {
-      "description": "Schematic neighborhood plate: home pin, nearby POIs, optional water context.",
-      "anyOf": [
-        {
-          "$ref": "#/definitions/PropertyMapContext"
         },
         {
           "type": "null"
@@ -222,7 +214,8 @@
     "rera_report_ref",
     "area_price_range_low",
     "area_price_range_high",
-    "interest_count"
+    "interest_count",
+    "context"
   ],
   "definitions": {
     "Availability": {
@@ -407,6 +400,268 @@
         "text",
         "source_type",
         "polarity"
+      ]
+    },
+    "ConstraintOperator": {
+      "type": "string",
+      "enum": [
+        "min",
+        "max"
+      ]
+    },
+    "ContextEntity": {
+      "type": "object",
+      "properties": {
+        "entityId": {
+          "type": "string"
+        },
+        "geometry": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ContextGeometry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "geometryEvidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/EvidenceRef"
+          }
+        },
+        "geometrySource": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ContextFact"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "point": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "number",
+            "format": "double"
+          },
+          "maxItems": 2,
+          "minItems": 2
+        }
+      },
+      "required": [
+        "entityId",
+        "name",
+        "point",
+        "geometry",
+        "geometryEvidence",
+        "geometrySource"
+      ]
+    },
+    "ContextFact": {
+      "type": "object",
+      "properties": {
+        "confidence": {
+          "type": "number",
+          "format": "float"
+        },
+        "entityId": {
+          "type": "string"
+        },
+        "evidence": {
+          "$ref": "#/definitions/EvidenceRef"
+        },
+        "factKey": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "observedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "sourceType": {
+          "type": "string"
+        },
+        "sourceUrl": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "value": {
+          "$ref": "#/definitions/FactValue"
+        }
+      },
+      "required": [
+        "id",
+        "entityId",
+        "factKey",
+        "value",
+        "evidence",
+        "sourceType",
+        "sourceUrl",
+        "observedAt",
+        "confidence"
+      ]
+    },
+    "ContextFeature": {
+      "type": "object",
+      "properties": {
+        "attributes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ContextFact"
+          }
+        },
+        "distance": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/DerivedEvidence"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fact": {
+          "$ref": "#/definitions/ContextFact"
+        },
+        "target": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ContextEntity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "fact",
+        "target",
+        "attributes",
+        "distance"
+      ]
+    },
+    "ContextGeometry": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "coordinates": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "double"
+              },
+              "maxItems": 2,
+              "minItems": 2
+            },
+            "type": {
+              "type": "string",
+              "const": "Point"
+            }
+          },
+          "required": [
+            "type",
+            "coordinates"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "coordinates": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "format": "double"
+                },
+                "maxItems": 2,
+                "minItems": 2
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "LineString"
+            }
+          },
+          "required": [
+            "type",
+            "coordinates"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "coordinates": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "format": "double"
+                  },
+                  "maxItems": 2,
+                  "minItems": 2
+                }
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "Polygon"
+            }
+          },
+          "required": [
+            "type",
+            "coordinates"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "coordinates": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "number",
+                      "format": "double"
+                    },
+                    "maxItems": 2,
+                    "minItems": 2
+                  }
+                }
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "MultiPolygon"
+            }
+          },
+          "required": [
+            "type",
+            "coordinates"
+          ]
+        }
       ]
     },
     "DataFreshness": {
@@ -601,6 +856,71 @@
         "labels"
       ]
     },
+    "DerivedEvidence": {
+      "type": "object",
+      "properties": {
+        "algorithm_version": {
+          "type": "string"
+        },
+        "confidence": {
+          "type": "number",
+          "format": "float"
+        },
+        "derivation_id": {
+          "type": "string"
+        },
+        "input_evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/EvidenceRef"
+          }
+        },
+        "metric": {
+          "type": "string"
+        },
+        "relation": {
+          "type": "string"
+        },
+        "snapshot_identity": {
+          "type": "string"
+        },
+        "subject_entity_id": {
+          "type": "string"
+        },
+        "target_entity_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "unit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "value": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        }
+      },
+      "required": [
+        "derivation_id",
+        "snapshot_identity",
+        "subject_entity_id",
+        "target_entity_id",
+        "relation",
+        "metric",
+        "value",
+        "unit",
+        "algorithm_version",
+        "confidence",
+        "input_evidence"
+      ]
+    },
     "DetailSignal": {
       "type": "object",
       "properties": {
@@ -623,6 +943,26 @@
         "key",
         "label",
         "icon"
+      ]
+    },
+    "EvaluatedClaim": {
+      "type": "object",
+      "properties": {
+        "dimension": {
+          "type": "string"
+        },
+        "unit": {
+          "type": "string"
+        },
+        "value": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "dimension",
+        "value",
+        "unit"
       ]
     },
     "EvidenceDelta": {
@@ -972,6 +1312,108 @@
         }
       }
     },
+    "FactValue": {
+      "description": "What kind of value a fact holds.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "number",
+              "format": "double"
+            },
+            "type": {
+              "type": "string",
+              "const": "Numeric"
+            }
+          },
+          "required": [
+            "type",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "Text"
+            }
+          },
+          "required": [
+            "type",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "boolean"
+            },
+            "type": {
+              "type": "string",
+              "const": "Bool"
+            }
+          },
+          "required": [
+            "type",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "Tags"
+            }
+          },
+          "required": [
+            "type",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "explanation": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "number",
+                  "format": "double"
+                }
+              },
+              "required": [
+                "value",
+                "explanation"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "Score"
+            }
+          },
+          "required": [
+            "type",
+            "data"
+          ]
+        }
+      ]
+    },
     "FiledPlanPreview": {
       "type": "object",
       "properties": {
@@ -1089,6 +1531,35 @@
         "confidence"
       ]
     },
+    "HardConstraint": {
+      "type": "object",
+      "properties": {
+        "field": {
+          "description": "Registry dimension, e.g. \"land_area\".",
+          "type": "string"
+        },
+        "operator": {
+          "$ref": "#/definitions/ConstraintOperator"
+        },
+        "raw_text": {
+          "type": "string"
+        },
+        "unit": {
+          "type": "string"
+        },
+        "value": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "field",
+        "operator",
+        "value",
+        "unit",
+        "raw_text"
+      ]
+    },
     "InventoryAvailability": {
       "type": "object",
       "properties": {
@@ -1197,216 +1668,6 @@
         "themes"
       ]
     },
-    "MapHomeAnchor": {
-      "type": "object",
-      "properties": {
-        "area": {
-          "type": "string"
-        },
-        "boundary": {
-          "$ref": "#/definitions/MapOverlayPolygon"
-        },
-        "entity_id": {
-          "type": "string"
-        },
-        "latitude": {
-          "type": "number",
-          "format": "double"
-        },
-        "longitude": {
-          "type": "number",
-          "format": "double"
-        },
-        "name": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "entity_id",
-        "name"
-      ]
-    },
-    "MapOverlayLine": {
-      "type": "object",
-      "properties": {
-        "coordinates": {
-          "type": "array",
-          "items": {
-            "type": "array",
-            "items": {
-              "type": "number",
-              "format": "double"
-            },
-            "maxItems": 2,
-            "minItems": 2
-          }
-        },
-        "details": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "distance_km": {
-          "type": "number",
-          "format": "double"
-        },
-        "id": {
-          "type": "string"
-        },
-        "kind": {
-          "type": "string"
-        },
-        "label": {
-          "type": "string"
-        },
-        "name": {
-          "type": "string"
-        },
-        "source_type": {
-          "type": "string"
-        },
-        "source_url": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "id",
-        "name",
-        "kind",
-        "coordinates",
-        "source_type"
-      ]
-    },
-    "MapOverlayPolygon": {
-      "type": "object",
-      "properties": {
-        "coordinates": {
-          "type": "array",
-          "items": {
-            "type": "array",
-            "items": {
-              "type": "number",
-              "format": "double"
-            },
-            "maxItems": 2,
-            "minItems": 2
-          }
-        },
-        "distance_km": {
-          "type": "number",
-          "format": "double"
-        },
-        "id": {
-          "type": "string"
-        },
-        "kind": {
-          "type": "string"
-        },
-        "name": {
-          "type": "string"
-        },
-        "source_type": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "id",
-        "name",
-        "kind",
-        "coordinates",
-        "source_type"
-      ]
-    },
-    "MapPlacePin": {
-      "type": "object",
-      "properties": {
-        "distance_km": {
-          "type": "number",
-          "format": "double"
-        },
-        "latitude": {
-          "type": "number",
-          "format": "double"
-        },
-        "layer": {
-          "type": "string"
-        },
-        "lines": {
-          "type": "array",
-          "default": [],
-          "items": {
-            "type": "string"
-          }
-        },
-        "longitude": {
-          "type": "number",
-          "format": "double"
-        },
-        "name": {
-          "type": "string"
-        },
-        "note": {
-          "type": "string"
-        },
-        "place_entity_id": {
-          "type": "string"
-        },
-        "rating": {
-          "type": "number",
-          "format": "double"
-        },
-        "review_count": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
-        "source_type": {
-          "type": "string"
-        },
-        "source_url": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "layer",
-        "name",
-        "lines",
-        "source_type"
-      ]
-    },
-    "MapWaterContext": {
-      "type": "object",
-      "properties": {
-        "groundwater_class": {
-          "type": "string"
-        },
-        "illustrative_zone": {
-          "description": "Soft zone fill is UI geometry; class/summary are source-backed.",
-          "type": "boolean"
-        },
-        "scope_radius_km": {
-          "type": "number",
-          "format": "double"
-        },
-        "source_type": {
-          "type": "string"
-        },
-        "source_url": {
-          "type": "string"
-        },
-        "summary": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "groundwater_class",
-        "summary",
-        "scope_radius_km",
-        "source_type",
-        "illustrative_zone"
-      ]
-    },
     "Measurement": {
       "description": "A measurement is never a display number: its basis, scope and receipt travel together.",
       "type": "object",
@@ -1478,6 +1739,94 @@
       "required": [
         "provider",
         "coverage_quality"
+      ]
+    },
+    "ProofResolution": {
+      "type": "object",
+      "properties": {
+        "branchId": {
+          "type": "string"
+        },
+        "claim": {
+          "$ref": "#/definitions/EvaluatedClaim"
+        },
+        "constraint": {
+          "$ref": "#/definitions/HardConstraint"
+        },
+        "contractVersion": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "derivationChain": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/DerivedEvidence"
+          }
+        },
+        "factKey": {
+          "type": "string"
+        },
+        "geometry": true,
+        "predicateId": {
+          "type": "string"
+        },
+        "propertyId": {
+          "type": "string"
+        },
+        "relation": {
+          "type": "string"
+        },
+        "resolutionStatus": {
+          "$ref": "#/definitions/ProofResolutionStatus"
+        },
+        "semanticFingerprint": {
+          "type": "string"
+        },
+        "snapshotIdentity": {
+          "type": "string"
+        },
+        "sourceObservations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ResolvedSourceObservation"
+          }
+        },
+        "subjectEntityId": {
+          "type": "string"
+        },
+        "targetEntityId": {
+          "type": "string"
+        },
+        "targetLabel": {
+          "type": "string"
+        },
+        "unit": {
+          "type": "string"
+        },
+        "value": {
+          "$ref": "#/definitions/FactValue"
+        }
+      },
+      "required": [
+        "contractVersion",
+        "snapshotIdentity",
+        "semanticFingerprint",
+        "propertyId",
+        "branchId",
+        "predicateId",
+        "subjectEntityId",
+        "factKey",
+        "relation",
+        "sourceObservations",
+        "derivationChain",
+        "resolutionStatus"
+      ]
+    },
+    "ProofResolutionStatus": {
+      "type": "string",
+      "enum": [
+        "resolved"
       ]
     },
     "PropertyAttributes": {
@@ -1798,6 +2147,57 @@
         "facing"
       ]
     },
+    "PropertyContext": {
+      "type": "object",
+      "properties": {
+        "anchor": {
+          "$ref": "#/definitions/ContextEntity"
+        },
+        "contractVersion": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "entityRefs": {
+          "$ref": "#/definitions/KgEntityRefs"
+        },
+        "features": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ContextFeature"
+          }
+        },
+        "matchedProof": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ProofResolution"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "propertyId": {
+          "type": "string"
+        },
+        "snapshotIdentity": {
+          "type": "string"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "contractVersion",
+        "snapshotIdentity",
+        "propertyId",
+        "entityRefs",
+        "anchor",
+        "features",
+        "truncated",
+        "matchedProof"
+      ]
+    },
     "PropertyEvidenceResponse": {
       "type": "object",
       "properties": {
@@ -1821,68 +2221,6 @@
         "property_id",
         "entity_refs",
         "sections"
-      ]
-    },
-    "PropertyMapContext": {
-      "type": "object",
-      "properties": {
-        "access_lines": {
-          "type": "array",
-          "default": [],
-          "items": {
-            "$ref": "#/definitions/MapOverlayLine"
-          }
-        },
-        "green_patches": {
-          "type": "array",
-          "default": [],
-          "items": {
-            "$ref": "#/definitions/MapOverlayPolygon"
-          }
-        },
-        "home": {
-          "$ref": "#/definitions/MapHomeAnchor"
-        },
-        "lakes": {
-          "type": "array",
-          "default": [],
-          "items": {
-            "$ref": "#/definitions/MapOverlayPolygon"
-          }
-        },
-        "metro_lines": {
-          "type": "array",
-          "default": [],
-          "items": {
-            "$ref": "#/definitions/MapOverlayLine"
-          }
-        },
-        "places": {
-          "type": "array",
-          "default": [],
-          "items": {
-            "$ref": "#/definitions/MapPlacePin"
-          }
-        },
-        "red_flag_lines": {
-          "type": "array",
-          "default": [],
-          "items": {
-            "$ref": "#/definitions/MapOverlayLine"
-          }
-        },
-        "water": {
-          "$ref": "#/definitions/MapWaterContext"
-        }
-      },
-      "required": [
-        "home",
-        "places",
-        "metro_lines",
-        "access_lines",
-        "red_flag_lines",
-        "green_patches",
-        "lakes"
       ]
     },
     "RecallChannelHit": {
@@ -2620,6 +2958,44 @@
         "group",
         "label",
         "rows"
+      ]
+    },
+    "ResolvedSourceObservation": {
+      "type": "object",
+      "properties": {
+        "assetLineage": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "observationId": {
+          "type": "string"
+        },
+        "observedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "providerObservationId": {
+          "type": "string"
+        },
+        "sourceUrl": {
+          "type": "string"
+        },
+        "subjectEntityId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "observationId",
+        "provider",
+        "providerObservationId",
+        "subjectEntityId",
+        "observedAt",
+        "assetLineage"
       ]
     },
     "ReviewTone": {

@@ -112,7 +112,7 @@ export type RecommendationResponse = {
   items: RecommendationBranch[];
 };
 
-export type PropertyDetailResponse = import("../generated/PropertyDetail.ts").PropertyDetail;
+export type PropertyDetailResponse = import("../generated/PropertyDetail.ts").PropertyDetail & { map_context?: PropertyMapContext | null };
 
 export type ExternalReviewCard = {
   id: string;
@@ -391,23 +391,6 @@ export type ProofFocus = {
   requestedConstraint?: string;
   distanceM?: number;
   reason: string;
-};
-
-export type PropertySurfacesResponse = {
-  contractVersion: 1;
-  propertyId: string;
-  scenes: SurfaceSceneResponse[];
-  missing: SurfaceSceneMissing[];
-};
-
-export type SurfaceSceneMissing = {
-  surfaceId: string;
-  reason: string;
-};
-
-export type SurfaceBatchResponse = {
-  contractVersion: 1;
-  items: PropertySurfacesResponse[];
 };
 
 export type SceneAnchor = {

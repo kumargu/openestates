@@ -3,6 +3,7 @@ import journeySchema from "../generated/schema/SearchJourneyEnvelope.json" with 
 import proofSchema from "../generated/schema/SearchProofResolution.json" with { type: "json" };
 import detailSchema from "../generated/schema/PropertyDetail.json" with { type: "json" };
 import summarySchema from "../generated/schema/PropertySummaries.json" with { type: "json" };
+import contextBatchSchema from "../generated/schema/PropertyContextBatch.json" with { type: "json" };
 import contextSchema from "../generated/schema/PropertyContext.json" with { type: "json" };
 
 import proofFailureSchema from "../generated/schema/SearchProofFailure.json" with { type: "json" };
@@ -14,7 +15,7 @@ const ajv = new Ajv({ strict: false, validateFormats: false });
 const validators: Record<string, ValidateFunction> = {
   catalog: ajv.compile(catalogSchema), evidence: ajv.compile(evidenceSchema),
   journey: ajv.compile(journeySchema), proof: ajv.compile(proofSchema), proofFailure: ajv.compile(proofFailureSchema),
-  detail: ajv.compile(detailSchema), summaries: ajv.compile(summarySchema), context: ajv.compile(contextSchema),
+  detail: ajv.compile(detailSchema), summaries: ajv.compile(summarySchema), context: ajv.compile(contextSchema), contextBatch: ajv.compile(contextBatchSchema),
 };
 
 /** Decode the real wire response before it enters presentation state or a cache. */

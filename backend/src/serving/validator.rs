@@ -554,7 +554,6 @@ fn validate_record_relations(
     issues: &mut Vec<ServingBundleValidationIssue>,
 ) {
     let mut entity_ids = BTreeSet::new();
-    let mut society_by_runtime_id = BTreeMap::<String, String>::new();
     for entity in entities {
         if !entity_ids.insert(entity.entity_id.as_str()) {
             issue(
@@ -563,24 +562,6 @@ fn validate_record_relations(
                 "bundle contains the same entity id more than once",
                 Some(entity.entity_id.clone()),
             );
-        }
-        if entity.entity_type == "society" {
-            let runtime_id = format!("soc-{}", entity_slug(&entity.name));
-            if let Some(existing) =
-                society_by_runtime_id.insert(runtime_id.clone(), entity.entity_id.clone())
-            {
-                if existing != entity.entity_id {
-                    issue(
-                        issues,
-                        "ambiguous_canonical_society_identity",
-                        format!(
-                            "runtime society id {runtime_id} is produced by both {existing} and {}",
-                            entity.entity_id
-                        ),
-                        Some(runtime_id),
-                    );
-                }
-            }
         }
     }
 
@@ -721,23 +702,6 @@ fn validate_property_projection(
             );
         }
     }
-}
-
-fn entity_slug(value: &str) -> String {
-    let mut output = String::new();
-    let mut pending_dash = false;
-    for character in value.trim().to_ascii_lowercase().chars() {
-        if character.is_ascii_alphanumeric() {
-            if pending_dash && !output.is_empty() {
-                output.push('-');
-            }
-            output.push(character);
-            pending_dash = false;
-        } else {
-            pending_dash = true;
-        }
-    }
-    output
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -998,8 +962,8 @@ mod tests {
     }
 
     #[test]
-    fn repeatable_search_metadata_does_not_fail_bundle_validation() {
-        let entities = vec![super::super::ServingEntityRecord {
+    fn distinct_same_name_entities_and_repeatable_metadata_pass_validation() {
+        let mut entities = vec![super::super::ServingEntityRecord {
             entity_id: "society:test".to_string(),
             entity_type: "society".to_string(),
             name: "Test Society".to_string(),
@@ -1007,6 +971,9 @@ mod tests {
             visibility: Default::default(),
             searchable_text: String::new(),
         }];
+        let mut same_name = entities[0].clone();
+        same_name.entity_id = "society:independent".to_string();
+        entities.push(same_name);
         let facts = vec![fact(FactValue::Text("School".to_string()))];
         let metadata = super::super::ServingSearchMetadataRecord {
             entity_id: "society:test".to_string(),

@@ -186,3 +186,26 @@ export function atlasFixtureScene(surfaceId: string): SurfaceSceneResponse {
     gaps: [],
   };
 }
+
+/** Archived source geometry expressed in the domain wire contract for UI development. */
+export function atlasFixtureContext(): import("../generated/PropertyContext.ts").PropertyContext {
+  const home = data.places.find((place) => place.id === "home")!;
+  const refs = { property_entity_id: atlasFixtureId, society_entity_id: "society:prestige-waterford", area_entity_id: "area:whitefield" };
+  const fact = (id: string, factKey: string, value: string): import("../generated/PropertyContext.ts").ContextFact => ({
+    id, entityId: refs.society_entity_id, factKey, value: { type: "Text", data: value },
+    evidence: { snapshot_identity: "dev-fixture-v1", subject_entity_id: refs.society_entity_id, evidence_id: { kind: "observation", id } },
+    sourceType: "Archived fixture", sourceUrl: "https://www.openstreetmap.org/", observedAt: "2026-09-08T00:00:00Z", confidence: 1,
+  });
+  const factKeys: Record<string, string> = { metro: "nearby_metro_stations", school: "nearby_schools", hospital: "nearby_hospitals", lake: "nearby_lakes", road: "approach_road" };
+  return {
+    contractVersion: 1, snapshotIdentity: "dev-fixture-v1", propertyId: atlasFixtureId, entityRefs: refs,
+    anchor: { entityId: refs.society_entity_id, name: home.name, point: [home.lng, home.lat],
+      geometry: { type: "Polygon", coordinates: [home.boundary!.map((p) => [p.lng,p.lat])] },
+      geometrySource: fact("fixture:boundary", "geo.geometry_geojson", "Archived boundary"), geometryEvidence: [] },
+    features: data.places.filter(place => factKeys[place.kind]).map(place => ({
+      fact: fact(`fixture:${place.id}`, factKeys[place.kind], place.name),
+      target: { entityId: place.id, name: place.name, point: [place.lng,place.lat], geometry: null, geometrySource: null, geometryEvidence: [] },
+      attributes: [], distance: null,
+    })), truncated: false, matchedProof: null,
+  };
+}

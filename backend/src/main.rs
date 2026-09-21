@@ -59,10 +59,8 @@ fn main() {
     println!("  GET /api/health");
     println!("  GET /media/*path");
     println!("  GET /api/properties | /api/properties/{{id}} | /api/properties/{{id}}/evidence | /api/properties/{{id}}/rera | /api/properties/{{id}}/recommendations");
-    println!(
-        "  GET /api/properties/{{id}}/surfaces | /api/properties/{{id}}/surfaces/{{surface_id}}"
-    );
-    println!("  POST /api/properties/surfaces/batch");
+    println!("  GET /api/properties/{{id}}/context");
+    println!("  POST /api/properties/context/batch");
     println!("  GET /api/areas | /api/areas/{{id}}");
     println!("  GET /api/discovery");
     println!("  GET /api/search?q=...");

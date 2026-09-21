@@ -10,7 +10,7 @@
 //! | `resolution_policies.json` | Source conflict rules | Fact resolver |
 //! | `asset_registry.json` | Pipeline asset DAG | `openestates_registry()` |
 //! | `enrichment_targets.json` | Re-enrichment plans | `openestates-enrich` (pending) |
-//! | `ui_surfaces.json` | UI surface → leaves | Frontend/API mappers |
+//! Presentation configuration is consumed by frontend projectors.
 //! | `evidence_sections.json` | Property evidence section metadata | Property detail API |
 //! | `search_intent.json` | Buyer archetypes | Search intent (migration pending) |
 //! | `serving_eligibility.json` | Clean-bundle admission policy | Serving bundle builder + structural validator |
@@ -31,7 +31,6 @@ mod resolution;
 mod search_guardrails;
 mod search_intent;
 mod serving_eligibility;
-mod ui_surfaces;
 
 pub use community_themes::{
     community_themes_config, community_themes_path, load_community_themes,
@@ -105,9 +104,4 @@ pub use serving_eligibility::{
     load_serving_eligibility, load_serving_eligibility_from_path, serving_eligibility_path,
     EligibilityValuePredicate, ProjectedPropertyRequirement, ServingEligibilityFile,
     SocietyEvidenceRequirement,
-};
-pub use ui_surfaces::{
-    load_ui_surfaces, load_ui_surfaces_from_path, ui_surfaces_config, ui_surfaces_path,
-    UiSurfaceAnchorConfig, UiSurfaceConfig, UiSurfaceLayerExperienceConfig, UiSurfaceLayerRule,
-    UiSurfaceSceneConfig, UiSurfaceSceneExperienceConfig, UiSurfacesFile,
 };

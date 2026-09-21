@@ -4,7 +4,7 @@ import { journeyFixture, retainedFixture } from "./fixtures/search-journey.ts";
 import { projectSearchJourney, readSavedJourney, saveJourney, selectJourneyProperty, journeyEditTargets, journeyUrl, readSearchCheckpoint } from "../src/lib/search-journey.ts";
 import { primaryProofFocus, resolvedProofFocus } from "../src/lib/proof-focus.ts";
 import { searchResultReasonLabels } from "../src/lib/search.ts";
-import { getDiscovery, getPropertySurfacesBatch, resumeSearch, resumeSearchCheckpoint, reviseSearch, searchProperties, resolveSearchProof } from "../src/lib/api.ts";
+import { getDiscovery, getPropertyContextsBatch, resumeSearch, resumeSearchCheckpoint, reviseSearch, searchProperties, resolveSearchProof } from "../src/lib/api.ts";
 
 test("wire envelope projects ranked cards and server-selected proof without reparsing the query", () => {
   const envelope = journeyFixture();
@@ -148,7 +148,7 @@ test("concurrent resume effects share one stateless rebase request", async () =>
   } finally { globalThis.fetch = original; }
 });
 
-test("concurrent landing eligibility effects share one surface batch", async () => {
+test("concurrent context reads share one bounded batch", async () => {
   const original = globalThis.fetch;
   let calls = 0;
   let finish: ((response: Response) => void) | undefined;
@@ -157,13 +157,13 @@ test("concurrent landing eligibility effects share one surface batch", async () 
     return new Promise<Response>((resolve) => { finish = resolve; });
   };
   try {
-    const first = getPropertySurfacesBatch(["home"], ["arrival_story"]);
-    const second = getPropertySurfacesBatch(["home"], ["arrival_story"]);
+    const first = getPropertyContextsBatch(["home"]);
+    const second = getPropertyContextsBatch(["home"]);
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(calls, 1);
-    finish!(Response.json({ contractVersion: 1, items: [] }));
-    assert.deepEqual(await first, { contractVersion: 1, items: [] });
-    assert.deepEqual(await second, { contractVersion: 1, items: [] });
+    finish!(Response.json({ contractVersion: 1, snapshotIdentity: "fixture", items: [] }));
+    assert.deepEqual(await first, { contractVersion: 1, snapshotIdentity: "fixture", items: [] });
+    assert.deepEqual(await second, { contractVersion: 1, snapshotIdentity: "fixture", items: [] });
   } finally { globalThis.fetch = original; }
 });
 

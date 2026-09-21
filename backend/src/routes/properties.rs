@@ -35,8 +35,8 @@ use crate::community::{
 };
 use crate::dag_config::{
     evidence_sections_config, fact_registry_index_config, rera_report_surface_config,
-    ui_surfaces_config, ContextFactDefinition, EvidenceSectionDefinition,
-    EvidenceSectionPresentation, FactRegistryIndex, ReraReportSurfaceFile,
+    ContextFactDefinition, EvidenceSectionDefinition, EvidenceSectionPresentation,
+    FactRegistryIndex, ReraReportSurfaceFile,
 };
 use crate::knowledge::FactValue;
 use crate::livability_brief::{
@@ -49,7 +49,6 @@ use super::enrichment::{
     rera_document_groups, society_node_id, ReraComplaintScopeSummary, ReraDocumentManifestItem,
     ReraInfo, ReraScheduleSection,
 };
-use super::property_map::property_map_context_from_surface_scene;
 
 pub(crate) fn property_card(
     property: &crate::models::Property,
@@ -123,7 +122,7 @@ pub async fn property_summaries(
     Json(request): Json<PropertySummaryRequest>,
 ) -> Result<Json<PropertySummaries>, (StatusCode, Json<ErrorResponse>)> {
     let runtime = state.search_runtime.load_full();
-    let limits = &crate::security::security_tuning().surface_requests;
+    let limits = &crate::security::security_tuning().context_requests;
     let error = |status, code: &str| {
         (
             status,
@@ -253,9 +252,7 @@ pub struct PropertyDetail {
     /// Receipt-backed livability diligence brief composed from DAG facts and mined themes.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub livability_brief: Option<LivabilityBrief>,
-    /// Schematic neighborhood plate: home pin, nearby POIs, optional water context.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub map_context: Option<crate::routes::property_map::PropertyMapContext>,
+    pub context: crate::property_context::PropertyContext,
     /// Buyer-facing site overview + floor plans (RERA brochure promotions).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub plans: Option<crate::plans::ProjectPlansView>,
@@ -2363,19 +2360,13 @@ pub async fn get_property(
             .map(|bundle| bundle.manifest.bundle_version.clone()),
     );
 
-    let map_context = serving_bundle
-        .as_ref()
-        .and_then(|bundle| {
-            let surface = around_this_home_surface_config()?;
-            crate::surfaces::build_surface_scene(
-                &property,
-                society.as_ref().map(|society| society.name.as_str()),
-                entity_refs.clone(),
-                bundle,
-                surface,
-            )
-        })
-        .and_then(|scene| property_map_context_from_surface_scene(&scene));
+    let context = crate::property_context::build_property_context(
+        &property,
+        entity_refs.clone(),
+        &runtime.bundle,
+        &runtime.context_lookup,
+        None,
+    );
     let detail_signals = detail_signals_for(external_reviews.as_ref(), society.as_ref());
     let plans = crate::plans::project_plans_for_society(
         &entity_refs.society_entity_id,
@@ -2411,17 +2402,9 @@ pub async fn get_property(
         external_reviews,
         detail_signals,
         livability_brief,
-        map_context,
+        context,
         plans,
     }))
-}
-
-fn around_this_home_surface_config() -> Option<&'static crate::dag_config::UiSurfaceConfig> {
-    ui_surfaces_config()
-        .ok()?
-        .surfaces
-        .iter()
-        .find(|surface| surface.id == "around_this_home")
 }
 
 fn google_review_cards_for(

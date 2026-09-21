@@ -89,26 +89,11 @@ async fn pinned_live_bundle_resolves_search_receipts_into_visible_scene_evidence
                     continue;
                 }
                 assert_eq!(proof.1["targetLabel"], expected["target_label"]);
-                let default = get_surface(&app, id.as_str().unwrap(), None, 182).await;
-                let focused = get_surface(&app, id.as_str().unwrap(), Some(token), 183).await;
+                let default = get_context(&app, id.as_str().unwrap(), None, 182).await;
+                let focused = get_context(&app, id.as_str().unwrap(), Some(token), 183).await;
                 assert_eq!(focused.0, StatusCode::OK);
-                assert_eq!(focused.1["proofFocusStatus"], "applied", "{}", id);
-                let feature_id = &focused.1["proofFocus"]["featureId"];
-                let feature = focused.1["features"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .find(|feature| &feature["id"] == feature_id)
-                    .expect("focused feature is rendered");
-                assert_eq!(feature["label"], expected["target_label"]);
-                assert_eq!(
-                    feature["metrics"]["distanceM"].as_u64(),
-                    Some((proof.1["value"]["data"].as_f64().unwrap() * 1000.0).round() as u64)
-                );
-                assert_eq!(
-                    feature["receiptIds"][0],
-                    proof.1["derivationChain"][0]["derivation_id"]
-                );
+                assert_eq!(focused.1["matchedProof"], proof.1);
+                assert!(focused.1.get("surfaceId").is_none());
                 for feature in default.1["features"].as_array().unwrap() {
                     assert!(
                         focused.1["features"].as_array().unwrap().contains(feature),
@@ -280,7 +265,7 @@ async fn inventory_and_proof_use_proof_identity_independently_of_catalog_version
         .unwrap()["proofToken"]
         .as_str()
         .unwrap();
-    let surface = get_surface(&app, result["id"].as_str().unwrap(), Some(token), 204).await;
+    let surface = get_context(&app, result["id"].as_str().unwrap(), Some(token), 204).await;
     assert_eq!(surface.0, StatusCode::OK, "{}", surface.1);
 }
 
@@ -511,18 +496,11 @@ async fn regression_surface_keeps_exact_resolved_receipt() {
     .unwrap();
     let resolved = post_proof(&app, json!({"proofToken":token}), 187).await;
     assert_eq!(resolved.0, StatusCode::OK);
-    let surface = get_surface(&app, "fixture-home-3bhk", Some(&token), 188).await;
+    let surface = get_context(&app, "fixture-home-3bhk", Some(&token), 188).await;
     assert_eq!(surface.0, StatusCode::OK);
-    let receipt_id = &surface.1["proofFocus"]["receiptId"];
-    let receipt = surface.1["receipts"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|receipt| &receipt["id"] == receipt_id)
-        .unwrap();
     assert_eq!(
-        receipt["sourceUrl"], resolved.1["sourceObservations"][0]["sourceUrl"],
-        "Focused receipt changed from the exact resolved source"
+        surface.1["matchedProof"], resolved.1,
+        "Context must preserve the exact resolved receipt independently of presentation"
     );
 }
 
@@ -988,8 +966,8 @@ async fn exact_proof_resolution_and_surface_focus_share_one_identity() {
     assert_eq!(resolved.1["targetLabel"], "Fixture School 6");
     assert_eq!(resolved.1["sourceObservations"][0]["provider"], "Google");
 
-    let default_scene = get_surface(&app, "fixture-home-3bhk", None, 84).await;
-    let focused_scene = get_surface(&app, "fixture-home-3bhk", Some(&proof_token), 85).await;
+    let default_scene = get_context(&app, "fixture-home-3bhk", None, 84).await;
+    let focused_scene = get_context(&app, "fixture-home-3bhk", Some(&proof_token), 85).await;
     assert_eq!(
         default_scene.0,
         StatusCode::OK,
@@ -1002,16 +980,10 @@ async fn exact_proof_resolution_and_surface_focus_share_one_identity() {
         "response={}",
         focused_scene.1
     );
-    assert_eq!(
-        focused_scene.1["proofFocusStatus"], "applied",
-        "{}",
-        focused_scene.1
-    );
-    assert_eq!(default_scene.1["features"].as_array().unwrap().len(), 5);
-    assert_eq!(focused_scene.1["features"].as_array().unwrap().len(), 6);
-    assert_eq!(
-        focused_scene.1["proofFocus"]["entityId"],
-        "place:fixture-school-6"
+    assert_eq!(focused_scene.1["matchedProof"], resolved.1);
+    assert!(
+        default_scene.1["features"].as_array().unwrap().len() >= 6,
+        "Domain context must not apply a presentation cap"
     );
     for feature in default_scene.1["features"].as_array().unwrap() {
         assert!(focused_scene.1["features"]
@@ -1052,7 +1024,7 @@ async fn proof_tokens_reject_tampering_stale_snapshots_wrong_properties_and_miss
     let invalid = post_proof(&app, json!({"proofToken": tampered}), 93).await;
     assert_eq!(invalid.0, StatusCode::BAD_REQUEST);
     assert_eq!(invalid.1["code"], "invalid_proof_token");
-    let invalid_surface = get_surface(&app, "fixture-home-3bhk", Some(&tampered), 193).await;
+    let invalid_surface = get_context(&app, "fixture-home-3bhk", Some(&tampered), 193).await;
     assert_eq!(invalid_surface.0, StatusCode::BAD_REQUEST);
     assert_eq!(invalid_surface.1["error"], "invalid_proof_token");
 
@@ -1064,11 +1036,9 @@ async fn proof_tokens_reject_tampering_stale_snapshots_wrong_properties_and_miss
     .await;
     assert_eq!(wrong_property.0, StatusCode::CONFLICT);
     assert_eq!(wrong_property.1["code"], "proof_property_mismatch");
-    let wrong_surface = get_surface(&app, "second-home-3bhk", Some(&token), 95).await;
-    assert_eq!(wrong_surface.0, StatusCode::OK);
-    assert_eq!(wrong_surface.1["proofFocus"], Value::Null);
-    assert_eq!(wrong_surface.1["proofFocusStatus"], "mismatch");
-    assert!(wrong_surface.1["proofFocusMessage"].is_string());
+    let wrong_surface = get_context(&app, "second-home-3bhk", Some(&token), 95).await;
+    assert_eq!(wrong_surface.0, StatusCode::BAD_REQUEST);
+    assert_eq!(wrong_surface.1["error"], "proof_property_mismatch");
 
     let fake_observation = SourceObservation::new(
         "Google",
@@ -1118,9 +1088,9 @@ async fn proof_tokens_reject_tampering_stale_snapshots_wrong_properties_and_miss
     let missing = post_proof(&app, json!({"proofToken": token}), 96).await;
     assert_eq!(missing.0, StatusCode::NOT_FOUND);
     assert_eq!(missing.1["resolutionStatus"], "missingEvidence");
-    let retired_surface = get_surface(&app, "fixture-home-3bhk", Some(&token), 196).await;
-    assert_eq!(retired_surface.0, StatusCode::OK);
-    assert_eq!(retired_surface.1["proofFocusStatus"], "retired");
+    let retired_surface = get_context(&app, "fixture-home-3bhk", Some(&token), 196).await;
+    assert_eq!(retired_surface.0, StatusCode::NOT_FOUND);
+    assert_eq!(retired_surface.1["error"], "proof_evidence_missing");
     state.search_runtime.store(intact);
 
     let current = state.search_runtime.load_full();
@@ -1144,22 +1114,9 @@ async fn proof_tokens_reject_tampering_stale_snapshots_wrong_properties_and_miss
     let stale = post_proof(&app, json!({"proofToken": token}), 98).await;
     assert_eq!(stale.0, StatusCode::CONFLICT);
     assert_eq!(stale.1["code"], "stale_proof_snapshot");
-    let stale_surface = get_surface(&app, "fixture-home-3bhk", Some(&token), 99).await;
-    assert_eq!(
-        stale_surface.0,
-        StatusCode::OK,
-        "response={}",
-        stale_surface.1
-    );
-    assert_eq!(stale_surface.1["proofFocus"], Value::Null);
-    assert_eq!(stale_surface.1["proofFocusStatus"], "stale");
-    assert_eq!(
-        stale_surface.1["proofFocusMessage"],
-        "This evidence changed since your search."
-    );
-    let stale_list = get_surface_list(&app, "fixture-home-3bhk", &token, 199).await;
-    assert_eq!(stale_list.0, StatusCode::OK);
-    assert_eq!(stale_list.1["scenes"][0]["proofFocusStatus"], "stale");
+    let stale_surface = get_context(&app, "fixture-home-3bhk", Some(&token), 99).await;
+    assert_eq!(stale_surface.0, StatusCode::CONFLICT);
+    assert_eq!(stale_surface.1["error"], "stale_proof_snapshot");
 }
 
 #[tokio::test]
@@ -2377,7 +2334,7 @@ async fn post_proof(app: &Router, payload: Value, peer: u8) -> (StatusCode, Valu
     .await
 }
 
-async fn get_surface(
+async fn get_context(
     app: &Router,
     property_id: &str,
     proof_token: Option<&str>,
@@ -2389,25 +2346,7 @@ async fn get_surface(
     send(
         app,
         Method::GET,
-        &format!("/api/properties/{property_id}/surfaces/around_this_home{suffix}"),
-        Body::empty(),
-        peer,
-    )
-    .await
-}
-
-async fn get_surface_list(
-    app: &Router,
-    property_id: &str,
-    proof_token: &str,
-    peer: u8,
-) -> (StatusCode, Value) {
-    send(
-        app,
-        Method::GET,
-        &format!(
-            "/api/properties/{property_id}/surfaces?ids=around_this_home&proofToken={proof_token}"
-        ),
+        &format!("/api/properties/{property_id}/context{suffix}"),
         Body::empty(),
         peer,
     )

@@ -1,54 +1,27 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "PropertyContext",
+  "title": "ContextBatchResponse",
   "type": "object",
   "properties": {
-    "anchor": {
-      "$ref": "#/definitions/ContextEntity"
-    },
     "contractVersion": {
       "type": "integer",
       "format": "uint32",
       "minimum": 0
     },
-    "entityRefs": {
-      "$ref": "#/definitions/KgEntityRefs"
-    },
-    "features": {
+    "items": {
       "type": "array",
       "items": {
-        "$ref": "#/definitions/ContextFeature"
+        "$ref": "#/definitions/PropertyContext"
       }
-    },
-    "matchedProof": {
-      "anyOf": [
-        {
-          "$ref": "#/definitions/ProofResolution"
-        },
-        {
-          "type": "null"
-        }
-      ]
-    },
-    "propertyId": {
-      "type": "string"
     },
     "snapshotIdentity": {
       "type": "string"
-    },
-    "truncated": {
-      "type": "boolean"
     }
   },
   "required": [
     "contractVersion",
     "snapshotIdentity",
-    "propertyId",
-    "entityRefs",
-    "anchor",
-    "features",
-    "truncated",
-    "matchedProof"
+    "items"
   ],
   "definitions": {
     "ConstraintOperator": {
@@ -704,6 +677,57 @@
       "type": "string",
       "enum": [
         "resolved"
+      ]
+    },
+    "PropertyContext": {
+      "type": "object",
+      "properties": {
+        "anchor": {
+          "$ref": "#/definitions/ContextEntity"
+        },
+        "contractVersion": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "entityRefs": {
+          "$ref": "#/definitions/KgEntityRefs"
+        },
+        "features": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ContextFeature"
+          }
+        },
+        "matchedProof": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ProofResolution"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "propertyId": {
+          "type": "string"
+        },
+        "snapshotIdentity": {
+          "type": "string"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "contractVersion",
+        "snapshotIdentity",
+        "propertyId",
+        "entityRefs",
+        "anchor",
+        "features",
+        "truncated",
+        "matchedProof"
       ]
     },
     "ResolvedSourceObservation": {

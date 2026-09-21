@@ -75,12 +75,8 @@ pub fn build_app_router_with_lake(state: Arc<AppState>, lake: LakeStore) -> Rout
                 get(routes::properties::get_property_recommendations),
             )
             .route(
-                "/api/properties/{id}/surfaces/{surface_id}",
-                get(routes::surfaces::get_property_surface),
-            )
-            .route(
-                "/api/properties/{id}/surfaces",
-                get(routes::surfaces::list_property_surfaces),
+                "/api/properties/{id}/context",
+                get(routes::property_context::get_property_context),
             )
             .route("/api/areas", get(routes::areas::list_areas))
             .route("/api/areas/{id}", get(routes::areas::get_area))
@@ -122,8 +118,8 @@ pub fn build_app_router_with_lake(state: Arc<AppState>, lake: LakeStore) -> Rout
                 post(routes::properties::property_summaries),
             )
             .route(
-                "/api/properties/surfaces/batch",
-                post(routes::surfaces::get_property_surfaces_batch),
+                "/api/properties/context/batch",
+                post(routes::property_context::get_property_context_batch),
             ),
     );
 

@@ -12,7 +12,7 @@ pub struct SecurityTuning {
     pub search_cache: SearchCacheTuning,
     pub revision_cache: RevisionCacheTuning,
     pub search_journey: SearchJourneyTuning,
-    pub surface_requests: SurfaceRequestTuning,
+    pub context_requests: ContextRequestTuning,
     pub requests: RequestTuning,
     pub rate_limits: RateLimitTuning,
     pub media: MediaTuning,
@@ -63,11 +63,9 @@ pub struct SearchJourneyTuning {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct SurfaceRequestTuning {
+pub struct ContextRequestTuning {
     pub batch_property_limit: usize,
-    pub surface_id_limit: usize,
     pub max_property_id_bytes: usize,
-    pub max_surface_id_bytes: usize,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -251,23 +249,13 @@ impl SecurityTuning {
             1024,
         )?;
         bounded(
-            "surface_requests.batch_property_limit",
-            self.surface_requests.batch_property_limit,
+            "context_requests.batch_property_limit",
+            self.context_requests.batch_property_limit,
             1024,
         )?;
         bounded(
-            "surface_requests.surface_id_limit",
-            self.surface_requests.surface_id_limit,
-            128,
-        )?;
-        bounded(
-            "surface_requests.max_property_id_bytes",
-            self.surface_requests.max_property_id_bytes,
-            8 * 1024,
-        )?;
-        bounded(
-            "surface_requests.max_surface_id_bytes",
-            self.surface_requests.max_surface_id_bytes,
+            "context_requests.max_property_id_bytes",
+            self.context_requests.max_property_id_bytes,
             8 * 1024,
         )?;
         bounded(
@@ -322,19 +310,18 @@ impl SecurityTuning {
                 "requests.search_body_bytes must fit every configured search token".to_string(),
             );
         }
-        let maximum_single_surface_proof_target = self
+        let maximum_context_proof_target = self
             .search_journey
             .proof_token_max_bytes
             .saturating_add(
-                self.surface_requests
+                self.context_requests
                     .max_property_id_bytes
                     .saturating_mul(3),
             )
-            .saturating_add(self.surface_requests.max_surface_id_bytes.saturating_mul(3))
             .saturating_add(256);
-        if maximum_single_surface_proof_target > self.requests.max_request_target_bytes {
+        if maximum_context_proof_target > self.requests.max_request_target_bytes {
             return Err(
-                "proof token and surface identities must fit requests.max_request_target_bytes"
+                "proof token and context identities must fit requests.max_request_target_bytes"
                     .to_string(),
             );
         }

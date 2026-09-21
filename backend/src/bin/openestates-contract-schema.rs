@@ -20,5 +20,9 @@ fn main() {
     export::<backend::routes::properties::PropertyEvidenceResponse>(&root, "PropertyEvidence");
     export::<backend::routes::properties::PropertyDetail>(&root, "PropertyDetail");
     export::<backend::routes::properties::PropertySummaries>(&root, "PropertySummaries");
-    export::<backend::surfaces::SurfaceSceneResponse>(&root, "PropertyContext");
+    export::<backend::property_context::PropertyContext>(&root, "PropertyContext");
+    export::<backend::routes::property_context::ContextBatchResponse>(
+        &root,
+        "PropertyContextBatch",
+    );
 }

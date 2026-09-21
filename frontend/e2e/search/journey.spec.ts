@@ -41,13 +41,10 @@ async function mockJourneyApi(page: Page, staleProof = false) {
         sourceObservations: [{ provider: "fixture", providerObservationId: "exact", subjectEntityId: "society:home", observedAt: "2026-07-14T12:00:00Z", assetLineage: ["fixture/v1"], observationId: "exact", sourceUrl: "https://example.test/exact-receipt" }],
       } });
     }
-    if (path === "/api/properties/surfaces/batch") {
+    if (path === "/api/properties/context/batch") {
       const propertyIds = Array.isArray(body.propertyIds) ? body.propertyIds as string[] : [];
-      return route.fulfill({ json: { contractVersion: 1, items: propertyIds.map((propertyId) => ({
-        contractVersion: 1,
-        propertyId,
-        missing: [],
-        scenes: [{ surfaceId: "arrival_story", fillRate: { value: 0.9 } }],
+      return route.fulfill({ json: { contractVersion: 1, snapshotIdentity: "dev-fixture-v1", items: propertyIds.map((propertyId) => ({
+        ...getFixtureResponse(`/api/properties/${atlasFixtureId}/context`) as object, propertyId,
       })) } });
     }
     if (path === "/api/discovery") {

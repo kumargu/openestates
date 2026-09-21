@@ -8144,5 +8144,127 @@
   "excluded_search_fact_keys": [
     "google_review_cards",
     "google_review_snippets"
-  ]
+  ],
+  "property_context": {
+    "maximum_features": 512,
+    "geometry_fact_key": "geo.geometry_geojson",
+    "place_url_fact_key": "google_place_url",
+    "attribute_fact_keys": [
+      "google_rating",
+      "google_review_count"
+    ],
+    "bindings": {
+      "nearby_metro_stations": {
+        "linked_entity_fact_keys": [],
+        "attribute_fact_keys": []
+      },
+      "nearby_schools": {
+        "linked_entity_fact_keys": [],
+        "attribute_fact_keys": []
+      },
+      "nearby_hospitals": {
+        "linked_entity_fact_keys": [],
+        "attribute_fact_keys": []
+      },
+      "nearby_tech_parks": {
+        "linked_entity_fact_keys": [],
+        "attribute_fact_keys": []
+      },
+      "nearby_fitness": {
+        "linked_entity_fact_keys": [],
+        "attribute_fact_keys": []
+      },
+      "nearby_public_parks": {
+        "linked_entity_fact_keys": [],
+        "attribute_fact_keys": []
+      },
+      "nearby_lakes": {
+        "linked_entity_fact_keys": [],
+        "attribute_fact_keys": []
+      },
+      "lake_within_250m": {
+        "linked_entity_fact_keys": [],
+        "attribute_fact_keys": []
+      },
+      "nearby_breweries": {
+        "linked_entity_fact_keys": [],
+        "attribute_fact_keys": []
+      },
+      "nearby_graveyards": {
+        "linked_entity_fact_keys": [
+          "high_voltage_transmission_line_place_entity",
+          "stormwater_drain_place_entity"
+        ],
+        "attribute_fact_keys": []
+      },
+      "high_voltage_transmission_line_nearby": {
+        "linked_entity_fact_keys": [
+          "high_voltage_transmission_line_place_entity",
+          "stormwater_drain_place_entity"
+        ],
+        "attribute_fact_keys": []
+      },
+      "stormwater_drain_nearby": {
+        "linked_entity_fact_keys": [
+          "high_voltage_transmission_line_place_entity",
+          "stormwater_drain_place_entity"
+        ],
+        "attribute_fact_keys": []
+      },
+      "society.entrance_entity": {
+        "linked_entity_fact_keys": [
+          "society.entrance_entity"
+        ],
+        "attribute_fact_keys": [
+          "entrance.association_method",
+          "entrance.status"
+        ]
+      },
+      "approach_road": {
+        "linked_entity_fact_keys": [
+          "approach_road_entity"
+        ],
+        "attribute_fact_keys": [
+          "road.association_method",
+          "road.direction"
+        ]
+      },
+      "risk.approach_road_traffic": {
+        "linked_entity_fact_keys": [],
+        "attribute_fact_keys": []
+      },
+      "risk.approach_road_waterlogging": {
+        "linked_entity_fact_keys": [],
+        "attribute_fact_keys": []
+      },
+      "environment.groundwater_potential_class": {
+        "linked_entity_fact_keys": [],
+        "attribute_fact_keys": []
+      },
+      "environment.water_body_distance_m": {
+        "linked_entity_fact_keys": [],
+        "attribute_fact_keys": []
+      },
+      "resilience.rainwater_harvesting_present": {
+        "linked_entity_fact_keys": [],
+        "attribute_fact_keys": []
+      },
+      "risk.basement_seepage": {
+        "linked_entity_fact_keys": [],
+        "attribute_fact_keys": []
+      },
+      "rajakaluve_nearby": {
+        "linked_entity_fact_keys": [
+          "stormwater_drain_place_entity"
+        ],
+        "attribute_fact_keys": []
+      },
+      "rajakaluve_encroachment_record": {
+        "linked_entity_fact_keys": [
+          "stormwater_drain_place_entity"
+        ],
+        "attribute_fact_keys": []
+      }
+    }
+  }
 }

@@ -7,7 +7,7 @@ import type {
   SearchAreaContext,
   SearchJourneyEnvelope,
 } from "./types.ts";
-import { atlasFixtureCard, atlasFixtureId, atlasFixtureScene } from './dev-atlas-fixtures.ts';
+import { atlasFixtureCard, atlasFixtureId, atlasFixtureContext } from './dev-atlas-fixtures.ts';
 
 const now = "2026-07-11T00:00:00.000Z";
 
@@ -408,8 +408,7 @@ export function getFixtureResponse(path: string): unknown | null {
   const [pathname, queryString = ""] = path.split("?");
   const params = new URLSearchParams(queryString);
   if (pathname === `/api/properties/${atlasFixtureId}`) return makeDetail(atlasFixtureCard(fixtureProperties[0]));
-  const atlasSurface = pathname.match(new RegExp(`^/api/properties/${atlasFixtureId}/surfaces/([^/]+)$`));
-  if (atlasSurface) return atlasFixtureScene(decodeURIComponent(atlasSurface[1]));
+  if (pathname === `/api/properties/${atlasFixtureId}/context`) return atlasFixtureContext();
 
   if (pathname === "/api/properties") return fixtureProperties;
   if (pathname === "/api/areas") return fixtureAreas;
@@ -610,6 +609,11 @@ function makeDetail(card: PropertyCard): PropertyDetailResponse {
   const area = areaContexts[card.area.toLowerCase()] ?? areaContexts.whitefield;
 
   return {
+    context: card.id === atlasFixtureId ? atlasFixtureContext() : {
+      contractVersion: 1, snapshotIdentity: "dev-fixture-v1", propertyId: card.id, entityRefs: card.kg_entity_refs,
+      anchor: { entityId: card.kg_entity_refs.society_entity_id, name: card.society_name, point: null, geometry: null, geometrySource: null, geometryEvidence: [] },
+      features: [], truncated: false, matchedProof: null,
+    },
     availability: card.availability,
     contract_version: 1,
     snapshot_identity: "dev-fixture-v1",

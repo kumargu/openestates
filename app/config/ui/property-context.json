@@ -63,7 +63,13 @@
             "sort": "distance",
             "maxItems": 2,
             "enabledByDefault": true,
-            "rank": 1
+            "rank": 1,
+            "tone": "positive",
+            "kind": "place",
+            "metricFactKeys": {
+              "rating": "google_rating",
+              "reviewCount": "google_review_count"
+            }
           },
           {
             "id": "schools",
@@ -83,7 +89,13 @@
             "expandedMaxItems": 8,
             "spreadMinDistanceKm": 1.2,
             "enabledByDefault": true,
-            "rank": 2
+            "rank": 2,
+            "tone": "positive",
+            "kind": "place",
+            "metricFactKeys": {
+              "rating": "google_rating",
+              "reviewCount": "google_review_count"
+            }
           },
           {
             "id": "hospitals",
@@ -111,7 +123,13 @@
               "maternity"
             ],
             "enabledByDefault": true,
-            "rank": 3
+            "rank": 3,
+            "tone": "positive",
+            "kind": "place",
+            "metricFactKeys": {
+              "rating": "google_rating",
+              "reviewCount": "google_review_count"
+            }
           },
           {
             "id": "tech",
@@ -140,7 +158,13 @@
               "itpb"
             ],
             "enabledByDefault": true,
-            "rank": 4
+            "rank": 4,
+            "tone": "positive",
+            "kind": "place",
+            "metricFactKeys": {
+              "rating": "google_rating",
+              "reviewCount": "google_review_count"
+            }
           },
           {
             "id": "fitness",
@@ -164,7 +188,13 @@
               "cult.fit"
             ],
             "enabledByDefault": false,
-            "rank": 5
+            "rank": 5,
+            "tone": "positive",
+            "kind": "place",
+            "metricFactKeys": {
+              "rating": "google_rating",
+              "reviewCount": "google_review_count"
+            }
           },
           {
             "id": "parks",
@@ -184,7 +214,13 @@
             "expandedMaxItems": 8,
             "spreadMinDistanceKm": 1.0,
             "enabledByDefault": false,
-            "rank": 6
+            "rank": 6,
+            "tone": "neutral",
+            "kind": "place",
+            "metricFactKeys": {
+              "rating": "google_rating",
+              "reviewCount": "google_review_count"
+            }
           },
           {
             "id": "lakes",
@@ -208,7 +244,13 @@
             "expandedMaxItems": 8,
             "spreadMinDistanceKm": 1.0,
             "enabledByDefault": false,
-            "rank": 7
+            "rank": 7,
+            "tone": "neutral",
+            "kind": "place",
+            "metricFactKeys": {
+              "rating": "google_rating",
+              "reviewCount": "google_review_count"
+            }
           },
           {
             "id": "breweries",
@@ -234,7 +276,13 @@
               "beer garden"
             ],
             "enabledByDefault": false,
-            "rank": 8
+            "rank": 8,
+            "tone": "positive",
+            "kind": "place",
+            "metricFactKeys": {
+              "rating": "google_rating",
+              "reviewCount": "google_review_count"
+            }
           },
           {
             "id": "red_flags",
@@ -267,7 +315,13 @@
             "spreadMinDistanceKm": 1.0,
             "showReviewMetrics": false,
             "enabledByDefault": true,
-            "rank": 9
+            "rank": 9,
+            "tone": "risk",
+            "kind": "place",
+            "metricFactKeys": {
+              "rating": "google_rating",
+              "reviewCount": "google_review_count"
+            }
           }
         ]
       }
@@ -340,7 +394,13 @@
             "sort": "distance",
             "maxItems": 2,
             "enabledByDefault": true,
-            "rank": 1
+            "rank": 1,
+            "tone": "positive",
+            "kind": "place",
+            "metricFactKeys": {
+              "rating": "google_rating",
+              "reviewCount": "google_review_count"
+            }
           },
           {
             "id": "entrance",
@@ -370,7 +430,13 @@
             "sort": "distance",
             "maxItems": 1,
             "enabledByDefault": true,
-            "rank": 2
+            "rank": 2,
+            "tone": "positive",
+            "kind": "entrance",
+            "metricFactKeys": {
+              "rating": "google_rating",
+              "reviewCount": "google_review_count"
+            }
           },
           {
             "id": "approach_road",
@@ -427,7 +493,13 @@
               "direction": "road.direction",
               "associationMethod": "road.association_method"
             },
-            "rank": 3
+            "rank": 3,
+            "tone": "positive",
+            "kind": "approach_road",
+            "metricFactKeys": {
+              "rating": "google_rating",
+              "reviewCount": "google_review_count"
+            }
           }
         ]
       }
@@ -441,7 +513,7 @@
         "risk.approach_road_waterlogging"
       ],
       "traversal": [
-        "property \u2192 in_society \u2192 society \u2192 served_by_road \u2192 road_segment"
+        "property → in_society → society → served_by_road → road_segment"
       ],
       "components": [
         "PropertyArrivalFilm",
@@ -472,7 +544,13 @@
             "renderKind": "evidence_list",
             "maxItems": 2,
             "enabledByDefault": true,
-            "rank": 1
+            "rank": 1,
+            "tone": "risk",
+            "kind": "approach_traffic",
+            "metricFactKeys": {
+              "rating": "google_rating",
+              "reviewCount": "google_review_count"
+            }
           },
           {
             "id": "approach_waterlogging",
@@ -488,7 +566,13 @@
             "renderKind": "evidence_list",
             "maxItems": 2,
             "enabledByDefault": true,
-            "rank": 2
+            "rank": 2,
+            "tone": "risk",
+            "kind": "approach_waterlogging",
+            "metricFactKeys": {
+              "rating": "google_rating",
+              "reviewCount": "google_review_count"
+            }
           }
         ]
       }
@@ -533,7 +617,13 @@
             "renderKind": "evidence_list",
             "maxItems": 1,
             "enabledByDefault": true,
-            "rank": 1
+            "rank": 1,
+            "tone": "neutral",
+            "kind": "groundwater",
+            "metricFactKeys": {
+              "rating": "google_rating",
+              "reviewCount": "google_review_count"
+            }
           },
           {
             "id": "water_bodies",
@@ -552,7 +642,13 @@
             "sort": "distance",
             "maxItems": 2,
             "enabledByDefault": true,
-            "rank": 2
+            "rank": 2,
+            "tone": "neutral",
+            "kind": "place",
+            "metricFactKeys": {
+              "rating": "google_rating",
+              "reviewCount": "google_review_count"
+            }
           },
           {
             "id": "rainwater",
@@ -565,7 +661,13 @@
             "renderKind": "evidence_list",
             "maxItems": 1,
             "enabledByDefault": false,
-            "rank": 3
+            "rank": 3,
+            "tone": "neutral",
+            "kind": "rainwater",
+            "metricFactKeys": {
+              "rating": "google_rating",
+              "reviewCount": "google_review_count"
+            }
           }
         ]
       }
@@ -589,8 +691,8 @@
         "risk.rajakaluve_proximity"
       ],
       "traversal": [
-        "property \u2192 in_society \u2192 society",
-        "society \u2192 in_area \u2192 area"
+        "property → in_society → society",
+        "society → in_area → area"
       ],
       "components": [
         "livability_brief:operating",
@@ -620,8 +722,8 @@
         "rajakaluve_encroachment_record"
       ],
       "traversal": [
-        "property \u2192 in_society \u2192 society",
-        "society \u2192 served_by_road \u2192 road_segment"
+        "property → in_society → society",
+        "society → served_by_road → road_segment"
       ],
       "components": [
         "livability_brief:risk",
@@ -651,7 +753,13 @@
             "renderKind": "evidence_list",
             "maxItems": 2,
             "enabledByDefault": true,
-            "rank": 1
+            "rank": 1,
+            "tone": "risk",
+            "kind": "road_waterlogging",
+            "metricFactKeys": {
+              "rating": "google_rating",
+              "reviewCount": "google_review_count"
+            }
           },
           {
             "id": "basement_seepage",
@@ -664,7 +772,13 @@
             "renderKind": "evidence_list",
             "maxItems": 2,
             "enabledByDefault": true,
-            "rank": 2
+            "rank": 2,
+            "tone": "risk",
+            "kind": "basement_seepage",
+            "metricFactKeys": {
+              "rating": "google_rating",
+              "reviewCount": "google_review_count"
+            }
           },
           {
             "id": "drains",
@@ -682,7 +796,13 @@
             "renderKind": "line",
             "maxItems": 3,
             "enabledByDefault": true,
-            "rank": 3
+            "rank": 3,
+            "tone": "risk",
+            "kind": "line",
+            "metricFactKeys": {
+              "rating": "google_rating",
+              "reviewCount": "google_review_count"
+            }
           }
         ]
       }
@@ -704,7 +824,7 @@
         "operating.association_responsiveness"
       ],
       "traversal": [
-        "property \u2192 in_society \u2192 society \u2192 built_by \u2192 builder"
+        "property → in_society → society → built_by → builder"
       ],
       "components": [
         "EvidenceStack:legal",
@@ -737,7 +857,7 @@
         "risk.construction_dust"
       ],
       "traversal": [
-        "property \u2192 in_society \u2192 society"
+        "property → in_society → society"
       ],
       "components": [
         "ProjectStatusTag",
@@ -787,7 +907,7 @@
         "positive.association_responsive"
       ],
       "traversal": [
-        "property \u2192 in_society \u2192 society"
+        "property → in_society → society"
       ],
       "components": [
         "livability_brief:positive",

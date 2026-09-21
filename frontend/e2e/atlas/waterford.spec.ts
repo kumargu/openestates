@@ -40,12 +40,13 @@ test("captured facts, reviews and photos remain accessible without Google", asyn
 
 test("missing mapped road is explicit and never creates a synthetic tour", async ({ page }) => {
   // Remove geometry from the existing contract fixture, without inventing a second society.
-  await page.route("**/api/properties/*/surfaces/arrival_story", async route => {
+  await page.route("**/api/properties/*/context", async route => {
     const response = await route.fetch();
     const scene = await response.json();
-    delete scene.anchor.boundary;
-    scene.features = scene.features.filter((feature: { layerId: string }) =>
-      feature.layerId !== "entrance" && feature.layerId !== "approach_road");
+    scene.anchor.geometry = null;
+    scene.anchor.geometrySource = null;
+    scene.features = scene.features.filter((feature: { fact: { factKey: string } }) =>
+      feature.fact.factKey !== "society.entrance_entity" && feature.fact.factKey !== "approach_road");
     await route.fulfill({ response, json: scene });
   });
   await page.route("https://maps.googleapis.com/**", route => route.abort());

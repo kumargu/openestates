@@ -205,7 +205,7 @@ impl EvidenceRef {
         Ok(())
     }
 
-    fn stable_key(&self) -> String {
+    pub(crate) fn stable_key(&self) -> String {
         serde_json::to_string(self).expect("evidence references contain only serializable fields")
     }
 }

@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { nearbyPlacesByDistance, nearbyBrowseWindow } from '../src/lib/atlasBrowse.ts';
-import detail from '../fixtures/prestige-waterford-api/property-detail.json' with {type: 'json'};
-import type { PropertyDetailResponse } from '../src/lib/types.ts';
+import mapRenderer from '../fixtures/prestige-waterford-api/map-renderer.json' with {type: 'json'};
+import type { PropertyMapContext } from '../src/lib/types.ts';
 import { resolveHomeAnchor } from '../src/lib/nearbyPlateProjection.ts';
 import policy from '../src/lib/atlasPolicy.ts';
 
-const context = (detail as unknown as PropertyDetailResponse).map_context;
+const context = mapRenderer as unknown as PropertyMapContext;
 const home = resolveHomeAnchor(context)!;
 
 test('all nearby categories sort by their displayed distance without mutating serving facts', () => {

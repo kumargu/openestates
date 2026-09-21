@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 const api = "http://127.0.0.1:4016";
 
 test("materialized evidence survives search, detail, selected-home reads and return", async ({ page, request }, info) => {
+  expect((await request.post("http://127.0.0.1:4017/snapshot/original")).ok()).toBeTruthy();
   const errors: string[] = [];
   const reads: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -17,6 +18,7 @@ test("materialized evidence survives search, detail, selected-home reads and ret
   await page.screenshot({ path: info.outputPath("search-resting.png") });
   const selected = await (await request.get(`${api}/api/properties/${links[0].split("/").pop()}`)).json();
   const selectedPrice = `₹${(selected.property.price / 10_000_000).toFixed(2)}Cr`;
+  const detailHref = await cards.first().getAttribute("href");
   await cards.first().click();
   await expect(page.locator("details.property-search-match")).toBeVisible();
   await expect(page.getByText(/receipt.*expired/i)).toHaveCount(0);
@@ -61,10 +63,25 @@ test("materialized evidence survives search, detail, selected-home reads and ret
   const search = await (await request.get(`${api}/api/search?q=3BHK`)).json();
   const ids = search.active.results.orderedResultIds;
   const snapshotIdentity = search.runtimeVersion.snapshotIdentity;
-  const batch = await request.post(`${api}/api/properties/batch`, { data: { propertyIds: [ids[1], ids[0]], snapshotIdentity } });
-  expect(batch.ok()).toBeTruthy();
-  expect((await batch.json()).items.map((item: { id: string }) => item.id)).toEqual([ids[1], ids[0]]);
+  await expect(async () => {
+    const batch = await request.post(`${api}/api/properties/batch`, { data: { propertyIds: [ids[1], ids[0]], snapshotIdentity } });
+    expect(batch.ok(), `${batch.status()}: ${await batch.text()}`).toBeTruthy();
+    expect((await batch.json()).items.map((item: { id: string }) => item.id)).toEqual([ids[1], ids[0]]);
+  }).toPass({ intervals: [250, 500], timeout: 5000 });
   const stale = await request.get(`${api}/api/properties/${ids[0]}?snapshotIdentity=retired`);
   expect(stale.status()).toBe(409);
   expect((await stale.json()).error).toBe("stale_snapshot");
+
+  expect((await request.post("http://127.0.0.1:4017/snapshot/updated")).ok()).toBeTruthy();
+  await page.goto(detailHref!);
+  await expect(page.getByRole("heading", { name: "This evidence changed since your search." })).toBeVisible();
+  await expect(page.locator("details.property-search-match")).toHaveCount(0);
+  await page.screenshot({ path: info.outputPath("snapshot-changed.png") });
+  await page.getByRole("link", { name: "Search again", exact: true }).click();
+  await expect(cards.first()).toBeVisible();
+  const updatedSearch = await (await request.get(`${api}/api/search?q=3BHK`)).json();
+  expect(updatedSearch.runtimeVersion.snapshotIdentity).not.toBe(snapshotIdentity);
+  await cards.first().click();
+  await expect(page.locator("details.property-search-match")).toBeVisible();
+  await expect(page.getByText("This evidence changed since your search.", { exact: true })).toHaveCount(0);
 });

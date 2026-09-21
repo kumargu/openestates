@@ -1,3 +1,4 @@
+import { projectPropertyContext } from "../lib/property-context.ts";
 import measurementPresentation from "../../../app/config/ui/measurements.json";
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import {
@@ -16,8 +17,8 @@ import type {
 import {
   getProperty,
   ApiError,
-  getPropertySurface,
-  getPropertySurfacesBatch,
+  getPropertyContext,
+  getPropertyContextsBatch,
   propertyDetailPath,
   resolveSearchProof,
 } from "../lib/api.ts";
@@ -236,7 +237,7 @@ function PropertyPageBody({
   const [searchContextSocieties, setSearchContextSocieties] =
     useState<ArrivalSearchSociety[]>([]);
   const [status, setStatus] = useState<
-    "loading" | "error" | "not_found" | "ok"
+    "loading" | "error" | "not_found" | "stale" | "ok"
   >("loading");
   const [retryKey, setRetryKey] = useState(0);
   const discoveryMapContext = useMemo(
@@ -275,7 +276,8 @@ function PropertyPageBody({
       })
       .catch((err: Error) => {
         if (controller.signal.aborted) return;
-        setStatus(err.message.includes("404") ? "not_found" : "error");
+        setData(null);
+        setStatus(err instanceof ApiError && err.status === 409 ? "stale" : err.message.includes("404") ? "not_found" : "error");
       });
 
     return () => {
@@ -295,15 +297,14 @@ function PropertyPageBody({
       return () => { cancelled = true; };
     }
     const controller = new AbortController();
-    void getPropertySurfacesBatch(
+    void getPropertyContextsBatch(
       candidates.map((candidate) => candidate.propertyId),
-      [ARRIVAL_STORY_SURFACE_ID],
       { signal: controller.signal, snapshotIdentity: data?.snapshot_identity },
     ).then((response) => {
       if (controller.signal.aborted) return;
       const scenesByPropertyId = new Map(response.items.map((item) => [
         item.propertyId,
-        item.scenes.find((scene) => scene.surfaceId === ARRIVAL_STORY_SURFACE_ID),
+        projectPropertyContext(item, ARRIVAL_STORY_SURFACE_ID),
       ]));
       const resolved = candidates.flatMap((candidate) => {
         const scene = scenesByPropertyId.get(candidate.propertyId);
@@ -351,15 +352,14 @@ function PropertyPageBody({
     if (!propertyId) return;
     let cancelled = false;
 
-    getPropertySurface(
+    getPropertyContext(
       propertyId,
-      initialPropertySurfaceId(proofFocus),
-      propertySceneProofFocus(proofFocus),
+      propertySceneProofFocus(proofFocus)?.proofToken,
       { snapshotIdentity: data.snapshot_identity },
     )
-      .then((scene) => {
+      .then((context) => {
         if (!cancelled) {
-          setAroundThisHomeScene(scene);
+          setAroundThisHomeScene(projectPropertyContext(context, initialPropertySurfaceId(proofFocus), proofFocus?.proofToken));
         }
       })
       .catch(() => {
@@ -376,10 +376,10 @@ function PropertyPageBody({
     if (!propertyId) return;
     let cancelled = false;
 
-    getPropertySurface(propertyId, ARRIVAL_STORY_SURFACE_ID, undefined, { snapshotIdentity: data.snapshot_identity })
-      .then((scene) => {
+    getPropertyContext(propertyId, undefined, { snapshotIdentity: data.snapshot_identity })
+      .then((context) => {
         if (cancelled) return;
-        setArrivalScene(scene);
+        setArrivalScene(projectPropertyContext(context, ARRIVAL_STORY_SURFACE_ID));
         setArrivalSceneStatus("ready");
       })
       .catch(() => {
@@ -444,6 +444,14 @@ function PropertyPageBody({
         </section>
       </div>
     );
+  if (status === "stale") return (
+    <div className="page-state" role="status">
+      <h2>This evidence changed since your search.</h2>
+      <Link className="page-state__action page-state__action--primary" to={`/?q=${encodeURIComponent(propertySearchContext?.queryLabel ?? "")}`}>
+        Search again
+      </Link>
+    </div>
+  );
   if (status === "not_found")
     return (
       <PageState

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   propertyDetailPath,
-  propertySurfacePath,
+  propertyContextPath,
 } from "../src/lib/api.ts";
 import {
   availableLayers,
@@ -76,10 +76,10 @@ test("detail and surface carry only signed proof identity, never client claims",
   assert.equal(detailUrl.searchParams.get("qf"), "q123");
 
   const surfaceUrl = new URL(
-    propertySurfacePath("property id/with slash", "around_this_home", focus),
+    propertyContextPath("property id/with slash", focus.proofToken),
     "http://test.local",
   );
-  assert.equal(surfaceUrl.pathname, "/api/properties/property%20id%2Fwith%20slash/surfaces/around_this_home");
+  assert.equal(surfaceUrl.pathname, "/api/properties/property%20id%2Fwith%20slash/context");
   assert.equal(surfaceUrl.searchParams.get("proofToken"), focus.proofToken);
   assert.equal(surfaceUrl.searchParams.has("focus"), false);
   assert.equal(propertyDetailPath("home", { ...focus, proofToken: undefined }), "/property/home");

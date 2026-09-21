@@ -28,6 +28,7 @@ pub const SEARCH_ENGINE_VERSION: &str = "openestates-search-runtime-v3";
 
 pub struct SearchRuntimeSnapshot {
     pub bundle: Arc<LoadedServingBundle>,
+    pub context_lookup: crate::property_context::ContextLookup,
     pub properties: Arc<[Property]>,
     pub property_by_id: HashMap<String, usize>,
     pub browse_cards: HashMap<String, BrowsePropertyCard>,
@@ -160,6 +161,7 @@ impl SearchRuntimeSnapshot {
             })
             .collect();
         Self {
+            context_lookup: crate::property_context::ContextLookup::from_bundle(&bundle),
             bundle,
             properties: Arc::from(properties),
             property_by_id,

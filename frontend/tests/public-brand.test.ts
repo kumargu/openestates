@@ -24,7 +24,6 @@ test("public product surfaces use the 80feet brand", async () => {
     resolve(frontendRoot, "index.html"),
     resolve(frontendRoot, "public/favicon.svg"),
     resolve(repositoryRoot, "app/config/dag/search_guardrails.json"),
-    resolve(repositoryRoot, "backend/src/routes/property_map.rs"),
     ...await sourceFilesUnder(resolve(frontendRoot, "src")),
   ];
 

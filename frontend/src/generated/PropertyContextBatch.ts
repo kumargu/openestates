@@ -60,6 +60,11 @@ export type FactValue =
 export type ConstraintOperator = "min" | "max";
 export type ProofResolutionStatus = "resolved";
 
+export interface ContextBatchResponse {
+  contractVersion: number;
+  items: PropertyContext[];
+  snapshotIdentity: string;
+}
 export interface PropertyContext {
   anchor: ContextEntity;
   contractVersion: number;
