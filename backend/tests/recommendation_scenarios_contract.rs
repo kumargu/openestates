@@ -389,6 +389,7 @@ fn property(spec: &PropertySpec) -> Property {
         price_per_sqft: spec.ppsf,
         carpet_area_sqft: if listable { 1_350 } else { 0 },
         super_builtup_sqft: if listable { 1_650 } else { 0 },
+        area_measurement: None,
         floor: 8,
         total_floors: 20,
         facing: "East".to_string(),

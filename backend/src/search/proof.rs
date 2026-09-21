@@ -23,7 +23,7 @@ pub struct ProofDestination {
     pub target_id: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ProofTokenIdentity {
     version: u32,
@@ -39,11 +39,12 @@ struct ProofTokenIdentity {
     relation: String,
     evidence_refs: Vec<EvidenceRef>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    destination: Option<ProofDestination>,
+    constraint: Option<super::intent::HardConstraint>,
 }
 
 #[derive(Debug, Clone)]
 pub struct ProofIssueRequest<'a> {
+    pub constraint: Option<&'a super::intent::HardConstraint>,
     pub snapshot_identity: &'a str,
     pub semantic_fingerprint: &'a str,
     pub property_id: &'a str,
@@ -72,6 +73,8 @@ pub struct ProofResolution {
     pub target_label: Option<String>,
     pub fact_key: String,
     pub relation: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub constraint: Option<super::intent::HardConstraint>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub value: Option<FactValue>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -209,7 +212,7 @@ pub fn issue_proof_token(request: ProofIssueRequest<'_>) -> Result<String, Strin
         fact_key: request.fact_key.to_string(),
         relation: request.relation.to_string(),
         evidence_refs: request.evidence_refs.to_vec(),
-        destination: proof_destination_for_fact_key(request.fact_key),
+        constraint: request.constraint.cloned(),
     };
     encode_signed(
         PROOF_TOKEN_PURPOSE,
@@ -248,9 +251,6 @@ pub fn resolve_proof_token(
         .ok_or(ProofResolutionError::WrongProperty)?;
     if !subject_belongs_to_property(snapshot, property, &identity.subject_entity_id) {
         return Err(ProofResolutionError::WrongSubject);
-    }
-    if proof_destination_for_fact_key(&identity.fact_key) != identity.destination {
-        return Err(ProofResolutionError::DestinationMismatch);
     }
 
     let mut value = None;
@@ -316,6 +316,7 @@ pub fn resolve_proof_token(
             .and_then(|index| snapshot.bundle.entities.get(*index))
             .map(|entity| entity.name.clone())
     });
+    let destination = proof_destination_for_fact_key(&identity.fact_key);
     Ok(ProofResolution {
         contract_version: 1,
         snapshot_identity: identity.snapshot_identity,
@@ -328,6 +329,7 @@ pub fn resolve_proof_token(
         target_label,
         fact_key: identity.fact_key,
         relation: identity.relation,
+        constraint: identity.constraint,
         value,
         unit,
         source_observations: observations
@@ -337,7 +339,7 @@ pub fn resolve_proof_token(
         derivation_chain: derivations,
         geometry,
         resolution_status: ProofResolutionStatus::Resolved,
-        destination: identity.destination,
+        destination,
     })
 }
 

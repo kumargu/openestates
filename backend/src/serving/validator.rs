@@ -733,14 +733,6 @@ fn validate_property_projection(
                 Some(property.id.clone()),
             );
         }
-        if property.carpet_area_sqft == 0 {
-            issue(
-                issues,
-                "incomplete_property_size",
-                "property card requires positive size data",
-                Some(property.id.clone()),
-            );
-        }
     }
 }
 

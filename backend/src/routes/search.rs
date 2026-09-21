@@ -757,6 +757,7 @@ mod tests {
             price_per_sqft: 7500,
             carpet_area_sqft: 1200,
             super_builtup_sqft: 1500,
+            area_measurement: None,
             floor: 5,
             total_floors: 20,
             facing: "East".into(),
@@ -809,6 +810,7 @@ mod tests {
                 price_min: Some(10_000_000),
                 price_max: Some(10_000_000),
                 size_sqft: Some(1_500),
+                area_measurement: None,
                 evidence_reference: Some(EvidenceRef::for_observation(
                     snapshot_identity,
                     &observation,

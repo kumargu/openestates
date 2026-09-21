@@ -35,6 +35,7 @@ pub fn inventory_options(properties: &[Property]) -> HashMap<String, InventoryOp
                     price_max: property.price_max.or(exact_price),
                     size_sqft: (property.super_builtup_sqft > 0)
                         .then_some(property.super_builtup_sqft),
+                    area_measurement: None,
                     evidence_reference: Some(EvidenceRef::for_observation(
                         SNAPSHOT_IDENTITY,
                         &observation,

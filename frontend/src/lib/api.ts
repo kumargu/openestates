@@ -8,7 +8,6 @@ import type {
   RecommendationResponse,
   AreaListItem,
   AreaDetail,
-  AreaTrackerResponse,
   DiscoveryResponse,
   SearchResponse,
   SearchJourneyEnvelope,
@@ -281,10 +280,6 @@ export function getAreas(options?: ApiFetchOptions): Promise<AreaListItem[]> {
 
 export function getArea(id: string): Promise<AreaDetail> {
   return fetchJson(`/api/areas/${encodeURIComponent(id)}`);
-}
-
-export function getAreaTracker(options?: ApiFetchOptions): Promise<AreaTrackerResponse> {
-  return fetchJson("/api/areas/tracker", options);
 }
 
 export function searchProperties(

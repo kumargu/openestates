@@ -745,6 +745,7 @@ fn project_reasons(
             &branch.predicate_bindings,
         ));
         let Ok(proof_token) = issue_proof_token(ProofIssueRequest {
+            constraint: verified.constraint.as_ref(),
             snapshot_identity: snapshot.bundle.manifest.proof_snapshot_identity(),
             semantic_fingerprint: &plan.semantic_fingerprint,
             property_id: &result.card.id,
@@ -808,6 +809,7 @@ fn project_reasons(
                 evidence_id: identity.evidence_id.clone(),
             }];
             let Ok(proof_token) = issue_proof_token(ProofIssueRequest {
+                constraint: None,
                 snapshot_identity: snapshot.bundle.manifest.proof_snapshot_identity(),
                 semantic_fingerprint: &plan.semantic_fingerprint,
                 property_id: &result.card.id,
@@ -847,6 +849,9 @@ fn binding_for_verified<'a>(
                 verified.metric.contains("bhk") && verified.predicate == format!("{value} BHK")
             }
             ConstraintTerm::Budget { .. } => verified.metric.contains("price"),
+            ConstraintTerm::Evidence { constraint, .. } => {
+                verified.constraint.as_ref() == Some(constraint)
+            }
             ConstraintTerm::Spatial {
                 entity_id,
                 relation,

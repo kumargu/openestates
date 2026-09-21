@@ -1032,16 +1032,27 @@ impl<'a> GeoSearchQuery<'a> {
             .and_then(|rows| self.society_rows_match_clause_distance_fact(rows, clause));
         match fact_distance {
             Some((distance_km, fact)) => match fact.observation.as_ref().and_then(|observation| {
-                verified_spatial_match(
-                    society_entity_id,
-                    None,
-                    clause,
-                    "serving_distance_fact",
-                    Some(distance_km),
-                    fact.confidence,
-                    snapshot_identity,
-                    vec![EvidenceRef::for_observation(snapshot_identity, observation)],
-                )
+                observation.validate().ok()?;
+                Some(VerifiedMatch {
+                    constraint: None,
+                    subject_entity_id: society_entity_id.to_string(),
+                    target_entity_id: None,
+                    predicate: clause.target_text.clone(),
+                    relation: clause.relation.clone(),
+                    metric: "serving_distance_fact".to_string(),
+                    value: Some(distance_km),
+                    unit: Some("km".to_string()),
+                    observation_ids: Vec::new(),
+                    evidence_refs: vec![EvidenceRef::for_observation(
+                        snapshot_identity,
+                        observation,
+                    )],
+                    fact_key: Some(fact.fact_key.clone()),
+                    derived_evidence: None,
+                    algorithm_version: "spatial-evaluator-v2".to_string(),
+                    confidence: fact.confidence,
+                    snapshot_identity: snapshot_identity.to_string(),
+                })
             }) {
                 Some(matched) => {
                     BooleanEvaluation::from_predicate(PredicateEvaluation::Satisfied(matched))
@@ -1386,6 +1397,7 @@ fn verified_spatial_match(
     .ok()?;
     let evidence_reference = EvidenceRef::for_derivation(&derivation);
     Some(VerifiedMatch {
+        constraint: None,
         subject_entity_id: subject_entity_id.to_string(),
         target_entity_id: target_entity_id.map(str::to_string),
         predicate: clause.target_text.clone(),
@@ -1418,6 +1430,7 @@ fn verified_spatial_derivation_match(
         return None;
     }
     Some(VerifiedMatch {
+        constraint: None,
         subject_entity_id: subject_entity_id.to_string(),
         target_entity_id: target_entity_id.map(str::to_string),
         predicate: clause.target_text.clone(),
@@ -2194,6 +2207,7 @@ mod tests {
             price_per_sqft: 12_000,
             carpet_area_sqft: 1_200,
             super_builtup_sqft: 1_550,
+            area_measurement: None,
             floor: 8,
             total_floors: 20,
             facing: "East".to_string(),

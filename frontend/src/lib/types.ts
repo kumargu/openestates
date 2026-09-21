@@ -1012,41 +1012,6 @@ export type AreaDetail = {
   community_notes: string;
 };
 
-export type AreaTrackerMarket = {
-  id: string;
-  name: string;
-  city: string;
-  listing_count: number;
-  avg_price_per_sqft: number;
-  price_min: number;
-  price_max: number;
-  bhks: number[];
-  ready_to_move: number;
-  near_metro: number;
-  top_builder: string;
-  societies: number;
-  median_price_per_sqft: number;
-  price_range_per_sqft: {
-    low: number;
-    high: number;
-  };
-  trend_direction: string;
-  primary_signal: string;
-  demand_score: number;
-  recent_searches: number;
-  last_searched_at?: string;
-  evidence_gap_count: number;
-  sample_size: number;
-  last_updated: string;
-};
-
-export type AreaTrackerResponse = {
-  generated_at: string;
-  total_areas: number;
-  total_listings: number;
-  markets: AreaTrackerMarket[];
-};
-
 export type UpcomingLaunchCard = {
   id: string;
   builder_name: string;

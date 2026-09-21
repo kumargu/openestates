@@ -12,10 +12,8 @@ use crate::dag_config::{
     ResolutionPoliciesFile,
 };
 use crate::discovery::load_discovery_config;
-use crate::knowledge;
-use crate::knowledge::fact::{google_reviews_url_from_facts, FactValue};
+use crate::knowledge::fact::FactValue;
 use crate::knowledge::graph::KnowledgeGraph;
-use crate::knowledge::node::NodeType;
 use crate::models::area_profile::{PriceRange, RedditSignals};
 use crate::models::{AreaProfile, Property, Society};
 use crate::search::SearchIndex;
@@ -288,12 +286,34 @@ fn representative_property_from_serving_society(
     let price = pricing
         .map(|pricing| pricing.representative_price())
         .unwrap_or(0);
-    let carpet_area_sqft = pricing
+    let listed_area_sqft = pricing
         .map(|pricing| pricing.representative_sqft())
         .unwrap_or(0);
     let (price_min, price_max) = pricing.map(listing_band).unwrap_or((None, None));
-    let price_per_sqft = if price > 0 && carpet_area_sqft > 0 {
-        price / carpet_area_sqft as u64
+    let carpet_area_sqft = pricing
+        .filter(|p| p.area_basis == AreaBasis::Carpet)
+        .map(|p| p.sqft)
+        .unwrap_or(0);
+    let super_builtup_sqft = pricing
+        .filter(|p| p.area_basis == AreaBasis::SuperBuiltUp)
+        .map(|p| p.sqft)
+        .unwrap_or(0);
+    let area_measurement = pricing.and_then(|pricing| {
+        let fact = latest_fact(Some(rows), &format!("listing_{bhk}bhk"))?;
+        let observation = fact.observation.as_ref()?;
+        observation.validate().ok()?;
+        Some(crate::models::Measurement {
+            value: pricing.sqft as f64,
+            minimum: Some(pricing.sqft_low as f64),
+            maximum: Some(pricing.sqft_high as f64),
+            unit: "sqft".to_string(),
+            basis: pricing.area_basis.label().to_string(),
+            entity_id: id.clone(),
+            evidence: crate::serving::EvidenceRef::for_observation(bundle_version, observation),
+        })
+    });
+    let price_per_sqft = if price > 0 && listed_area_sqft > 0 {
+        price / listed_area_sqft as u64
     } else {
         0
     };
@@ -335,7 +355,8 @@ fn representative_property_from_serving_society(
         price_max,
         price_per_sqft,
         carpet_area_sqft,
-        super_builtup_sqft: carpet_area_sqft,
+        super_builtup_sqft,
+        area_measurement,
         floor: 0,
         total_floors: 0,
         facing: "Not specified".to_string(),
@@ -537,6 +558,7 @@ fn property_from_serving_entity(
             .unwrap_or(0.0)
             .round()
             .max(0.0) as u32,
+        area_measurement: None,
         floor: latest_numeric(rows, "floor")
             .unwrap_or(0.0)
             .round()
@@ -1067,274 +1089,6 @@ fn title_case_slug(value: &str) -> String {
         .join(" ")
 }
 
-/// Derive Society structs from KG society nodes.
-///
-/// Extracts known fact keys into the flat Society struct fields.
-/// Missing facts get sensible defaults — KG nodes may have sparse data
-/// when offline enrichment has not filled every dimension yet.
-pub fn societies_from_graph(graph: &KnowledgeGraph) -> Vec<Society> {
-    graph
-        .nodes_of_type(NodeType::Society)
-        .into_iter()
-        .map(|node| {
-            // Strip "society:" prefix from node id to get the plain id
-            let id = node
-                .id
-                .strip_prefix("society:")
-                .unwrap_or(&node.id)
-                .to_string();
-
-            let google_place_id: Option<String> = fact_text(node, "google_place_id").into_option();
-            Society {
-                id,
-                name: node.name.clone(),
-                area: fact_text(node, "area").into(),
-                city: fact_text(node, "city").into(),
-                builder_name: fact_text(node, "builder_name").into(),
-                year_built: fact_numeric(node, "year_built") as u32,
-                total_units: fact_numeric(node, "total_units") as u32,
-                summary: fact_text(node, "summary").into(),
-                maintenance_sentiment: fact_text(node, "maintenance_sentiment")
-                    .or_fact_text(node, "google_sentiment")
-                    .into(),
-                livability_sentiment: fact_text(node, "livability_sentiment").into(),
-                common_positives: fact_tags(node, "common_positives")
-                    .or_fact_tags(node, "google_top_positives")
-                    .into(),
-                common_complaints: fact_tags(node, "common_complaints")
-                    .or_fact_tags(node, "google_top_negatives")
-                    .into(),
-                review_summary: fact_text(node, "review_summary")
-                    .or_fact_text(node, "google_common_themes")
-                    .into(),
-                google_reviews_url: google_reviews_url_from_facts(&node.facts, &node.name),
-                future_google_place_name: node.name.clone(),
-                future_google_place_id: google_place_id,
-                future_review_enrichment_status: String::from("kg_derived"),
-            }
-        })
-        .collect()
-}
-
-/// Derive AreaProfile structs from KG area nodes.
-///
-/// KG area nodes have a different fact schema than legacy seed JSON, so we
-/// map available facts and default the rest. The old fields like
-/// `airport_noise_summary` and `reddit_signals` may not exist in KG yet.
-#[cfg(test)]
-fn areas_from_graph(graph: &KnowledgeGraph) -> Vec<AreaProfile> {
-    graph
-        .nodes_of_type(NodeType::Area)
-        .into_iter()
-        .map(|node| {
-            let id = node
-                .id
-                .strip_prefix("area:")
-                .unwrap_or(&node.id)
-                .to_string();
-
-            AreaProfile {
-                id,
-                name: node.name.clone(),
-                city: fact_text(node, "city").into(),
-                median_price_per_sqft: fact_numeric(node, "median_price_per_sqft") as u64,
-                price_range_per_sqft: PriceRange { low: 0, high: 0 },
-                trend_direction: fact_text(node, "trend_direction")
-                    .or_fact_text(node, "price_trend")
-                    .into(),
-                trend_summary: fact_text(node, "trend_summary").into(),
-                metro_access_summary: fact_text(node, "metro_details")
-                    .or_fact_text(node, "metro_access")
-                    .into(),
-                airport_noise_summary: fact_text(node, "airport_noise_summary").into(),
-                traffic_summary: fact_text(node, "traffic")
-                    .or_fact_text(node, "traffic_reality")
-                    .into(),
-                waterlogging_summary: fact_text(node, "waterlogging")
-                    .or_fact_text(node, "waterlogging_risk")
-                    .or_fact_text(node, "waterlogging_detail")
-                    .into(),
-                livability_summary: fact_text(node, "livability")
-                    .or_fact_text(node, "livability_summary")
-                    .or_fact_text(node, "area_vibe")
-                    .into(),
-                externality_tags: fact_tags(node, "externality_tags").into(),
-                infrastructure_tags: fact_tags(node, "infrastructure_tags")
-                    .or_fact_tags(node, "upcoming_infra")
-                    .into(),
-                reddit_signals: RedditSignals {
-                    decision_drivers: fact_tags(node, "reddit_decision_drivers").into(),
-                    recurring_concerns: fact_tags(node, "reddit_concerns").into(),
-                    sentiment_label: fact_text(node, "reddit_sentiment").into(),
-                    last_updated: String::new(),
-                },
-                community_notes: fact_text(node, "community_notes").into(),
-                sample_size: 0,
-                last_updated: node.updated_at.to_rfc3339(),
-            }
-        })
-        .collect()
-}
-
-/// Derive Property structs from KG property nodes.
-///
-/// Maps KG fact keys (area, city, bhk, price, etc.) to Property struct fields.
-/// Missing facts get conservative defaults so sparse local nodes can still render.
-pub fn properties_from_graph(graph: &KnowledgeGraph) -> Vec<Property> {
-    graph
-        .nodes_of_type(NodeType::Property)
-        .into_iter()
-        .map(|node| {
-            // Strip "property:" prefix from node id
-            let id = node
-                .id
-                .strip_prefix("property:")
-                .unwrap_or(&node.id)
-                .to_string();
-
-            // Derive society_id from property slug:
-            // "discovered-prestige-park-grove-3bhk" → "soc-prestige-park-grove"
-            let society_id = derive_society_id(&id);
-
-            let area: String = fact_text(node, "area").into();
-            let area_slug = area.to_lowercase().replace(' ', "-");
-            let bhk = fact_numeric(node, "bhk") as u32;
-            let mut price = fact_numeric(node, "price") as u64;
-            let mut carpet_area_sqft = fact_numeric(node, "carpet_area_sqft") as u32;
-            let mut price_min = None;
-            let mut price_max = None;
-            if let Some(pricing) = market_pricing_for_property(graph, &id, bhk) {
-                let price_confidence = fact_confidence(node, "price");
-                let sqft_confidence = fact_confidence(node, "carpet_area_sqft");
-                (price, carpet_area_sqft, price_min, price_max) = resolve_listing_pricing(
-                    price,
-                    carpet_area_sqft,
-                    price_confidence,
-                    sqft_confidence,
-                    pricing,
-                );
-            }
-            let price_per_sqft = if carpet_area_sqft > 0 && price > 0 {
-                price / carpet_area_sqft as u64
-            } else {
-                0
-            };
-
-            let title: String = fact_text(node, "title").into();
-            let title = if title.is_empty() {
-                if bhk > 0 {
-                    format!("{} BHK in {}", bhk, node.name)
-                } else {
-                    node.name.clone()
-                }
-            } else {
-                title
-            };
-
-            let description: String = fact_text(node, "description_summary").into();
-            let description = if description.is_empty() {
-                let builder: String = fact_text(node, "builder_name").into();
-                format!("{} by {} in {}", node.name, builder, area)
-            } else {
-                description
-            };
-
-            let mut tags: Vec<String> = fact_tags(node, "transparency_tags").into();
-            if tags.is_empty() {
-                tags.push("Discovered via Search".to_string());
-                tags.push("Verification Pending".to_string());
-            }
-
-            Property {
-                id,
-                title,
-                area: area.clone(),
-                area_id: format!("area-{}", area_slug),
-                city: fact_text(node, "city").into(),
-                society_id,
-                builder_name: fact_text(node, "builder_name").into(),
-                property_type: {
-                    let t: String = fact_text(node, "property_type").into();
-                    if t.is_empty() {
-                        "Apartment".to_string()
-                    } else {
-                        t
-                    }
-                },
-                listing_type: {
-                    let t: String = fact_text(node, "listing_type").into();
-                    if t.is_empty() {
-                        "Resale".to_string()
-                    } else {
-                        t
-                    }
-                },
-                bhk,
-                price,
-                price_min,
-                price_max,
-                price_per_sqft,
-                carpet_area_sqft,
-                super_builtup_sqft: fact_numeric(node, "super_builtup_sqft") as u32,
-                floor: fact_numeric(node, "floor") as u32,
-                total_floors: fact_numeric(node, "total_floors") as u32,
-                facing: {
-                    let f: String = fact_text(node, "facing").into();
-                    if f.is_empty() {
-                        "Not specified".to_string()
-                    } else {
-                        f
-                    }
-                },
-                possession_status: {
-                    let p: String = fact_text(node, "possession_status").into();
-                    if p.is_empty() {
-                        "unknown".to_string()
-                    } else {
-                        p
-                    }
-                },
-                metro_distance_mins: fact_numeric(node, "metro_distance_mins") as u32,
-                maintenance_cost_monthly: fact_numeric(node, "maintenance_cost_monthly") as u32,
-                society_quality_score: optional_fact_numeric(node, "society_quality_score"),
-                builder_quality_score: optional_fact_numeric(node, "builder_quality_score"),
-                document_completeness_score: optional_fact_numeric(
-                    node,
-                    "document_completeness_score",
-                ),
-                litigation_risk: optional_fact_numeric(node, "litigation_risk"),
-                noise_score: optional_fact_numeric(node, "noise_score"),
-                sunlight_score: optional_fact_numeric(node, "sunlight_score"),
-                airport_noise_score: optional_fact_numeric(node, "airport_noise_score"),
-                waterlogging_risk_score: optional_fact_numeric(node, "waterlogging_risk_score"),
-                traffic_score: optional_fact_numeric(node, "traffic_score"),
-                days_on_market: fact_numeric(node, "days_on_market") as u32,
-                greenery_score: None,
-                open_space_score: None,
-                resale_strength_score: None,
-                interest_level: None,
-                saves_last_7d: None,
-                offers_last_7d: None,
-                images: {
-                    let imgs: Vec<String> = fact_tags(node, "images").into();
-                    imgs
-                },
-                hero_image: fact_text(node, "hero_image").into(),
-                description_summary: description,
-                transparency_tags: tags,
-                source_reference: {
-                    let s: String = fact_text(node, "source_reference").into();
-                    if s.is_empty() {
-                        "Knowledge Graph".to_string()
-                    } else {
-                        s
-                    }
-                },
-            }
-        })
-        .collect()
-}
-
 /// Derive society_id from a property slug.
 ///
 /// Strips BHK suffix (e.g. "-3bhk") and "discovered-" prefix, then prepends "soc-".
@@ -1369,6 +1123,37 @@ struct MarketPricing {
     sqft_low: u32,
     sqft_high: u32,
     basis: PricingBasis,
+    area_basis: AreaBasis,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum AreaBasis {
+    Carpet,
+    BuiltUp,
+    SuperBuiltUp,
+    Mixed,
+    Unspecified,
+}
+
+impl AreaBasis {
+    fn from_source(value: Option<&str>) -> Self {
+        match value.unwrap_or_default().replace(['-', '_'], " ").as_str() {
+            "carpet" | "carpet area" => Self::Carpet,
+            "built up" => Self::BuiltUp,
+            "super built up" => Self::SuperBuiltUp,
+            "mixed listed area" | "mixed" => Self::Mixed,
+            _ => Self::Unspecified,
+        }
+    }
+    fn label(self) -> &'static str {
+        match self {
+            Self::Carpet => "carpet",
+            Self::BuiltUp => "built_up",
+            Self::SuperBuiltUp => "super_builtup",
+            Self::Mixed => "mixed",
+            Self::Unspecified => "unspecified",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1409,7 +1194,8 @@ fn resolve_listing_pricing(
         && should_replace_price(price, price_confidence, pricing);
     let discard_weak_direct_price = pricing.basis == PricingBasis::ProjectAggregate
         && should_replace_price(price, price_confidence, pricing);
-    let replace_sqft = should_replace_sqft(sqft, sqft_confidence, pricing);
+    let replace_sqft = pricing.area_basis == AreaBasis::Carpet
+        && should_replace_sqft(sqft, sqft_confidence, pricing);
     let (price_min, price_max) = if replace_price {
         listing_band(pricing)
     } else {
@@ -1437,25 +1223,6 @@ fn resolve_listing_pricing(
     )
 }
 
-fn market_pricing_for_property(
-    graph: &KnowledgeGraph,
-    property_id: &str,
-    bhk: u32,
-) -> Option<MarketPricing> {
-    if bhk == 0 {
-        return None;
-    }
-
-    let society_id = derive_society_id(property_id);
-    let slug = society_id.strip_prefix("soc-")?;
-    let society_node = graph.get_node(&format!("society:{}", slug))?;
-    let listing_text: String = fact_text(society_node, &format!("listing_{}bhk", bhk)).into();
-    parse_listing_pricing(&listing_text).or_else(|| {
-        let pricing_text: String = fact_text(society_node, &format!("pricing_{}bhk", bhk)).into();
-        parse_market_pricing(&pricing_text)
-    })
-}
-
 fn parse_market_pricing(raw: &str) -> Option<MarketPricing> {
     if raw.trim().is_empty() {
         return None;
@@ -1478,6 +1245,7 @@ fn parse_market_pricing(raw: &str) -> Option<MarketPricing> {
         sqft_low: sqft_low.round() as u32,
         sqft_high: sqft_high.round() as u32,
         basis: PricingBasis::ProjectAggregate,
+        area_basis: AreaBasis::Unspecified,
     })
 }
 
@@ -1531,6 +1299,7 @@ fn parse_listing_pricing(raw: &str) -> Option<MarketPricing> {
         sqft_low: sqft_low.round() as u32,
         sqft_high: sqft_high.round() as u32,
         basis: PricingBasis::ProjectAggregate,
+        area_basis: AreaBasis::from_source(value.get("area_type").and_then(|v| v.as_str())),
     })
 }
 
@@ -1549,6 +1318,7 @@ fn parse_text_listing_pricing(raw: &str) -> Option<MarketPricing> {
         sqft_low: sqft,
         sqft_high: sqft,
         basis: PricingBasis::ProjectAggregate,
+        area_basis: AreaBasis::Unspecified,
     })
 }
 
@@ -1609,101 +1379,6 @@ fn should_replace_sqft(sqft: u32, sqft_confidence: f32, pricing: MarketPricing) 
     sqft == 0 || sqft < sqft_low_floor || sqft > sqft_high_ceiling
 }
 
-// --- Fact extraction helpers ---
-
-/// A string wrapper that supports fallback chaining via `.or_fact_text()`.
-struct FactStr(String);
-
-impl FactStr {
-    /// If this string is empty, try another fact key from the node.
-    fn or_fact_text(self, node: &knowledge::node::Node, key: &str) -> Self {
-        if self.0.is_empty() {
-            fact_text(node, key)
-        } else {
-            self
-        }
-    }
-
-    fn into_option(self) -> Option<String> {
-        if self.0.is_empty() {
-            None
-        } else {
-            Some(self.0)
-        }
-    }
-}
-
-/// Allow implicit conversion to String for struct field assignment.
-impl From<FactStr> for String {
-    fn from(f: FactStr) -> String {
-        f.0
-    }
-}
-
-/// A tags wrapper that supports fallback chaining via `.or_fact_tags()`.
-struct FactTags(Vec<String>);
-
-impl FactTags {
-    fn or_fact_tags(self, node: &knowledge::node::Node, key: &str) -> Self {
-        if self.0.is_empty() {
-            fact_tags(node, key)
-        } else {
-            self
-        }
-    }
-}
-
-impl From<FactTags> for Vec<String> {
-    fn from(f: FactTags) -> Vec<String> {
-        f.0
-    }
-}
-
-/// Extract a text fact value, returning empty string if missing.
-fn fact_text(node: &knowledge::node::Node, key: &str) -> FactStr {
-    let s = node
-        .get_fact(key)
-        .map(|f| match &f.value {
-            FactValue::Text(t) => t.clone(),
-            FactValue::Numeric(n) => n.to_string(),
-            FactValue::Bool(b) => b.to_string(),
-            FactValue::Score { value, .. } => value.to_string(),
-            FactValue::Tags(tags) => tags.join(", "),
-        })
-        .unwrap_or_default();
-    FactStr(s)
-}
-
-/// Extract a numeric fact value, returning 0.0 if missing.
-fn fact_numeric(node: &knowledge::node::Node, key: &str) -> f64 {
-    optional_fact_numeric(node, key).unwrap_or(0.0)
-}
-
-fn optional_fact_numeric(node: &knowledge::node::Node, key: &str) -> Option<f64> {
-    node.get_fact(key).and_then(|fact| match &fact.value {
-        FactValue::Numeric(value) if value.is_finite() => Some(*value),
-        FactValue::Score { value, .. } if value.is_finite() => Some(*value),
-        _ => None,
-    })
-}
-
-fn fact_confidence(node: &knowledge::node::Node, key: &str) -> f32 {
-    node.get_fact(key).map(|f| f.confidence).unwrap_or(0.0)
-}
-
-/// Extract a tags fact value, returning empty vec if missing.
-fn fact_tags(node: &knowledge::node::Node, key: &str) -> FactTags {
-    let tags = node
-        .get_fact(key)
-        .map(|f| match &f.value {
-            FactValue::Tags(t) => t.clone(),
-            FactValue::Text(t) if !t.is_empty() => vec![t.clone()],
-            _ => Vec::new(),
-        })
-        .unwrap_or_default();
-    FactTags(tags)
-}
-
 fn root_source_display_label(root_source: &str) -> &'static str {
     match root_source {
         "seller" => "Self-reported",
@@ -1718,8 +1393,6 @@ fn root_source_display_label(root_source: &str) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::knowledge::fact::SourcedFact;
-    use crate::knowledge::node::Node;
     use chrono::{TimeZone, Utc};
     use tempfile::tempdir;
 
@@ -1891,6 +1564,7 @@ mod tests {
             sqft_low: 1_000,
             sqft_high: 2_500,
             basis: PricingBasis::ProjectAggregate,
+            area_basis: AreaBasis::Unspecified,
         };
 
         let resolved = resolve_listing_pricing(45_000_000, 2_000, 0.9, 0.9, market);
@@ -1908,6 +1582,7 @@ mod tests {
             sqft_low: 1_000,
             sqft_high: 2_500,
             basis: PricingBasis::ProjectAggregate,
+            area_basis: AreaBasis::Unspecified,
         };
 
         let resolved = resolve_listing_pricing(45_000_000, 1, 0.9, 0.2, market);
@@ -1925,6 +1600,7 @@ mod tests {
             sqft_low: 1_300,
             sqft_high: 1_700,
             basis: PricingBasis::ProjectAggregate,
+            area_basis: AreaBasis::Unspecified,
         };
 
         let resolved = resolve_listing_pricing(0, 0, 0.0, 0.0, aggregate);
@@ -2319,275 +1995,6 @@ mod tests {
         assert_eq!(properties[0].price, 12_500_000);
     }
 
-    fn make_society_node(slug: &str, name: &str, area: &str, builder: &str) -> Node {
-        let id = format!("society:{}", slug);
-        let mut node = Node::new(&id, NodeType::Society, name);
-        node.add_facts(vec![
-            SourcedFact::manual("area", FactValue::Text(area.into())),
-            SourcedFact::manual("city", FactValue::Text("Bengaluru".into())),
-            SourcedFact::manual("builder_name", FactValue::Text(builder.into())),
-            SourcedFact::manual("year_built", FactValue::Numeric(2020.0)),
-            SourcedFact::manual("total_units", FactValue::Numeric(500.0)),
-            SourcedFact::manual("summary", FactValue::Text("A great society".into())),
-        ]);
-        node
-    }
-
-    fn make_area_node(slug: &str, name: &str) -> Node {
-        let id = format!("area:{}", slug);
-        let mut node = Node::new(&id, NodeType::Area, name);
-        node.add_facts(vec![
-            SourcedFact::manual("city", FactValue::Text("Bengaluru".into())),
-            SourcedFact::manual("metro_access", FactValue::Text("operational".into())),
-            SourcedFact::manual("area_vibe", FactValue::Text("Tech hub".into())),
-        ]);
-        node
-    }
-
-    #[test]
-    fn test_societies_from_graph() {
-        let mut graph = KnowledgeGraph::new();
-        graph.add_node(make_society_node(
-            "test-society",
-            "Test Society",
-            "Whitefield",
-            "Test Builder",
-        ));
-        graph.rebuild_indexes();
-
-        let societies = societies_from_graph(&graph);
-        assert_eq!(societies.len(), 1);
-        let s = &societies[0];
-        assert_eq!(s.id, "test-society");
-        assert_eq!(s.name, "Test Society");
-        assert_eq!(s.area, "Whitefield");
-        assert_eq!(s.builder_name, "Test Builder");
-        assert_eq!(s.year_built, 2020);
-        assert_eq!(s.total_units, 500);
-    }
-
-    #[test]
-    fn test_areas_from_graph() {
-        let mut graph = KnowledgeGraph::new();
-        graph.add_node(make_area_node("whitefield", "Whitefield"));
-        graph.rebuild_indexes();
-
-        let areas = areas_from_graph(&graph);
-        assert_eq!(areas.len(), 1);
-        let a = &areas[0];
-        assert_eq!(a.id, "whitefield");
-        assert_eq!(a.name, "Whitefield");
-        assert_eq!(a.city, "Bengaluru");
-        // metro_access_summary falls back to metro_access
-        assert_eq!(a.metro_access_summary, "operational");
-        // livability_summary falls back to area_vibe
-        assert_eq!(a.livability_summary, "Tech hub");
-    }
-
-    #[test]
-    fn test_society_sparse_data_defaults() {
-        let mut graph = KnowledgeGraph::new();
-        // Minimal node — only name, no facts
-        let node = Node::new("society:sparse", NodeType::Society, "Sparse Society");
-        graph.add_node(node);
-        graph.rebuild_indexes();
-
-        let societies = societies_from_graph(&graph);
-        assert_eq!(societies.len(), 1);
-        let s = &societies[0];
-        assert_eq!(s.id, "sparse");
-        assert_eq!(s.name, "Sparse Society");
-        assert_eq!(s.area, "");
-        assert_eq!(s.year_built, 0);
-        assert_eq!(s.total_units, 0);
-    }
-
-    fn make_property_node(
-        slug: &str,
-        name: &str,
-        area: &str,
-        builder: &str,
-        bhk: u32,
-        price: f64,
-    ) -> Node {
-        let id = format!("property:{}", slug);
-        let mut node = Node::new(&id, NodeType::Property, name);
-        node.add_facts(vec![
-            SourcedFact::manual("area", FactValue::Text(area.into())),
-            SourcedFact::manual("city", FactValue::Text("Bengaluru".into())),
-            SourcedFact::manual("builder_name", FactValue::Text(builder.into())),
-            SourcedFact::manual("bhk", FactValue::Numeric(bhk as f64)),
-            SourcedFact::manual("price", FactValue::Numeric(price)),
-            SourcedFact::manual("carpet_area_sqft", FactValue::Numeric(1200.0)),
-            SourcedFact::manual("title", FactValue::Text(format!("{} BHK in {}", bhk, name))),
-        ]);
-        node
-    }
-
-    fn low_conf_numeric_fact(key: &str, value: f64) -> SourcedFact {
-        let mut fact = SourcedFact::manual(key, FactValue::Numeric(value));
-        fact.confidence = 0.6;
-        fact
-    }
-
-    #[test]
-    fn test_properties_from_graph() {
-        let mut graph = KnowledgeGraph::new();
-        graph.add_node(make_property_node(
-            "discovered-prestige-lakeside-3bhk",
-            "Prestige Lakeside Habitat",
-            "Whitefield",
-            "Prestige Group",
-            3,
-            15000000.0,
-        ));
-        graph.rebuild_indexes();
-
-        let properties = properties_from_graph(&graph);
-        assert_eq!(properties.len(), 1);
-        let p = &properties[0];
-        assert_eq!(p.id, "discovered-prestige-lakeside-3bhk");
-        assert_eq!(p.area, "Whitefield");
-        assert_eq!(p.city, "Bengaluru");
-        assert_eq!(p.builder_name, "Prestige Group");
-        assert_eq!(p.bhk, 3);
-        assert_eq!(p.price, 15000000);
-        assert_eq!(p.carpet_area_sqft, 1200);
-        assert_eq!(p.price_per_sqft, 12500); // 15000000 / 1200
-        assert_eq!(p.title, "3 BHK in Prestige Lakeside Habitat");
-        assert_eq!(p.society_id, "soc-prestige-lakeside");
-        assert_eq!(p.property_type, "Apartment");
-        assert_eq!(p.listing_type, "Resale");
-    }
-
-    #[test]
-    fn test_property_sparse_defaults() {
-        let mut graph = KnowledgeGraph::new();
-        // Minimal node — only name, no facts
-        let node = Node::new(
-            "property:minimal-prop",
-            NodeType::Property,
-            "Minimal Property",
-        );
-        graph.add_node(node);
-        graph.rebuild_indexes();
-
-        let properties = properties_from_graph(&graph);
-        assert_eq!(properties.len(), 1);
-        let p = &properties[0];
-        assert_eq!(p.id, "minimal-prop");
-        assert_eq!(p.area, "");
-        assert_eq!(p.bhk, 0);
-        assert_eq!(p.price, 0);
-        assert_eq!(p.price_per_sqft, 0);
-        assert_eq!(p.carpet_area_sqft, 0);
-        assert_eq!(p.property_type, "Apartment");
-        assert_eq!(p.facing, "Not specified");
-        assert_eq!(p.possession_status, "unknown");
-        // Missing quality/risk scores stay absent — no bootstrap defaults.
-        assert!(p.society_quality_score.is_none());
-        assert!(p.litigation_risk.is_none());
-        assert!(p
-            .transparency_tags
-            .contains(&"Discovered via Search".to_string()));
-        assert!(p.greenery_score.is_none());
-    }
-
-    #[test]
-    fn test_low_confidence_property_does_not_borrow_society_market_price() {
-        let mut graph = KnowledgeGraph::new();
-        let mut society = make_society_node(
-            "prestige-raintree-park",
-            "Prestige Raintree Park",
-            "Whitefield",
-            "Prestige Group",
-        );
-        society.add_fact(SourcedFact::manual(
-            "pricing_3bhk",
-            FactValue::Text(
-                r#"{"bhk":"3BHK","price_range_lakh":"259-353","sqft_range":"2004-2482"}"#.into(),
-            ),
-        ));
-        graph.add_node(society);
-
-        let id = "property:discovered-prestige-raintree-park-3bhk";
-        let mut property = Node::new(id, NodeType::Property, "Prestige Raintree Park");
-        property.add_facts(vec![
-            SourcedFact::manual("area", FactValue::Text("Whitefield".into())),
-            SourcedFact::manual("city", FactValue::Text("Bengaluru".into())),
-            SourcedFact::manual("builder_name", FactValue::Text("Prestige Group".into())),
-            SourcedFact::manual("bhk", FactValue::Numeric(3.0)),
-            low_conf_numeric_fact("price", 11_500_000.0),
-            low_conf_numeric_fact("carpet_area_sqft", 521.0),
-            SourcedFact::manual(
-                "title",
-                FactValue::Text("3 BHK in Prestige Raintree Park".into()),
-            ),
-        ]);
-        graph.add_node(property);
-        graph.rebuild_indexes();
-
-        let properties = properties_from_graph(&graph);
-        let p = properties
-            .iter()
-            .find(|p| p.id == "discovered-prestige-raintree-park-3bhk")
-            .expect("property should be derived");
-        assert_eq!(p.price, 0);
-        assert_eq!(p.carpet_area_sqft, 2243);
-        assert_eq!(p.price_per_sqft, 0);
-    }
-
-    #[test]
-    fn test_low_confidence_property_does_not_borrow_external_project_listing() {
-        let mut graph = KnowledgeGraph::new();
-        let mut society = make_society_node(
-            "prestige-raintree-park",
-            "Prestige Raintree Park",
-            "Whitefield",
-            "Prestige Group",
-        );
-        society.add_facts(vec![
-            SourcedFact::manual(
-                "listing_3bhk",
-                FactValue::Text(r#"{"price":31000000,"area_sqft":1900}"#.into()),
-            ),
-            SourcedFact::manual(
-                "pricing_3bhk",
-                FactValue::Text(
-                    r#"{"bhk":"3BHK","price_range_lakh":"259-353","sqft_range":"2004-2482"}"#
-                        .into(),
-                ),
-            ),
-        ]);
-        graph.add_node(society);
-
-        let id = "property:discovered-prestige-raintree-park-3bhk";
-        let mut property = Node::new(id, NodeType::Property, "Prestige Raintree Park");
-        property.add_facts(vec![
-            SourcedFact::manual("area", FactValue::Text("Whitefield".into())),
-            SourcedFact::manual("city", FactValue::Text("Bengaluru".into())),
-            SourcedFact::manual("builder_name", FactValue::Text("Prestige Group".into())),
-            SourcedFact::manual("bhk", FactValue::Numeric(3.0)),
-            low_conf_numeric_fact("price", 11_500_000.0),
-            low_conf_numeric_fact("carpet_area_sqft", 521.0),
-            SourcedFact::manual(
-                "title",
-                FactValue::Text("3 BHK in Prestige Raintree Park".into()),
-            ),
-        ]);
-        graph.add_node(property);
-        graph.rebuild_indexes();
-
-        let properties = properties_from_graph(&graph);
-        let p = properties
-            .iter()
-            .find(|p| p.id == "discovered-prestige-raintree-park-3bhk")
-            .expect("property should be derived");
-        assert_eq!(p.price, 0);
-        assert_eq!(p.carpet_area_sqft, 1900);
-        assert_eq!(p.price_per_sqft, 0);
-    }
-
     #[test]
     fn test_parse_number_range() {
         assert_eq!(parse_number_range("259-353"), Some((259.0, 353.0)));
@@ -2610,37 +2017,6 @@ mod tests {
             derive_society_id("discovered-some-project"),
             "soc-some-project"
         );
-    }
-
-    #[test]
-    fn test_fact_text_fallback_chain() {
-        let mut node = Node::new("society:test", NodeType::Society, "Test");
-        // Only add google_sentiment, not maintenance_sentiment
-        node.add_fact(SourcedFact::manual(
-            "google_sentiment",
-            FactValue::Text("positive".into()),
-        ));
-
-        let result: String = fact_text(&node, "maintenance_sentiment")
-            .or_fact_text(&node, "google_sentiment")
-            .into();
-        assert_eq!(result, "positive");
-    }
-
-    fn listing_payload(price: f64, sqft: f64) -> String {
-        listing_payload_range(price, price, price, sqft)
-    }
-
-    fn listing_payload_range(price: f64, price_min: f64, price_max: f64, sqft: f64) -> String {
-        serde_json::json!({
-            "price": price,
-            "price_min": price_min,
-            "price_max": price_max,
-            "area_sqft": sqft,
-            "area_sqft_min": sqft,
-            "area_sqft_max": sqft
-        })
-        .to_string()
     }
 
     fn serving_fact(

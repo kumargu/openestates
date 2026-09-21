@@ -1152,6 +1152,7 @@ fn property_with_description(
         price_per_sqft: 12_000,
         carpet_area_sqft: 1_200,
         super_builtup_sqft: 1_550,
+        area_measurement: None,
         floor: 8,
         total_floors: 20,
         facing: "East".to_string(),

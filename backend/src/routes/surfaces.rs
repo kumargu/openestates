@@ -13,10 +13,7 @@ use crate::search::proof::{
 };
 use crate::security::security_tuning;
 use crate::state::AppState;
-use crate::surfaces::{
-    build_surface_scene_with_focus, merge_surface_context_polygons, ProofFocusStatus,
-    SceneGeometry, SurfaceSceneResponse,
-};
+use crate::surfaces::{build_surface_scene_with_focus, ProofFocusStatus, SurfaceSceneResponse};
 
 #[derive(Debug, Serialize)]
 pub struct ErrorResponse {
@@ -218,15 +215,6 @@ async fn build_property_surfaces_response(
                     scene.proof_focus_status = ProofFocusStatus::Unavailable;
                     scene.proof_focus_message =
                         Some(config.proof_focus_messages.unavailable.clone());
-                }
-                if let Some(SceneGeometry::Point { coordinates }) = scene.anchor.geometry.as_ref() {
-                    let (green_patches, lakes) = crate::routes::map_overlays::clip_green_patches(
-                        state.map_overlays.as_ref(),
-                        (coordinates[1], coordinates[0]),
-                    );
-                    let context_polygons =
-                        green_patches.into_iter().chain(lakes).collect::<Vec<_>>();
-                    merge_surface_context_polygons(&mut scene, surface, &context_polygons);
                 }
                 scenes.push(scene);
             }

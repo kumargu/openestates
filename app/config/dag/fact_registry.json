@@ -3022,7 +3022,7 @@
       "dimension": "carpet_area",
       "label": "Carpet area",
       "fact_keys": [],
-      "runtime_field": "carpet_area_sqft",
+      "measurement_basis": "carpet",
       "query_units": [
         {
           "unit": "sqft",
@@ -3039,7 +3039,7 @@
         }
       ],
       "proof_sources": [],
-      "scoring_method": "serving-property"
+      "scoring_method": "inventory-measurement"
     },
     {
       "dimension": "lake_distance",

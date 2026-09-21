@@ -21,7 +21,7 @@ use super::analyzer;
 use super::ast::ConstraintTerm;
 #[cfg(test)]
 use super::ast::IntentAst;
-use super::evaluation::{InventoryOption, VerifiedMatch};
+use super::evaluation::{BooleanEvaluation, InventoryOption, VerifiedMatch};
 use super::geo;
 use super::index::{
     property_matches_excluded_builder, property_matches_excluded_society, SearchIndex,
@@ -244,6 +244,7 @@ impl CandidateEvaluator {
                     p,
                     serving_facts,
                     society_entity_id.as_ref(),
+                    evaluation,
                 )?;
 
                 let society_name = society_names
@@ -531,6 +532,7 @@ impl CandidateEvaluator {
                     sqft: p.carpet_area_sqft,
                     carpet_area_sqft: p.carpet_area_sqft,
                     super_builtup_sqft: p.super_builtup_sqft,
+                    area_measurement: p.area_measurement.clone(),
                     society_name: society_name.to_string(),
                     builder_name: p.builder_name.clone(),
                     images: p.images.clone(),
@@ -1443,121 +1445,127 @@ fn match_hard_constraints(
     property: &Property,
     serving_facts: Option<&ServingFactIndex>,
     society_entity_id: &str,
+    evaluation: SearchEvaluationContext<'_>,
 ) -> Option<Vec<EvidenceMatch>> {
-    if constraints.is_empty() {
-        return Some(Vec::new());
-    }
-
-    let mut matches = Vec::new();
-
-    for constraint in constraints {
-        let schema = schema::numeric_constraint_schema(&constraint.field)?;
-        if let Some(evidence) = runtime_numeric_constraint_evidence(property, schema, constraint) {
-            matches.push(evidence);
-            continue;
-        }
-        let serving_evaluation = serving_facts
-            .map(|index| {
-                serving_numeric_constraint_evidence(index, society_entity_id, schema, constraint)
+    constraints
+        .iter()
+        .map(|constraint| {
+            let result = numeric_constraint_evaluation(
+                constraint,
+                property,
+                serving_facts,
+                society_entity_id,
+                evaluation,
+            );
+            if result.state != super::evaluation::EvaluationState::Satisfied {
+                return None;
+            }
+            let verified = result.verified_matches.first()?;
+            let reference = verified.evidence_refs.first()?;
+            let schema = schema::numeric_constraint_schema(&constraint.field)?;
+            Some(EvidenceMatch {
+                preference: constraint.raw_text.clone(),
+                fact_key: verified.fact_key.clone()?,
+                fact_key_rank: usize::MAX,
+                display: format!(
+                    "{}: {} {}",
+                    schema.label,
+                    format_measurement(verified.value?),
+                    constraint.unit
+                ),
+                normalized_score: 1.0,
+                ranking_score: 1.0,
+                score_delta: 2.0,
+                confidence: verified.confidence,
+                source_type: "ServingBundle".to_string(),
+                scoring_method: schema.scoring_method.clone(),
+                reason: format!("proved constraint: {}", constraint.raw_text),
+                evidence_identity: Some(MatchEvidenceIdentity {
+                    subject_entity_id: reference.subject_entity_id.clone(),
+                    evidence_id: reference.evidence_id.clone(),
+                }),
             })
-            .unwrap_or(ConstraintEvaluation::Missing);
-        match serving_evaluation {
-            ConstraintEvaluation::Matched(evidence) => matches.push(*evidence),
-            ConstraintEvaluation::Failed | ConstraintEvaluation::Missing => return None,
-        }
-    }
-
-    Some(matches)
+        })
+        .collect()
 }
 
-fn runtime_numeric_constraint_evidence(
+fn numeric_constraint_evaluation(
+    constraint: &HardConstraint,
     property: &Property,
-    schema: &NumericConstraintSchema,
-    constraint: &HardConstraint,
-) -> Option<EvidenceMatch> {
-    let runtime_field = schema.runtime_field.as_deref()?;
-    let value = match runtime_field {
-        "carpet_area_sqft" => f64::from(property.carpet_area_sqft),
-        "super_builtup_sqft" => f64::from(property.super_builtup_sqft),
-        _ => return None,
-    };
-    let query_unit = schema
-        .query_units
-        .iter()
-        .find(|unit| unit.unit.eq_ignore_ascii_case(&constraint.unit))?;
-    let threshold = constraint.value * query_unit.to_canonical;
-    let matches = match constraint.operator {
-        ConstraintOperator::Min => value + 0.001 >= threshold,
-        ConstraintOperator::Max => value - 0.001 <= threshold,
-    };
-    matches.then(|| EvidenceMatch {
-        preference: constraint.raw_text.clone(),
-        fact_key: runtime_field.to_string(),
-        fact_key_rank: usize::MAX,
-        display: format!(
-            "{}: {} {}",
-            schema.label,
-            format_measurement(value / query_unit.to_canonical),
-            query_unit.unit
-        ),
-        normalized_score: 1.0,
-        ranking_score: 1.0,
-        score_delta: 2.0,
-        confidence: 1.0,
-        source_type: "ServingBundle".to_string(),
-        scoring_method: "runtime-field".to_string(),
-        reason: format!("proved constraint: {}", constraint.raw_text),
-        evidence_identity: None,
-    })
-}
-
-fn serving_numeric_constraint_evidence(
-    serving_facts: &ServingFactIndex,
+    serving_facts: Option<&ServingFactIndex>,
     society_entity_id: &str,
-    schema: &NumericConstraintSchema,
-    constraint: &HardConstraint,
-) -> ConstraintEvaluation {
-    let Some(rows) = serving_facts.entity(society_entity_id) else {
-        return ConstraintEvaluation::Missing;
-    };
-    let Some(query_unit) = schema
-        .query_units
-        .iter()
-        .find(|unit| unit.unit.eq_ignore_ascii_case(&constraint.unit))
-    else {
-        return ConstraintEvaluation::Missing;
-    };
-    let threshold = constraint.value * query_unit.to_canonical;
-    let Some((fact, canonical_value)) = aggregate_numeric_constraint_fact(rows, schema) else {
-        return ConstraintEvaluation::Missing;
-    };
-    let matched = match constraint.operator {
-        ConstraintOperator::Min => canonical_value + 0.001 >= threshold,
-        ConstraintOperator::Max => canonical_value - 0.001 <= threshold,
-    };
-    if !matched {
-        return ConstraintEvaluation::Failed;
-    }
-    let display_value = canonical_value / query_unit.to_canonical;
-    ConstraintEvaluation::Matched(Box::new(EvidenceMatch {
-        preference: constraint.raw_text.clone(),
-        fact_key: fact.fact_key.clone(),
-        fact_key_rank: usize::MAX,
-        display: format!(
-            "{}: {} {}",
-            schema.label,
-            format_measurement(display_value),
-            query_unit.unit
-        ),
-        normalized_score: 1.0,
-        ranking_score: 1.0,
-        score_delta: 2.0,
-        confidence: fact.confidence,
-        source_type: fact.source_type.clone(),
-        scoring_method: schema.scoring_method.clone(),
-        reason: format!("proved constraint: {}", constraint.raw_text),
-        evidence_identity: match_evidence_identity(fact),
-    }))
+    evaluation: SearchEvaluationContext<'_>,
+) -> BooleanEvaluation {
+    let witness = (|| {
+        let schema = schema::numeric_constraint_schema(&constraint.field)?;
+        let query_unit = schema
+            .query_units
+            .iter()
+            .find(|unit| unit.unit.eq_ignore_ascii_case(&constraint.unit))?;
+        let (value, reference, fact_key, confidence) =
+            if let Some(basis) = &schema.measurement_basis {
+                let option = evaluation.options.get(&property.id)?;
+                let measurement = option.area_measurement.as_ref()?;
+                if !measurement.basis.eq_ignore_ascii_case(basis) {
+                    return None;
+                }
+                (
+                    measurement.value,
+                    measurement.evidence.clone(),
+                    option.evidence_fact_key.clone()?,
+                    1.0,
+                )
+            } else {
+                let rows = serving_facts?.entity(society_entity_id)?;
+                let (fact, value) = aggregate_numeric_constraint_fact(rows, schema)?;
+                let observation = fact.observation.as_ref()?;
+                observation.validate().ok()?;
+                (
+                    value,
+                    crate::serving::EvidenceRef::for_observation(
+                        evaluation.snapshot_identity,
+                        observation,
+                    ),
+                    fact.fact_key.clone(),
+                    fact.confidence,
+                )
+            };
+        reference
+            .validate_for(society_entity_id, evaluation.snapshot_identity)
+            .ok()?;
+        let threshold = constraint.value * query_unit.to_canonical;
+        let satisfied = match constraint.operator {
+            ConstraintOperator::Min => value + 0.001 >= threshold,
+            ConstraintOperator::Max => value - 0.001 <= threshold,
+        };
+        let verified = VerifiedMatch {
+            constraint: Some(constraint.clone()),
+            subject_entity_id: society_entity_id.to_string(),
+            target_entity_id: None,
+            predicate: constraint.raw_text.clone(),
+            relation: match constraint.operator {
+                ConstraintOperator::Min => "at_least",
+                ConstraintOperator::Max => "at_most",
+            }
+            .to_string(),
+            metric: schema.dimension.clone(),
+            value: Some(value / query_unit.to_canonical),
+            unit: Some(constraint.unit.clone()),
+            observation_ids: Vec::new(),
+            evidence_refs: vec![reference],
+            fact_key: Some(fact_key),
+            derived_evidence: None,
+            algorithm_version: "numeric-evaluator-v1".to_string(),
+            confidence,
+            snapshot_identity: evaluation.snapshot_identity.to_string(),
+        };
+        Some(if satisfied {
+            BooleanEvaluation::satisfied(vec![verified])
+        } else {
+            BooleanEvaluation::unsatisfied_with(vec![verified])
+        })
+    })();
+    witness.unwrap_or_else(BooleanEvaluation::unknown)
 }
 
 fn aggregate_numeric_constraint_fact<'a>(
@@ -1573,6 +1581,11 @@ fn aggregate_numeric_constraint_fact<'a>(
                     fact.source_type
                         .eq_ignore_ascii_case(&format!("{source:?}"))
                 })
+            })
+            .filter(|fact| {
+                fact.observation
+                    .as_ref()
+                    .is_some_and(|o| o.validate().is_ok())
             })
             .filter_map(|fact| {
                 numeric_constraint_fact_value(fact, schema).map(|value| (fact, value))
@@ -1597,12 +1610,6 @@ fn numeric_constraint_fact_value(
         NumericFactValueKind::DistanceKmInText => geo::serving_fact_distance_km(fact)?,
     };
     (value.is_finite() && value >= 0.0).then_some(value)
-}
-
-enum ConstraintEvaluation {
-    Missing,
-    Failed,
-    Matched(Box<EvidenceMatch>),
 }
 
 fn serving_preference_evidence(
@@ -3043,15 +3050,13 @@ pub(super) fn constraint_term_evaluation_for_society(
                 known_match(property_matches_excluded_builder(property, display_name))
             }
         }
-        ConstraintTerm::Evidence { constraint, .. } => match match_hard_constraints(
-            std::slice::from_ref(constraint),
+        ConstraintTerm::Evidence { constraint, .. } => numeric_constraint_evaluation(
+            constraint,
             property,
             serving_facts,
             society_entity_id,
-        ) {
-            Some(_) => BooleanEvaluation::satisfied(Vec::new()),
-            None => BooleanEvaluation::unknown(),
-        },
+            evaluation,
+        ),
         ConstraintTerm::Spatial {
             relation,
             entity_id,
@@ -3893,6 +3898,7 @@ mod tests {
             price_per_sqft: 12_000,
             carpet_area_sqft: 1_200,
             super_builtup_sqft: 1_550,
+            area_measurement: None,
             floor: 8,
             total_floors: 20,
             facing: "East".to_string(),
@@ -3963,6 +3969,7 @@ mod tests {
                         price_max: property.price_max.or(exact_price),
                         size_sqft: (property.super_builtup_sqft > 0)
                             .then_some(property.super_builtup_sqft),
+                        area_measurement: None,
                         evidence_reference: Some(EvidenceRef::for_observation(
                             FIXTURE_SNAPSHOT_IDENTITY,
                             &observation,

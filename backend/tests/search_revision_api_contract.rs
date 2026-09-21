@@ -492,6 +492,7 @@ async fn regression_surface_keeps_exact_resolved_receipt() {
         exact.observation.as_ref().unwrap(),
     )];
     let token = issue_proof_token(ProofIssueRequest {
+        constraint: None,
         snapshot_identity: "review-exact",
         semantic_fingerprint: "review",
         property_id: "fixture-home-3bhk",
@@ -1076,6 +1077,7 @@ async fn proof_tokens_reject_tampering_stale_snapshots_wrong_properties_and_miss
     .unwrap();
     let fake_reference = EvidenceRef::for_observation("journey-fixture-v1", &fake_observation);
     let missing_token = issue_proof_token(ProofIssueRequest {
+        constraint: None,
         snapshot_identity: "journey-fixture-v1",
         semantic_fingerprint: "sha256:missing-proof",
         property_id: "fixture-home-3bhk",
@@ -2084,6 +2086,7 @@ fn test_property(id: &str, title: &str, society_id: &str, price: u64) -> Propert
         price_per_sqft: 12_000,
         carpet_area_sqft: 1_200,
         super_builtup_sqft: 1_550,
+        area_measurement: None,
         floor: 8,
         total_floors: 20,
         facing: "East".to_string(),

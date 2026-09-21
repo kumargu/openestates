@@ -213,7 +213,7 @@ pub struct NumericConstraintSchema {
     pub label: String,
     pub fact_keys: Vec<String>,
     #[serde(default)]
-    pub runtime_field: Option<String>,
+    pub measurement_basis: Option<String>,
     pub query_units: Vec<QueryUnit>,
     #[serde(default)]
     pub qualitative_bounds: Vec<QualitativeNumericBound>,

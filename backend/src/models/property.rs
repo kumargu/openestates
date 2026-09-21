@@ -25,6 +25,8 @@ pub struct Property {
     pub price_per_sqft: u64,
     pub carpet_area_sqft: u32,
     pub super_builtup_sqft: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub area_measurement: Option<crate::models::Measurement>,
     pub floor: u32,
     pub total_floors: u32,
     pub facing: String,
@@ -74,6 +76,13 @@ impl Property {
     /// identity or usable media. The promoted serving eligibility policy owns
     /// the stricter buyer-visible media gate. Explicit budget and BHK
     /// constraints still fail closed on zero/unknown values.
+    pub fn listed_area_sqft(&self) -> u32 {
+        self.area_measurement
+            .as_ref()
+            .map(|area| area.value.round() as u32)
+            .unwrap_or_else(|| self.carpet_area_sqft.max(self.super_builtup_sqft))
+    }
+
     pub fn is_listable(&self) -> bool {
         self.price > 0
             || self.bhk > 0
@@ -116,6 +125,8 @@ pub struct PropertyCard {
     pub sqft: u32,
     pub carpet_area_sqft: u32,
     pub super_builtup_sqft: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub area_measurement: Option<crate::models::Measurement>,
     pub society_name: String,
     pub builder_name: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

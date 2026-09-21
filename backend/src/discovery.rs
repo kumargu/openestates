@@ -201,7 +201,7 @@ impl BrowsePropertyCard {
             price: property.price,
             price_min: property.price_min,
             price_max: property.price_max,
-            sqft: property.super_builtup_sqft.max(property.carpet_area_sqft),
+            sqft: property.listed_area_sqft(),
             google_rating: reviews.rating,
             google_review_count: reviews.review_count,
             signals,

@@ -1355,6 +1355,7 @@ mod tests {
             price_per_sqft: 10_000,
             carpet_area_sqft: 1_000,
             super_builtup_sqft: 1_200,
+            area_measurement: None,
             floor: 1,
             total_floors: 10,
             facing: "East".to_string(),

@@ -6,7 +6,7 @@ use crate::knowledge::FactValue;
 use crate::models::Property;
 use crate::serving::{DerivedEvidence, EvidenceRef, ServingFactIndex};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InventoryOption {
     pub property_id: String,
@@ -15,6 +15,8 @@ pub struct InventoryOption {
     pub price_min: Option<u64>,
     pub price_max: Option<u64>,
     pub size_sqft: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub area_measurement: Option<crate::models::Measurement>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub evidence_reference: Option<EvidenceRef>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -44,7 +46,22 @@ impl InventoryOption {
                     return None;
                 };
                 let value = serde_json::from_str::<InventoryObservationValue>(encoded).ok()?;
-                let option = value.into_option(property, society_entity_id)?;
+                let area = value.area_sqft;
+                let basis = value.area_type.clone();
+                let minimum = value.area_sqft_min;
+                let maximum = value.area_sqft_max;
+                let mut option = value.into_option(property, society_entity_id)?;
+                if let Some(value) = area.filter(|v| *v > 0) {
+                    option.area_measurement = Some(crate::models::Measurement {
+                        value: value as f64,
+                        minimum,
+                        maximum,
+                        unit: "sqft".to_string(),
+                        basis: basis.unwrap_or_else(|| "unspecified".to_string()),
+                        entity_id: property.id.clone(),
+                        evidence: EvidenceRef::for_observation(snapshot_identity, observation),
+                    });
+                }
                 Some((
                     observation.observation_id.as_str(),
                     observation,
@@ -60,6 +77,9 @@ impl InventoryOption {
         evidence_reference
             .validate_for(society_entity_id, snapshot_identity)
             .ok()?;
+        if let Some(area) = option.area_measurement.as_mut() {
+            area.evidence = evidence_reference.clone();
+        }
         option.evidence_reference = Some(evidence_reference);
         option.evidence_fact_key = Some(fact_key.to_string());
         Some(option)
@@ -169,6 +189,7 @@ impl InventoryOption {
             .validate_for(society_entity_id, snapshot_identity)
             .ok()?;
         Some(VerifiedMatch {
+            constraint: None,
             subject_entity_id: society_entity_id.to_string(),
             target_entity_id: Some(property_id.to_string()),
             predicate,
@@ -198,6 +219,12 @@ struct InventoryObservationValue {
     price_max: Option<u64>,
     #[serde(default)]
     area_sqft: Option<u32>,
+    #[serde(default)]
+    area_type: Option<String>,
+    #[serde(default)]
+    area_sqft_min: Option<f64>,
+    #[serde(default)]
+    area_sqft_max: Option<f64>,
 }
 
 impl InventoryObservationValue {
@@ -216,6 +243,7 @@ impl InventoryObservationValue {
             price_min,
             price_max,
             size_sqft: self.area_sqft.filter(|value| *value > 0),
+            area_measurement: None,
             evidence_reference: None,
             evidence_fact_key: None,
         };
@@ -243,6 +271,8 @@ fn comparable_price(left: Option<u64>, right: Option<u64>) -> bool {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VerifiedMatch {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub constraint: Option<super::intent::HardConstraint>,
     pub subject_entity_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub target_entity_id: Option<String>,
@@ -469,6 +499,7 @@ mod inventory_tests {
             price_per_sqft: 10_000,
             carpet_area_sqft: 900,
             super_builtup_sqft: 1_000,
+            area_measurement: None,
             floor: 1,
             total_floors: 10,
             facing: "East".to_string(),

@@ -286,7 +286,9 @@ async fn three_societies_reach_serving_with_listing_and_builder_evidence() {
         interest_counter: AtomicU64::new(0),
         interest_write_lock: tokio::sync::Mutex::new(()),
     });
-    let response = build_app_router_with_lake(state, lake)
+    let app = build_app_router_with_lake(state, lake);
+    let response = app
+        .clone()
         .oneshot(
             Request::builder()
                 .uri("/api/search?q=3BHK%20in%20Whitefield")
@@ -310,6 +312,74 @@ async fn three_societies_reach_serving_with_listing_and_builder_evidence() {
             .unwrap()
             .len(),
         3
+    );
+    // This is deliberately the production router over materialized source inputs.
+    // A passing engine-only fixture cannot establish receipt resolvability.
+    for query in ["3BHK", "3BHK above 10 acres", "3BHK near metro"] {
+        let query: String = url::form_urlencoded::byte_serialize(query.as_bytes()).collect();
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/search?q={query}"))
+                    .extension(ConnectInfo(SocketAddr::from(([192, 0, 2, 2], 41000))))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let journey: Value = serde_json::from_slice(
+            &to_bytes(response.into_body(), 4 * 1024 * 1024)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        for set in journey["active"]["results"]["resultSets"]
+            .as_array()
+            .unwrap()
+        {
+            for result in set["results"].as_array().unwrap() {
+                for reason in result["reasons"].as_array().unwrap() {
+                    let response = app.clone().oneshot(Request::builder()
+                        .method("POST").uri("/api/search/proofs/resolve")
+                        .header("content-type", "application/json")
+                        .extension(ConnectInfo(SocketAddr::from(([192, 0, 2, 3], 41000))))
+                        .body(Body::from(serde_json::json!({"proofToken": reason["proofToken"], "propertyId": result["id"]}).to_string())).unwrap()).await.unwrap();
+                    let status = response.status();
+                    let receipt: Value = serde_json::from_slice(
+                        &to_bytes(response.into_body(), 4 * 1024 * 1024)
+                            .await
+                            .unwrap(),
+                    )
+                    .unwrap();
+                    assert_eq!(status, StatusCode::OK, "{query}: {receipt}");
+                    assert_eq!(receipt["resolutionStatus"], "resolved");
+                    assert!(!receipt["sourceObservations"].as_array().unwrap().is_empty());
+                }
+            }
+        }
+    }
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/search?q=3BHK%20carpet%20area%20above%201500%20sqft")
+                .extension(ConnectInfo(SocketAddr::from(([192, 0, 2, 4], 41000))))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let journey: Value = serde_json::from_slice(
+        &to_bytes(response.into_body(), 4 * 1024 * 1024)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        journey["active"]["results"]["totalMatches"], 0,
+        "super built-up observations cannot prove carpet area"
     );
 }
 

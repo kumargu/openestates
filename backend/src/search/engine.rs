@@ -2423,6 +2423,7 @@ mod tests {
             price_per_sqft: 10_000,
             carpet_area_sqft: 1_000,
             super_builtup_sqft: 1_200,
+            area_measurement: None,
             floor: 1,
             total_floors: 10,
             facing: "East".to_string(),
@@ -2491,6 +2492,7 @@ mod tests {
             price_min: Some(10_000_000),
             price_max: Some(10_000_000),
             size_sqft: Some(1_000),
+            area_measurement: None,
             evidence_reference: Some(evidence.clone()),
             evidence_fact_key: None,
         };
@@ -2635,6 +2637,7 @@ mod tests {
                         price_max: property.price_max.or(exact_price),
                         size_sqft: (property.super_builtup_sqft > 0)
                             .then_some(property.super_builtup_sqft),
+                        area_measurement: None,
                         evidence_reference: Some(EvidenceRef::for_observation(
                             snapshot.bundle.manifest.proof_snapshot_identity(),
                             &observation,
