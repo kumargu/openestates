@@ -33,6 +33,96 @@ use tokio::sync::{mpsc, RwLock};
 use tower::ServiceExt;
 
 #[tokio::test]
+#[ignore = "requires OPENESTATES_TEST_LAKE_ROOT and the pinned proof_handoff_live bundle"]
+async fn pinned_live_bundle_resolves_search_receipts_into_visible_scene_evidence() {
+    let bank: Value =
+        serde_json::from_str(include_str!("../../data/validation/search_query_bank.json")).unwrap();
+    let suite = bank["suites"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|suite| suite["id"] == "proof_handoff_live")
+        .unwrap();
+    let lake =
+        LakeStore::local(std::env::var("OPENESTATES_TEST_LAKE_ROOT").expect("test lake root"))
+            .unwrap();
+    let cache = tempdir().unwrap();
+    let bundle = backend::serving::ServingBundleLoader::new(lake, cache.path())
+        .load_search_bundle(suite["required_serving_bundle_version"].as_str().unwrap())
+        .await
+        .unwrap();
+    let (app, state) = test_app_with_state().await;
+    state.search_runtime.store(Arc::new(
+        backend::data_loader::runtime_snapshot_from_serving_bundle(Arc::new(bundle)),
+    ));
+    for case in bank["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|case| case["group"] == "proof_handoff_live")
+    {
+        let search = get_search(&app, case["query"].as_str().unwrap(), 180).await;
+        assert_eq!(search.0, StatusCode::OK);
+        let expected = &case["expected"];
+        let ids = result_ids(&search.1);
+        for (index, id) in expected["leading_property_ids"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .enumerate()
+        {
+            assert_eq!(ids[index], id.as_str().unwrap());
+            let card = search.1["active"]["results"]["resultSets"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .flat_map(|set| set["results"].as_array().unwrap())
+                .find(|card| card["id"] == *id)
+                .unwrap();
+            let mut applied = false;
+            for reason in card["reasons"].as_array().unwrap() {
+                let token = reason["proofToken"].as_str().unwrap();
+                let proof =
+                    post_proof(&app, json!({"proofToken":token,"propertyId":id}), 181).await;
+                assert_eq!(proof.0, StatusCode::OK);
+                if proof.1["factKey"] != expected["proof_fact_key"] {
+                    continue;
+                }
+                assert_eq!(proof.1["targetLabel"], expected["target_label"]);
+                let default = get_surface(&app, id.as_str().unwrap(), None, 182).await;
+                let focused = get_surface(&app, id.as_str().unwrap(), Some(token), 183).await;
+                assert_eq!(focused.0, StatusCode::OK);
+                assert_eq!(focused.1["proofFocusStatus"], "applied", "{}", id);
+                let feature_id = &focused.1["proofFocus"]["featureId"];
+                let feature = focused.1["features"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|feature| &feature["id"] == feature_id)
+                    .expect("focused feature is rendered");
+                assert_eq!(feature["label"], expected["target_label"]);
+                assert_eq!(
+                    feature["metrics"]["distanceM"].as_u64(),
+                    Some((proof.1["value"]["data"].as_f64().unwrap() * 1000.0).round() as u64)
+                );
+                assert_eq!(
+                    feature["receiptIds"][0],
+                    proof.1["derivationChain"][0]["derivation_id"]
+                );
+                for feature in default.1["features"].as_array().unwrap() {
+                    assert!(
+                        focused.1["features"].as_array().unwrap().contains(feature),
+                        "focus hid an existing feature"
+                    );
+                }
+                applied = true;
+            }
+            assert!(applied, "{} has no focusable named-place receipt", id);
+        }
+    }
+}
+
+#[tokio::test]
 async fn populated_collections_preserve_requirements_exclusions_and_geographic_membership() {
     let (app, state, _events) = test_app_fixture().await;
     install_collection_inventory(&state, true);
@@ -907,6 +997,11 @@ async fn exact_proof_resolution_and_surface_focus_share_one_identity() {
         "response={}",
         focused_scene.1
     );
+    assert_eq!(
+        focused_scene.1["proofFocusStatus"], "applied",
+        "{}",
+        focused_scene.1
+    );
     assert_eq!(default_scene.1["features"].as_array().unwrap().len(), 5);
     assert_eq!(focused_scene.1["features"].as_array().unwrap().len(), 6);
     assert_eq!(
@@ -1450,6 +1545,22 @@ fn test_bundle_with_options(
                     )),
                 ),
             ]);
+            // Production projects one raw nearby record onto both the society
+            // and the place. Observation IDs remain subject-scoped.
+            let nearby = facts.last().unwrap().observation.clone().unwrap();
+            for fact in facts.iter_mut().filter(|fact| fact.entity_id == entity_id) {
+                fact.observation = Some(
+                    SourceObservation::new(
+                        &nearby.provider,
+                        &nearby.provider_observation_id,
+                        &entity_id,
+                        nearby.observed_at,
+                        nearby.source_url.clone(),
+                        nearby.asset_lineage.clone(),
+                    )
+                    .unwrap(),
+                );
+            }
         }
     }
 
@@ -1490,7 +1601,11 @@ fn test_bundle_with_options(
                 bundle_version,
                 "society:fixture-home",
                 &format!("place:fixture-school-{index}"),
-                fact_nth(&facts, "society:fixture-home", "nearby_schools", index - 1),
+                fact(
+                    &facts,
+                    &format!("place:fixture-school-{index}"),
+                    "geo.latitude",
+                ),
                 0.2 + index as f64 * 0.1,
             ));
         }

@@ -6,7 +6,7 @@ use serde_json::Value;
 
 use crate::dag_config::ui_surfaces_config;
 use crate::knowledge::FactValue;
-use crate::serving::{DerivedEvidence, EvidenceId, EvidenceRef, SourceObservation};
+use crate::serving::{DerivedEvidence, EvidenceId, EvidenceRef, ObservationId, SourceObservation};
 use crate::state::SearchRuntimeSnapshot;
 
 use super::tokens::{decode_signed, encode_signed};
@@ -85,10 +85,10 @@ pub struct ProofResolution {
     pub destination: Option<ProofDestination>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResolvedSourceObservation {
-    pub observation_id: String,
+    pub observation_id: ObservationId,
     pub provider: String,
     pub provider_observation_id: String,
     pub subject_entity_id: String,
@@ -101,7 +101,7 @@ pub struct ResolvedSourceObservation {
 impl From<&SourceObservation> for ResolvedSourceObservation {
     fn from(observation: &SourceObservation) -> Self {
         Self {
-            observation_id: observation.observation_id.as_str().to_string(),
+            observation_id: observation.observation_id.clone(),
             provider: observation.provider.clone(),
             provider_observation_id: observation.provider_observation_id.clone(),
             subject_entity_id: observation.subject_entity_id.clone(),
@@ -143,6 +143,17 @@ pub struct ResolvedProofFocus {
     pub matched_value: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub distance_m: Option<u32>,
+    #[serde(skip)]
+    pub scene_evidence: Option<ResolvedSceneEvidence>,
+}
+
+/// Exact derived evidence for a scene overlay. Never reconstructed from a
+/// nearby display row, and never accepted from a client-authored focus.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ResolvedSceneEvidence {
+    pub coordinates: [f64; 2],
+    pub derivation: DerivedEvidence,
+    pub source: ResolvedSourceObservation,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -363,7 +374,10 @@ fn recompute_search_derivation(
     .ok()
 }
 
-pub fn resolved_proof_focus(resolution: &ProofResolution) -> Option<ResolvedProofFocus> {
+pub fn resolved_proof_focus(
+    snapshot: &SearchRuntimeSnapshot,
+    resolution: &ProofResolution,
+) -> Option<ResolvedProofFocus> {
     let destination = resolution.destination.as_ref()?;
     let layer_id = destination.layer_id.clone()?;
     let matched_value = resolution.value.as_ref().map(fact_value_display);
@@ -376,12 +390,37 @@ pub fn resolved_proof_focus(resolution: &ProofResolution) -> Option<ResolvedProo
         }
         _ => None,
     };
+    let scene_evidence = distance_m.and_then(|_| {
+        let target = resolution.target_entity_id.as_deref()?;
+        let rows = snapshot.bundle.fact_index.entity(target)?;
+        let source = resolution.source_observations.iter().find(|source| {
+            rows.facts.iter().any(|fact| {
+                fact.observation
+                    .as_ref()
+                    .is_some_and(|observation| observation.observation_id == source.observation_id)
+            })
+        })?;
+        let coordinates = resolution
+            .geometry
+            .as_ref()?
+            .get("coordinates")?
+            .as_array()?;
+        Some(ResolvedSceneEvidence {
+            coordinates: [
+                coordinates.first()?.as_f64()?,
+                coordinates.get(1)?.as_f64()?,
+            ],
+            derivation: resolution.derivation_chain.first()?.clone(),
+            source: source.clone(),
+        })
+    });
     Some(ResolvedProofFocus {
         observation_ids: resolution
             .source_observations
             .iter()
-            .map(|source| source.observation_id.clone())
+            .map(|source| source.observation_id.as_str().to_string())
             .collect(),
+        scene_evidence,
         surface_id: destination.surface_id.clone(),
         layer_id,
         fact_key: resolution.fact_key.clone(),

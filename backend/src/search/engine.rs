@@ -278,7 +278,7 @@ impl<'a> SearchEngine<'a> {
             .iter()
             .map(|branch| branch.branch_id.as_str())
             .collect::<HashSet<_>>();
-        if !portable_root_is_valid(&ast.root, &branch_ids) {
+        if !ast.root.references_only(&branch_ids) {
             return Err("intent AST root references an unknown branch".to_string());
         }
         plan.root = ast.root.clone();
@@ -1047,23 +1047,6 @@ impl<'a> SearchEngine<'a> {
             diagnostics,
             evidence_gaps,
         }
-    }
-}
-
-fn portable_root_is_valid(
-    root: &super::compiled_plan::BoolExpr<String>,
-    branch_ids: &HashSet<&str>,
-) -> bool {
-    match root {
-        super::compiled_plan::BoolExpr::All(clauses)
-        | super::compiled_plan::BoolExpr::Any(clauses) => {
-            !clauses.is_empty()
-                && clauses
-                    .iter()
-                    .all(|clause| portable_root_is_valid(clause, branch_ids))
-        }
-        super::compiled_plan::BoolExpr::Not(clause) => portable_root_is_valid(clause, branch_ids),
-        super::compiled_plan::BoolExpr::Leaf(branch_id) => branch_ids.contains(branch_id.as_str()),
     }
 }
 

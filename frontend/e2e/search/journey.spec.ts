@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 import { journeyFixture, retainedFixture } from "../../tests/fixtures/search-journey.ts";
 import { getFixtureResponse } from "../../src/lib/dev-fixtures.ts";
@@ -572,6 +573,8 @@ test("native rail scrolling, resize and reduced motion keep controls synchronize
     await expect.poll(() => scroller.evaluate((element) => element.clientWidth)).toBeLessThan(fullWidth);
     await expect(previous).toBeDisabled();
   } else {
+    await scroller.scrollIntoViewIfNeeded();
+    await scroller.click({ trial: true });
     const bounds = await scroller.boundingBox();
     const touch = await page.context().newCDPSession(page);
     await touch.send("Input.synthesizeScrollGesture", {
@@ -630,11 +633,14 @@ test("zero exact results carry contextual homes through detail, workspace and co
 
 test("live bundle API and UI agree through two edits, proof and resume", async ({ page, request }, testInfo) => {
   test.skip(!process.env.SEARCH_LIVE_API, "Set SEARCH_LIVE_API to run against a rebuilt API");
+  const bank = JSON.parse(readFileSync(new URL("../../../data/validation/search_query_bank.json", import.meta.url), "utf8"));
+  const suite = bank.suites.find((suite: { id: string }) => suite.id === "proof_handoff_live");
+  const scenario = bank.cases.find((scenario: { group: string }) => scenario.group === "proof_handoff_live");
   const api = process.env.SEARCH_LIVE_API!;
   const health = await (await request.get(`${api}/api/health`)).json();
-  expect(health.serving_bundle_version).toBe("catalog-71-299c3135-23aa-4945-8f26-2cf2fc775eaa");
+  expect(health.serving_bundle_version).toBe(suite.required_serving_bundle_version);
   const initialResponse = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/search");
-  await page.goto("/?q=3BHK%20in%20Whitefield");
+  await page.goto(`/?q=${encodeURIComponent(scenario.query)}`);
   let envelope = await (await initialResponse).json();
   const assertParity = async () => {
     await expect(page.getByRole("button", { name: `Change search. Current search: ${envelope.active.buyerBrief}`, exact: true })).toBeVisible();
@@ -673,15 +679,33 @@ test("live bundle API and UI agree through two edits, proof and resume", async (
   const ids = envelope.active.results.orderedResultIds;
   const first = page.locator('.landing-featured__results .catalog-card__link').first();
   expect(new URL((await first.getAttribute("href"))!, page.url()).searchParams.has("proofToken")).toBe(true);
-  const proof = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/search/proofs/resolve");
+  const propertyPath = new URL((await first.getAttribute("href"))!, page.url()).pathname;
+  // StrictMode cancels the first effect request. Inspect the completed response,
+  // rather than an abandoned response whose headers happened to arrive first.
+  const proof = page.waitForResponse(async (response) => {
+    if (new URL(response.url()).pathname !== "/api/search/proofs/resolve") return false;
+    try { await response.json(); return true; } catch { return false; }
+  });
   await first.click();
-  expect((await proof).status()).toBe(200);
+  const resolved = await proof;
+  expect(resolved.status()).toBe(200);
+  expect((await resolved.json()).targetLabel).toBe(scenario.expected.target_label);
   await expect(page.locator("#property-atlas")).toBeVisible();
-  await page.screenshot({ path: testInfo.outputPath("live-proof.png") });
+  const selected = page.locator(".property-atlas__place-list .is-selected");
+  await expect(selected).toContainText(scenario.expected.target_label);
+  await expect(selected.getByText("Matched your search", { exact: true })).toBeVisible();
+  await expect(selected.getByRole("link", { name: "Source" })).toHaveAttribute("href", /^https:\/\//);
+  await selected.getByRole("link", { name: "Source" }).click({ trial: true });
+  await expect(page.getByText(/This search receipt is no longer available/)).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath("live-proof.png"), animations: "disabled" });
   const resumed = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/search/resume");
   await page.getByRole("navigation", { name: "Property navigation" }).getByRole("link", { name: "Back to results" }).click();
   envelope = await (await resumed).json();
   expect(envelope.active.intent).toEqual(intent);
   expect(envelope.active.results.orderedResultIds).toEqual(ids);
   await assertParity();
+  await page.goto(propertyPath);
+  await expect(page.locator("#property-atlas")).toBeVisible();
+  await expect(page.getByText("Matched your search", { exact: true })).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath("live-property-rest.png"), animations: "disabled" });
 });

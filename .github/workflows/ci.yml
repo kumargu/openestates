@@ -30,6 +30,8 @@ jobs:
         with:
           workspaces: backend
       - run: cargo clippy -- -D warnings
+      - name: Search journey contracts
+        run: cargo test --test search_revision_api_contract --test search_conversational_semantics_contract --test search_efficiency_contract
 
   frontend-build:
     name: Frontend Build

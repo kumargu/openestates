@@ -25,18 +25,26 @@ export function propertyMapContextFromSurfaceScene(
     .map((feature) => mapPlacePinFromFeature(feature, receiptsById))
     .filter((place): place is MapPlacePin => Boolean(place));
   const places: MapPlacePin[] = [];
+  const focusedFeatureId = (scene.proofFocus ?? fallback?.proof_focus)?.featureId;
   for (const place of [...scenePlaces, ...(fallback?.places ?? [])]) {
     const index = places.findIndex(candidate => samePlacePin(candidate, place));
     if (index < 0) { places.push(place); continue; }
-    const primary = places[index];
+    // Keep the exact focused receipt primary when the arrival scene merges
+    // another observation of the same place; retain every feature identity.
+    const incomingFocused = focusedFeatureId && (place.feature_id === focusedFeatureId
+      || place.feature_ids?.includes(focusedFeatureId));
+    const primary = incomingFocused ? place : places[index];
+    const secondary = incomingFocused ? places[index] : place;
+    const primaryFocused = focusedFeatureId && (primary.feature_id === focusedFeatureId
+      || primary.feature_ids?.includes(focusedFeatureId));
     places[index] = {
-      ...place,
+      ...secondary,
       ...Object.fromEntries(Object.entries(primary).filter(([, value]) => value !== undefined)),
       feature_ids: [...new Set([primary.feature_id, ...(primary.feature_ids ?? []),
-        place.feature_id, ...(place.feature_ids ?? [])].filter((id): id is string => Boolean(id)))],
-      source_url: primary.source_url ?? place.source_url,
-      source_type: primary.source_url ? primary.source_type : place.source_url ? place.source_type : primary.source_type,
-      properties: {...place.properties, ...primary.properties},
+        secondary.feature_id, ...(secondary.feature_ids ?? [])].filter((id): id is string => Boolean(id)))],
+      source_url: primaryFocused ? primary.source_url : primary.source_url ?? secondary.source_url,
+      source_type: primaryFocused || primary.source_url ? primary.source_type : secondary.source_url ? secondary.source_type : primary.source_type,
+      properties: {...secondary.properties, ...primary.properties},
     };
   }
   const redFlagLines = scene.features
