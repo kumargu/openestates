@@ -577,10 +577,22 @@ test("native rail scrolling, resize and reduced motion keep controls synchronize
     await scroller.click({ trial: true });
     const bounds = await scroller.boundingBox();
     const touch = await page.context().newCDPSession(page);
-    await touch.send("Input.synthesizeScrollGesture", {
-      x: bounds!.x + bounds!.width * 0.8, y: bounds!.y + 100,
-      xDistance: -280, yDistance: 0, gestureSourceType: "touch",
-    });
+    const startX = bounds!.x + bounds!.width * 0.85;
+    const y = bounds!.y + Math.min(100, bounds!.height / 2);
+    const point = (x: number) => ({ x, y, radiusX: 1, radiusY: 1, force: 1, id: 1 });
+    const scrollEnded = scroller.evaluate((element) => new Promise<void>((resolve) => {
+      element.addEventListener("scrollend", () => resolve(), { once: true });
+    }));
+    await touch.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [point(startX)] });
+    for (let step = 1; step <= 8; step++) {
+      await touch.send("Input.dispatchTouchEvent", {
+        type: "touchMove", touchPoints: [point(startX - bounds!.width * 0.7 * step / 8)],
+      });
+      await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+    }
+    await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await expect.poll(() => scroller.evaluate((element) => element.scrollLeft)).toBeGreaterThan(1);
+    await scrollEnded;
     await expect(previous).toBeEnabled();
     await page.screenshot({ path: testInfo.outputPath("touch-scroll.png") });
     await touch.detach();

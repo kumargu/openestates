@@ -31,7 +31,9 @@ jobs:
           workspaces: backend
       - run: cargo clippy -- -D warnings
       - name: Search journey contracts
-        run: cargo test --test search_revision_api_contract --test search_conversational_semantics_contract --test search_efficiency_contract
+        # Keep the fixed latency budgets meaningful on the shared runner:
+        # optimize application code, without rebuilding the heavy dependency graph.
+        run: cargo test --config 'profile.test.package.backend.opt-level=1' --test search_revision_api_contract --test search_conversational_semantics_contract --test search_efficiency_contract
 
   frontend-build:
     name: Frontend Build

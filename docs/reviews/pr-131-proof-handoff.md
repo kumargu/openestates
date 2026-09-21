@@ -55,8 +55,10 @@ without borrowing a different observation's distance or source URL.
   restoration of the removed text-reconstruction path. The fixture now includes
   all localities used by the three/eight-branch scenarios. Repeated equivalent
   labels are suppressed in the brief without changing executable predicates.
-- Native touch tests wait for a visible, stable hit target before the gesture;
-  scroll controls, native scrolling, resize, and reduced-motion checks remain.
+- Native touch tests wait for a visible, stable hit target and dispatch a real
+  touch-start/move/end sequence across animation frames. Linux CI did not scroll
+  with CDP's synthetic scroll gesture. The test requires actual scroll movement
+  before checking controls; resize and reduced-motion checks remain.
 
 ## Interaction note and UI Critic
 
@@ -81,7 +83,14 @@ search context and return path are preserved.
 - Clippy with warnings denied, frontend lint, production build, dist verification,
   the hardcoding gate (zero findings), 21 audit/benchmark Python tests, and
   `git diff --check` passed.
-- CI now runs the three Rust search contract suites, including the restored test.
+- CI now runs the three Rust search contract suites, including the restored test,
+  with application-only test optimization (`profile.test.package.backend.opt-level=1`).
+  The first Linux debug build took 2.37 s against the scale contract's unchanged
+  2 s budget; the 10,000-row corpus, pruning, eligibility, and latency assertions
+  are retained. All 49 contracts also passed locally with this exact CI command.
+  Heavy dependencies use their existing profile.
+- The explicit touch sequence waits for `scrollend` before testing arrow actions,
+  so native momentum cannot overwrite the next scroll operation.
 
 The initial browser attempt used the wrong local CORS origin and was rerun with
 `OPENESTATES_ALLOWED_ORIGINS=http://localhost:5174`. The test also now waits for a
