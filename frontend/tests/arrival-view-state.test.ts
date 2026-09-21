@@ -22,10 +22,8 @@ test("arrival tabs retain a configured empty road while Metro remains optional",
 
 test("arrival missing states are concise and specific to the active scene", () => {
   const states = {
-    hasApproachRoad: true,
     hasBoundary: true,
     hasEntrance: true,
-    missingApproachRoadState: "Approach road not mapped",
     missingBoundaryState: "Society boundary not mapped",
     missingEntranceState: "Entrance not mapped",
   };
@@ -34,8 +32,7 @@ test("arrival missing states are concise and specific to the active scene", () =
     "Society boundary not mapped");
   assert.equal(arrivalMissingState("society", { ...states, hasEntrance: false }),
     "Entrance not mapped");
-  assert.equal(arrivalMissingState("approach", { ...states, hasApproachRoad: false }),
-    "Approach road not mapped");
+  assert.equal(arrivalMissingState("approach", states), null);
   assert.equal(arrivalMissingState("metro", { ...states, hasEntrance: false }), null);
   assert.equal(arrivalMissingState("society", states), null);
 });

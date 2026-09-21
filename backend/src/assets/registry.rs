@@ -712,19 +712,6 @@ pub fn default_openestates_registry() -> AssetRegistry {
             TrustTier::Derived,
         ),
         asset(
-            "approach_road_graph_facts",
-            AssetStage::Silver,
-            "Approach-road graph edges and road-segment facts derived from upstream RERA and Google location facts.",
-            &[
-                "canonical_society_nodes",
-                "rera_legal_facts",
-                "google_review_facts",
-            ],
-            RefreshCadence::OnChange,
-            CostTier::Free,
-            TrustTier::Support,
-        ),
-        asset(
             "society_groundwater_potential_facts",
             AssetStage::Silver,
             "Groundwater potential facts joined offline from society coordinates to OpenCity groundwater zones.",
@@ -822,19 +809,12 @@ pub fn default_openestates_registry() -> AssetRegistry {
             "society_gold_snapshot",
             AssetStage::Gold,
             "Immutable society gold snapshot merged by source precedence and fact policy.",
-            &[
-                "canonical_society_nodes",
-                "society_fact_snapshot",
-                // Approach-road data includes road-segment entities and graph edges, so it bypasses
-                // fact-row compaction and remains a direct KG input.
-                "approach_road_graph_facts",
-            ],
+            &["canonical_society_nodes", "society_fact_snapshot"],
             RefreshCadence::OnChange,
             CostTier::Free,
             TrustTier::Derived,
         )
         .with_partition_policy(AssetPartitionPolicy::from_run_keys(&["society"]))
-        .with_optional_dependency("approach_road_graph_facts")
         .with_optional_dependency("society_fact_snapshot"),
     ])
     .expect("default asset registry is valid")
@@ -919,10 +899,6 @@ mod tests {
         );
         assert_eq!(
             kg.dependency_fan_in_policy(&AssetId::new("society_fact_snapshot").unwrap()),
-            DependencyFanInPolicy::ResolvedPartition
-        );
-        assert_eq!(
-            kg.dependency_fan_in_policy(&AssetId::new("approach_road_graph_facts").unwrap()),
             DependencyFanInPolicy::ResolvedPartition
         );
     }

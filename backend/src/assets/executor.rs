@@ -8,31 +8,29 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     ingest_local_media_assets, read_skill_fact_artifact_rows, sort_materialization_records,
-    ApproachRoadGraphError, ApproachRoadGraphMaterializer, AssetDagPlan, AssetDagRunManifest,
-    AssetDefinition, AssetFanInError, AssetId, AssetMaterializationStore, AssetPartition,
-    AssetPlanner, AssetRunManifestStore, AssetSourceInputs, AssetStage, DependencyFanInPolicy,
-    EnvironmentalAssetError, GooglePlaceAssetError, GooglePlaceSnapshotMaterializer,
-    LocalityAssetError, MaterializationId, MaterializationRecord, MediaAssetError,
-    MediaAssetMaterializer, OsmAccessAssetError, OsmPowerAssetError, PartitionResolutionError,
-    PlannerError, ProjectEnrichmentAssetError, ProjectEnrichmentMaterializer, ReraAssetError,
-    ReraClaimMaterializeError, ReraClaimsMaterializer, ReraEvidenceError, ReraPlanFramesAssetError,
-    ReraReceiptsMaterializer, ReraRegistryMaterializer, ReraSourceRecordsError,
-    ReraSourceRecordsMaterializer, RunManifestError, SkillFactMaterializeError,
-    SkillFactMaterializer, SkillFactsInput, SocietyFactSnapshotError,
-    SocietyFactSnapshotMaterializer, SocietyGoldSnapshotMaterialization,
+    AssetDagPlan, AssetDagRunManifest, AssetDefinition, AssetFanInError, AssetId,
+    AssetMaterializationStore, AssetPartition, AssetPlanner, AssetRunManifestStore,
+    AssetSourceInputs, AssetStage, DependencyFanInPolicy, EnvironmentalAssetError,
+    GooglePlaceAssetError, GooglePlaceSnapshotMaterializer, LocalityAssetError, MaterializationId,
+    MaterializationRecord, MediaAssetError, MediaAssetMaterializer, OsmAccessAssetError,
+    OsmPowerAssetError, PartitionResolutionError, PlannerError, ProjectEnrichmentAssetError,
+    ProjectEnrichmentMaterializer, ReraAssetError, ReraClaimMaterializeError,
+    ReraClaimsMaterializer, ReraEvidenceError, ReraPlanFramesAssetError, ReraReceiptsMaterializer,
+    ReraRegistryMaterializer, ReraSourceRecordsError, ReraSourceRecordsMaterializer,
+    RunManifestError, SkillFactMaterializeError, SkillFactMaterializer, SkillFactsInput,
+    SocietyFactSnapshotError, SocietyFactSnapshotMaterializer, SocietyGoldSnapshotMaterialization,
     SocietyGoldSnapshotMaterializeError, SocietyGoldSnapshotMaterializer,
     SourceEntityResolutionScope, SourceWatermark, TransitAssetError,
-    APPROACH_ROAD_GRAPH_FACTS_ASSET_ID, BENGALURU_METRO_STATION_FACTS_ASSET_ID,
-    BUILDER_RERA_AGGREGATES_ASSET_ID, CANONICAL_SOCIETY_NODES_ASSET_ID,
-    EXTERNAL_IMAGES_WEEKLY_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
-    EXTERNAL_LISTING_FACTS_ASSET_ID, GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
-    GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID, GOOGLE_PLACES_WEEKLY_ASSET_ID,
-    GOOGLE_REVIEW_FACTS_ASSET_ID, HOME_STATE_SIGNALS_ASSET_ID, IMAGE_MEDIA_FACTS_ASSET_ID,
-    OSM_LOCALITY_BOUNDARY_FACTS_ASSET_ID, OSM_POWER_LINE_FACTS_ASSET_ID,
-    OSM_SOCIETY_ACCESS_FACTS_ASSET_ID, RERA_CLAIMS_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID,
-    RERA_PROJECT_PLAN_FRAMES_ASSET_ID, RERA_RECEIPTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
-    RERA_SOURCE_RECORDS_ASSET_ID, SOCIETY_FACT_SNAPSHOT_ASSET_ID, SOCIETY_GOLD_SNAPSHOT_ASSET_ID,
-    SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
+    BENGALURU_METRO_STATION_FACTS_ASSET_ID, BUILDER_RERA_AGGREGATES_ASSET_ID,
+    CANONICAL_SOCIETY_NODES_ASSET_ID, EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
+    EXTERNAL_LISTINGS_WEEKLY_ASSET_ID, EXTERNAL_LISTING_FACTS_ASSET_ID,
+    GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID, GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
+    GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID, HOME_STATE_SIGNALS_ASSET_ID,
+    IMAGE_MEDIA_FACTS_ASSET_ID, OSM_LOCALITY_BOUNDARY_FACTS_ASSET_ID,
+    OSM_POWER_LINE_FACTS_ASSET_ID, OSM_SOCIETY_ACCESS_FACTS_ASSET_ID, RERA_CLAIMS_ASSET_ID,
+    RERA_LEGAL_FACTS_ASSET_ID, RERA_PROJECT_PLAN_FRAMES_ASSET_ID, RERA_RECEIPTS_ASSET_ID,
+    RERA_REGISTRY_MONTHLY_ASSET_ID, RERA_SOURCE_RECORDS_ASSET_ID, SOCIETY_FACT_SNAPSHOT_ASSET_ID,
+    SOCIETY_GOLD_SNAPSHOT_ASSET_ID, SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
 };
 use crate::knowledge::KnowledgeGraph;
 use crate::lake::{LakeError, LakeStore};
@@ -1223,10 +1221,6 @@ impl BuiltInAssetExecutorRegistry {
             BuiltInAssetExecutor::HomeStateSignals,
         );
         executors.insert(
-            static_asset_id(APPROACH_ROAD_GRAPH_FACTS_ASSET_ID),
-            BuiltInAssetExecutor::ApproachRoadGraphFacts,
-        );
-        executors.insert(
             static_asset_id(SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID),
             BuiltInAssetExecutor::SocietyGroundwaterPotentialFacts,
         );
@@ -1281,7 +1275,6 @@ enum BuiltInAssetExecutor {
     ImageMediaFacts,
     BuilderReraAggregates,
     HomeStateSignals,
-    ApproachRoadGraphFacts,
     SocietyGroundwaterPotentialFacts,
     BengaluruMetroStationFacts,
     OsmLocalityBoundaryFacts,
@@ -1795,27 +1788,6 @@ impl BuiltInAssetExecutor {
                 let materialization = execute_skill_fact_asset(context, &input).await?;
                 Ok(ExecutedAsset::SkillFacts(materialization))
             }
-            Self::ApproachRoadGraphFacts => {
-                ensure_global_partition(context.asset_id, context.asset_partition)?;
-                let parent_records = context
-                    .dag
-                    .dependency_materialization_records(
-                        context.asset_id,
-                        &context.options.partition,
-                        context.records_by_asset,
-                        context.dependency_snapshot,
-                    )
-                    .await?;
-                let materialization = ApproachRoadGraphMaterializer::new(context.dag.lake.clone())
-                    .materialize_for_run(
-                        context.options.planned_at,
-                        &parent_records,
-                        context.run_id.clone(),
-                        context.asset_partition.clone(),
-                    )
-                    .await?;
-                Ok(ExecutedAsset::Record(materialization.record))
-            }
             Self::SocietyGroundwaterPotentialFacts => {
                 ensure_global_partition(context.asset_id, context.asset_partition)?;
                 let input = context
@@ -1995,20 +1967,8 @@ impl BuiltInAssetExecutor {
                     &parent_records,
                     CANONICAL_SOCIETY_NODES_ASSET_ID,
                 )?;
-                let mut canonical_rows =
+                let canonical_rows =
                     super::read_canonical_society_rows(&context.dag.lake, canonical_record).await?;
-                if let Some(approach_record) = parent_records
-                    .iter()
-                    .find(|record| record.asset_id.as_str() == APPROACH_ROAD_GRAPH_FACTS_ASSET_ID)
-                {
-                    let approach_rows =
-                        super::read_approach_road_graph_rows(&context.dag.lake, approach_record)
-                            .await?;
-                    canonical_rows
-                        .entities
-                        .extend(approach_rows.canonical.entities);
-                    canonical_rows.edges.extend(approach_rows.canonical.edges);
-                }
                 let parent_materializations = parent_records
                     .iter()
                     .map(|record| record.materialization_id.clone())
@@ -2216,7 +2176,6 @@ pub enum AssetDagExecutorError {
     ProjectEnrichment(ProjectEnrichmentAssetError),
     Media(MediaAssetError),
     SkillFact(SkillFactMaterializeError),
-    ApproachRoadGraph(ApproachRoadGraphError),
     Environmental(EnvironmentalAssetError),
     Transit(TransitAssetError),
     Locality(LocalityAssetError),
@@ -2305,9 +2264,6 @@ impl fmt::Display for AssetDagExecutorError {
             Self::FanIn(err) => write!(f, "asset DAG fan-in failed: {err}"),
             Self::Partition(err) => write!(f, "asset partition resolution failed: {err}"),
             Self::SocietyGoldSnapshot(err) => write!(f, "KG society view execution failed: {err}"),
-            Self::ApproachRoadGraph(err) => {
-                write!(f, "approach-road graph asset execution failed: {err}")
-            }
             Self::Environmental(err) => write!(f, "environmental asset execution failed: {err}"),
             Self::Transit(err) => write!(f, "transit asset execution failed: {err}"),
             Self::Locality(err) => write!(f, "locality asset execution failed: {err}"),
@@ -2445,7 +2401,6 @@ impl AssetDagExecutorError {
             | Self::ProjectEnrichment(ProjectEnrichmentAssetError::Lake(err))
             | Self::Media(MediaAssetError::Lake(err))
             | Self::SkillFact(SkillFactMaterializeError::Lake(err))
-            | Self::ApproachRoadGraph(ApproachRoadGraphError::Lake(err))
             | Self::SocietyFactSnapshot(SocietyFactSnapshotError::Lake(err))
             | Self::Rera(ReraAssetError::Lake(err))
             | Self::CanonicalNodes(super::CanonicalNodesError::Lake(err))
@@ -2485,12 +2440,6 @@ impl From<AssetFanInError> for AssetDagExecutorError {
 impl From<SocietyGoldSnapshotMaterializeError> for AssetDagExecutorError {
     fn from(err: SocietyGoldSnapshotMaterializeError) -> Self {
         Self::SocietyGoldSnapshot(err)
-    }
-}
-
-impl From<ApproachRoadGraphError> for AssetDagExecutorError {
-    fn from(err: ApproachRoadGraphError) -> Self {
-        Self::ApproachRoadGraph(err)
     }
 }
 

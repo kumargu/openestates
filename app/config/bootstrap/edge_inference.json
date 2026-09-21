@@ -1,5 +1,5 @@
 {
-  "_comment": "EDGE INFERENCE RULES — how served_by_road, in_area, built_by are derived from RERA/geocode/OSM. Rules only, not instances.",
+  "_comment": "EDGE INFERENCE RULES — how served_by_road, in_area, built_by are derived from explicit source evidence. Rules only, not instances.",
   "version": 1,
   "description": "How bootstrap/enrichment infers typed edges. No society or road instances — rules only.",
   "edge_rules": [
@@ -36,12 +36,9 @@
       "to_entity_type": "road_segment",
       "inference": {
         "methods": [
-          "reverse_geocode_gate",
-          "openstreetmap_nearest_named_road",
-          "rera_address_approach_parse",
-          "street_view_road_axis"
+          "openstreetmap_connected_entrance_corridor"
         ],
-        "min_confidence": 0.6,
+        "min_confidence": 0.78,
         "dedupe_by": "road_segment_entity_id"
       },
       "project_facts_to": ["society", "property"],

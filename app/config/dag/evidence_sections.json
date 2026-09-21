@@ -67,36 +67,21 @@
     "constellation": "commute",
     "surfaces": ["buyer_context"],
     "title": "Approach road",
-    "subtitle": "Last-lane access context from reviews and visual proof.",
-    "scope": "road_segment",
+    "subtitle": "What residents report about the way in.",
+    "scope": "society",
     "relationship": "gate approach",
     "presentation": {
-      "variant": "media_grid",
+      "variant": "fact_list",
       "density": "standard",
       "max_preview_items": 3
     },
-    "media": ["approach_road_visuals"],
     "facts": [
-      {
-        "key": "approach_road_visual_available",
-        "label": "Visual proof",
-        "scope": "society",
-        "relationship": "approach road"
-      },
       {
         "key": "approach_road_condition",
         "label": "Review signal",
         "livability_lens": "risk",
         "livability_label": "approach road access",
         "scope": "society",
-        "relationship": "approach road"
-      },
-      {
-        "key": "access_road_quality",
-        "label": "Road quality",
-        "livability_lens": "risk",
-        "livability_label": "road quality",
-        "scope": "road_segment",
         "relationship": "approach road"
       }
     ]

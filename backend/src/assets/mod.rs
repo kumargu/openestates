@@ -8,7 +8,6 @@
 //! is reserved for small control-plane files such as manifests, schema
 //! descriptors, and current pointers. The catalog compiles gold into serving.
 
-pub mod approach_road;
 pub mod canonical_nodes;
 pub mod compaction;
 pub mod environment;
@@ -41,10 +40,6 @@ mod source_resolution;
 pub mod transit;
 pub mod types;
 
-pub use approach_road::{
-    read_approach_road_graph_rows, ApproachRoadGraphError, ApproachRoadGraphMaterialization,
-    ApproachRoadGraphMaterializer, ApproachRoadGraphRows, APPROACH_ROAD_GRAPH_FACTS_ASSET_ID,
-};
 pub use canonical_nodes::{read_canonical_node_rows, CanonicalNodeRows, CanonicalNodesError};
 pub use compaction::{
     SocietyFactSnapshotError, SocietyFactSnapshotMaterialization, SocietyFactSnapshotMaterializer,

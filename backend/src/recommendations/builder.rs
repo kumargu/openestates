@@ -239,7 +239,6 @@ fn recall_candidates(
                     .unwrap_or(""),
                 property,
                 serving_bundle.map(|bundle| &bundle.fact_index),
-                serving_bundle.map(|bundle| &bundle.graph_index),
             );
             let sections = source_panels
                 .into_iter()

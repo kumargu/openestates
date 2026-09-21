@@ -415,7 +415,6 @@
             "relationClass": "access",
             "renderKind": "terrain_corridor",
             "mapPresentation": "immersive_3d",
-            "emptyState": "Approach road not mapped",
             "experience": {
               "kind": "street_view_tour",
               "waypointSpacingM": 65,

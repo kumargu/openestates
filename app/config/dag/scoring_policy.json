@@ -129,7 +129,6 @@
     "listing_price_per_sqft_range_2bhk",
     "listing_price_per_sqft_range_3bhk",
     "listing_price_per_sqft_range_4bhk",
-    "access_road_quality",
     "google_rating",
     "google_review_count",
     "google_reviews_url",
@@ -201,7 +200,6 @@
       "fact_keys": [
         "environment.groundwater_potential_class",
         "environment.water_body_distance_m",
-        "access_road_quality",
         "nearby_public_parks",
         "operating.water_supply_good",
         "positive.maintenance_quality",

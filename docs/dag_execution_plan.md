@@ -143,7 +143,7 @@ app/config/
 | `data/product/livability_theme_registry.json` | Merged into `concern_taxonomy.json` + `fact_registry.json` |
 | `backend/src/assets/registry.rs` | Exported to `asset_registry.json`; Rust loader in `dag_config/` |
 | `data/product/buyer_context_sections.json` | Copied to `app/config/product/evidence_sections.json` |
-| `data/product/approach_road_visuals.json` | Move to lake as enriched media facts on `road_segment` |
+| `data/product/approach_road_visuals.json` | Removed; Street View resolves only from OSM entrance/corridor facts |
 
 ### 2.2 Leaf schema (every fact)
 
@@ -210,7 +210,7 @@ Track and eliminate these as phases complete.
 | `livability_brief.rs` | `include_str!(livability_theme_registry.json)` | Load `concern_taxonomy.json` |
 | `data_loader.rs` | `.unwrap_or(0.5)` on seed scores | Hydrate from facts; null if missing |
 | `routes/properties.rs` | Evidence section builders (`rera`, `reviews`, …) | Group facts by `ui.section_kind` from config |
-| `routes/properties.rs` | `include_str!(approach_road_visuals.json)` | Reference fact_keys; visuals optional overlay |
+| `routes/properties.rs` | `include_str!(approach_road_visuals.json)` | Removed; property map consumes typed OSM entrance/corridor facts |
 | `scoring/transparency.rs` | Seed-field composite | DAG-backed confidence components |
 
 ### 4.2 Pipeline (Python)

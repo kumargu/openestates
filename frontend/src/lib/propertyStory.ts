@@ -1,7 +1,7 @@
 import { initialPropertySceneUrls } from "./propertyScene.ts";
 import { backendUrl } from "./runtimeConfig.ts";
+import { hasArrivalMap } from "./arrivalMapProjection.ts";
 import { hasAroundThisHomePlate } from "./nearbyPlateProjection.ts";
-import { visibleEvidenceSections } from "./evidence.ts";
 import type {
   DecisionLabel,
   PropertyDetailResponse,
@@ -74,23 +74,6 @@ export type StoryMapModel = {
   available: boolean;
 };
 
-export type StoryArrivalFrame = {
-  id: string;
-  url: string;
-  label: string;
-  distanceFromGateM?: number;
-  heading?: number;
-  sourceType: string;
-  lifecycle: StoryMediaLifecycle;
-  capturedAt?: string;
-  sourceUrl?: string;
-  stripKind: string;
-};
-
-export type StoryArrivalModel = {
-  frames: StoryArrivalFrame[];
-};
-
 export type StoryReviewsModel = {
   state: "present" | "unresolved" | "missing";
   rating?: number;
@@ -134,7 +117,6 @@ export type PropertyStoryModel = {
   identity: StoryIdentity;
   media: StoryMedia;
   map: StoryMapModel;
-  arrival: StoryArrivalModel;
   reviews: StoryReviewsModel;
   recordCards: StoryRecordCard[];
   coverage: StoryCoverage;
@@ -328,40 +310,6 @@ function projectMedia(
     frames,
     galleryUrls: inputs ? urls : galleryUrls,
   };
-}
-
-function projectArrival(data: PropertyDetailResponse): StoryArrivalModel {
-  const approachSections = visibleEvidenceSections(
-    data.evidence?.sections ?? [],
-  ).filter((section) => section.kind === "approach_road");
-  const frames = approachSections
-    .flatMap((section) => section.media ?? [])
-    .flatMap((strip) =>
-      strip.frames
-        .filter((frame) => Boolean(frame.image_url.trim()))
-        .map((frame, index) => ({
-          id: `arrival-${stableStoryHash(
-            `${strip.kind}:${frame.image_url}:${frame.label}:${index}`,
-          ).toString(16)}`,
-          url: backendUrl(frame.image_url.trim()),
-          label: frame.label.trim(),
-          distanceFromGateM:
-            Number.isFinite(frame.distance_from_gate_m)
-            && frame.distance_from_gate_m >= 0
-              ? frame.distance_from_gate_m
-              : undefined,
-          heading: Number.isFinite(frame.heading) ? frame.heading : undefined,
-          sourceType: strip.provider.trim() || "unknown",
-          lifecycle: strip.kind === "street_view_strip"
-            ? "current" as const
-            : "unknown" as const,
-          capturedAt: frame.capture_date.trim() || undefined,
-          sourceUrl: sourceUrl(frame.source_url),
-          stripKind: strip.kind,
-        })),
-    )
-    .slice(0, 6);
-  return { frames };
 }
 
 function projectReviews(
@@ -564,7 +512,6 @@ export function projectPropertyStory(
 ): PropertyStoryModel {
   const facts = identityFacts(data);
   const media = projectMedia(data, options.media);
-  const arrival = projectArrival(data);
   const reviews = projectReviews(data);
   const recordCards = projectRecordCards(data);
   const map = {
@@ -580,7 +527,7 @@ export function projectPropertyStory(
   const decks = orderedDecks({
     heroFactKeys: facts.map((fact) => fact.key),
     hasMap: map.available,
-    hasArrival: arrival.frames.length > 0,
+    hasArrival: hasArrivalMap(data.map_context),
     reviewState: reviews.state,
     hasRecord: recordCards.length > 0,
   });
@@ -602,7 +549,6 @@ export function projectPropertyStory(
     },
     media,
     map,
-    arrival,
     reviews,
     recordCards,
     coverage: {

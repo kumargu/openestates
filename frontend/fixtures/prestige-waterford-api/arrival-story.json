@@ -215,7 +215,6 @@
         "resumeLabel": "Resume approach road",
         "replayLabel": "Replay approach road"
       },
-      "emptyState": "Approach road not mapped",
       "relationClass": "access",
       "enabledByDefault": true,
       "rank": 3,

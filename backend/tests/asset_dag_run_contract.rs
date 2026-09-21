@@ -458,19 +458,6 @@ async fn dag_plan_fans_all_current_support_partitions_into_society_gold_lineage(
         })
     );
 
-    let approach_road_facts = materialization_in_partition(
-        "approach_road_graph_facts",
-        AssetStage::Silver,
-        "2026-07-13",
-        vec![
-            canonical.materialization_id.clone(),
-            rera_facts.materialization_id.clone(),
-            google_facts.materialization_id.clone(),
-        ],
-        now,
-        AssetPartition::global(),
-    );
-    write_current(&materializations, &approach_road_facts).await;
     let groundwater_facts = materialization_in_partition(
         "society_groundwater_potential_facts",
         AssetStage::Silver,
@@ -562,7 +549,6 @@ async fn dag_plan_fans_all_current_support_partitions_into_society_gold_lineage(
         vec![
             canonical.materialization_id.clone(),
             society_fact_snapshot.materialization_id.clone(),
-            approach_road_facts.materialization_id.clone(),
         ],
         now,
         AssetPartition::new([("society", "fixture-society")]),
