@@ -45,6 +45,43 @@ pub struct SearchRuntimeSnapshot {
 }
 
 impl SearchRuntimeSnapshot {
+    pub fn entity_refs_for_property(&self, property: &Property) -> crate::models::KgEntityRefs {
+        let property_entity_id = format!("property:{}", property.id);
+        let society_entity_id = self
+            .search_index
+            .society_entity_id_for_property(&property.id)
+            .unwrap_or(&property.society_id)
+            .to_string();
+        let area_entity_id = self
+            .search_index
+            .area_entity_id_for_property(&property.id)
+            .unwrap_or(&property.area_id)
+            .to_string();
+        let builder_entity_id = self
+            .search_index
+            .builder_entity_id_for_property(&property.id)
+            .map(str::to_string);
+        let mut source_entity_ids = [
+            Some(property_entity_id.clone()),
+            Some(society_entity_id.clone()),
+            Some(area_entity_id.clone()),
+            builder_entity_id.clone(),
+        ]
+        .into_iter()
+        .flatten()
+        .filter(|id| self.entity_by_id.contains_key(id))
+        .collect::<Vec<_>>();
+        source_entity_ids.sort();
+        source_entity_ids.dedup();
+        crate::models::KgEntityRefs {
+            property_entity_id,
+            society_entity_id,
+            area_entity_id,
+            builder_entity_id,
+            source_entity_ids,
+        }
+    }
+
     pub fn new(
         bundle: Arc<LoadedServingBundle>,
         properties: Vec<Property>,

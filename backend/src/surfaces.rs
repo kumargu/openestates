@@ -10,7 +10,6 @@ use crate::dag_config::{
 };
 use crate::knowledge::FactValue;
 use crate::models::{KgEntityRefs, Property};
-use crate::related_societies::related_society_entity_ids_with_entities;
 use crate::search::geo::{extract_first_distance_km, haversine_km};
 pub mod proof_focus;
 use self::proof_focus::ResolvedProofFocus;
@@ -364,7 +363,6 @@ pub fn build_surface_scene_with_focus(
         let layer_rank = layer_rule.rank.unwrap_or((layer_index as u32) + 1);
         let mut candidates = features_for_layer(
             layer_rule,
-            property,
             &anchor_entity_id,
             anchor_coords,
             bundle,
@@ -748,7 +746,6 @@ impl ScenePlaceIndex {
 
 fn features_for_layer(
     layer_rule: &UiSurfaceLayerRule,
-    property: &Property,
     anchor_entity_id: &str,
     anchor_coords: Option<(f64, f64)>,
     bundle: &LoadedServingBundle,
@@ -761,16 +758,7 @@ fn features_for_layer(
         .iter()
         .map(|key| key.as_str())
         .collect::<HashSet<_>>();
-    let mut row_entity_ids = vec![anchor_entity_id.to_string()];
-    if layer_rule.include_related_society_facts {
-        row_entity_ids.extend(related_society_entity_ids_with_entities(
-            property,
-            &bundle.fact_index,
-            &bundle.entities,
-        ));
-    }
-    row_entity_ids.sort();
-    row_entity_ids.dedup();
+    let row_entity_ids = [anchor_entity_id.to_string()];
 
     let mut fact_sources = Vec::new();
     for row_entity_id in row_entity_ids {
@@ -1995,7 +1983,7 @@ mod tests {
                     spread_min_distance_km: None,
                     show_review_metrics: None,
                     include_name_markers: Vec::new(),
-                    include_related_society_facts: false,
+
                     enabled_by_default: true,
                     rank: Some(1),
                 }],
@@ -2132,7 +2120,7 @@ mod tests {
                     spread_min_distance_km: None,
                     show_review_metrics: None,
                     include_name_markers: Vec::new(),
-                    include_related_society_facts: false,
+
                     enabled_by_default: true,
                     rank: Some(1),
                 }],
@@ -2246,7 +2234,7 @@ mod tests {
                     spread_min_distance_km: None,
                     show_review_metrics: None,
                     include_name_markers: Vec::new(),
-                    include_related_society_facts: false,
+
                     enabled_by_default: true,
                     rank: Some(1),
                 }],
@@ -2353,7 +2341,7 @@ mod tests {
                     spread_min_distance_km: None,
                     show_review_metrics: None,
                     include_name_markers: Vec::new(),
-                    include_related_society_facts: false,
+
                     enabled_by_default: true,
                     rank: Some(1),
                 }],
@@ -2408,20 +2396,20 @@ mod tests {
     }
 
     #[test]
-    fn surface_scene_includes_related_rera_society_proximity_facts() {
+    fn surface_scene_reads_canonical_society_proximity_facts() {
         let entities = vec![
             serving_entity("society:society-one", "society", "One Society"),
             serving_entity("society:rera-one", "society", "One Society Phase 1"),
         ];
         let facts = vec![
             serving_fact(
-                "society:society-one",
+                "society:rera-one",
                 "geo.latitude",
                 FactValue::Numeric(12.94),
                 None,
             ),
             serving_fact(
-                "society:society-one",
+                "society:rera-one",
                 "geo.longitude",
                 FactValue::Numeric(77.745),
                 None,
@@ -2480,7 +2468,7 @@ mod tests {
                     spread_min_distance_km: None,
                     show_review_metrics: None,
                     include_name_markers: Vec::new(),
-                    include_related_society_facts: true,
+
                     enabled_by_default: true,
                     rank: Some(1),
                 }],
@@ -2492,7 +2480,7 @@ mod tests {
             Some("One Society"),
             KgEntityRefs {
                 property_entity_id: "property:one".to_string(),
-                society_entity_id: "society:society-one".to_string(),
+                society_entity_id: "society:rera-one".to_string(),
                 area_entity_id: "area:whitefield".to_string(),
                 builder_entity_id: None,
                 source_entity_ids: Vec::new(),
@@ -2508,7 +2496,7 @@ mod tests {
     }
 
     #[test]
-    fn surface_scene_includes_related_rera_red_flags_matched_by_entity_name() {
+    fn surface_scene_reads_canonical_society_red_flags() {
         let entities = vec![
             serving_entity("society:society-one", "society", "One Society"),
             serving_entity("society:rera-one", "society", "One Society"),
@@ -2620,7 +2608,7 @@ mod tests {
                     spread_min_distance_km: None,
                     show_review_metrics: Some(false),
                     include_name_markers: Vec::new(),
-                    include_related_society_facts: true,
+
                     enabled_by_default: true,
                     rank: Some(1),
                 }],
@@ -2632,7 +2620,7 @@ mod tests {
             Some("One Society"),
             KgEntityRefs {
                 property_entity_id: "property:one".to_string(),
-                society_entity_id: "society:society-one".to_string(),
+                society_entity_id: "society:rera-one".to_string(),
                 area_entity_id: "area:whitefield".to_string(),
                 builder_entity_id: None,
                 source_entity_ids: Vec::new(),
@@ -2734,7 +2722,7 @@ mod tests {
                     spread_min_distance_km: None,
                     show_review_metrics: Some(false),
                     include_name_markers: Vec::new(),
-                    include_related_society_facts: false,
+
                     enabled_by_default: true,
                     rank: Some(1),
                 }],
@@ -2832,7 +2820,7 @@ mod tests {
             spread_min_distance_km: None,
             show_review_metrics: None,
             include_name_markers: Vec::new(),
-            include_related_society_facts: false,
+
             enabled_by_default: true,
             rank: Some(1),
         };
@@ -2865,7 +2853,7 @@ mod tests {
             spread_min_distance_km: None,
             show_review_metrics: None,
             include_name_markers: Vec::new(),
-            include_related_society_facts: false,
+
             enabled_by_default: true,
             rank: Some(1),
         };

@@ -39,7 +39,7 @@
       ]
     },
     "DataFreshness": {
-      "description": "Legacy optional API shape. Search and detail responses do not calculate\nfreshness or age from timestamps.",
+      "description": "Get the learned_at timestamp from any fact matching the key, formatted as ISO string.\nExtract area intelligence from the knowledge graph for a given area.\nReturns None if no Reddit-sourced area intelligence facts exist.\nExtract builder trust from a facts slice — shared logic between direct and canonical builder.\nExtract builder trust data by traversing BuiltBy edges from society to builder node.\nIf the builder has a `canonical_builder` fact (orphan resolution), follows the\nreference to the canonical builder node and reads delivery data from there.\nReturns None if no builder node found or no delivery data.\nLegacy optional API shape. Search and detail responses do not calculate\nfreshness or age from timestamps.",
       "type": "object",
       "properties": {
         "days_ago": {

@@ -13,17 +13,6 @@
         }
       ]
     },
-    "area_intelligence": {
-      "description": "Area intelligence from Reddit and other sources (None if not yet enriched).",
-      "anyOf": [
-        {
-          "$ref": "#/definitions/AreaIntelligence"
-        },
-        {
-          "type": "null"
-        }
-      ]
-    },
     "area_price_range_high": {
       "description": "Highest price_per_sqft among properties in the same area.",
       "type": [
@@ -56,32 +45,10 @@
         }
       ]
     },
-    "builder_trust": {
-      "description": "Builder delivery track record from knowledge graph",
-      "anyOf": [
-        {
-          "$ref": "#/definitions/BuilderTrust"
-        },
-        {
-          "type": "null"
-        }
-      ]
-    },
     "contract_version": {
       "type": "integer",
       "format": "uint32",
       "minimum": 0
-    },
-    "data_freshness": {
-      "description": "Data freshness — how recently and richly the society data was updated",
-      "anyOf": [
-        {
-          "$ref": "#/definitions/DataFreshness"
-        },
-        {
-          "type": "null"
-        }
-      ]
     },
     "decision_check_summary": {
       "description": "Grouped project-check read model for the buyer-facing detail page.",
@@ -239,13 +206,6 @@
         "null"
       ]
     },
-    "similar_properties": {
-      "description": "Similar properties from locally precomputed society embeddings.",
-      "type": "array",
-      "items": {
-        "$ref": "#/definitions/PropertyCard"
-      }
-    },
     "snapshot_identity": {
       "type": "string"
     },
@@ -269,7 +229,6 @@
     "evidence",
     "society",
     "area",
-    "similar_properties",
     "recommendations",
     "rera_report_ref",
     "area_price_range_low",
@@ -277,126 +236,6 @@
     "interest_count"
   ],
   "definitions": {
-    "AreaIntelligence": {
-      "type": "object",
-      "properties": {
-        "community_vibe": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "commute_reality": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "deal_breakers": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "green_cover": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "grocery_shopping": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "healthcare_access": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "hidden_gems": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "last_updated": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "noise_level": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "overall_sentiment": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "recurring_complaints": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "safety": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "school_quality": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "source_count": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "int32"
-        },
-        "walkability": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "water_supply": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "safety",
-        "commute_reality",
-        "water_supply",
-        "noise_level",
-        "green_cover",
-        "community_vibe",
-        "walkability",
-        "school_quality",
-        "grocery_shopping",
-        "healthcare_access",
-        "recurring_complaints",
-        "hidden_gems",
-        "deal_breakers",
-        "overall_sentiment",
-        "source_count",
-        "last_updated"
-      ]
-    },
     "AreaProfile": {
       "type": "object",
       "properties": {
@@ -601,37 +440,6 @@
         "current"
       ]
     },
-    "BuilderTrust": {
-      "type": "object",
-      "properties": {
-        "delivery_display": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "delivery_rate": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "format": "double"
-        },
-        "project_count": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint32",
-          "minimum": 0
-        }
-      },
-      "required": [
-        "delivery_rate",
-        "project_count",
-        "delivery_display"
-      ]
-    },
     "CommunityPulse": {
       "type": "object",
       "properties": {
@@ -702,7 +510,7 @@
       ]
     },
     "DataFreshness": {
-      "description": "Legacy optional API shape. Search and detail responses do not calculate\nfreshness or age from timestamps.",
+      "description": "Get the learned_at timestamp from any fact matching the key, formatted as ISO string.\nExtract area intelligence from the knowledge graph for a given area.\nReturns None if no Reddit-sourced area intelligence facts exist.\nExtract builder trust from a facts slice — shared logic between direct and canonical builder.\nExtract builder trust data by traversing BuiltBy edges from society to builder node.\nIf the builder has a `canonical_builder` fact (orphan resolution), follows the\nreference to the canonical builder node and reads delivery data from there.\nReturns None if no builder node found or no delivery data.\nLegacy optional API shape. Search and detail responses do not calculate\nfreshness or age from timestamps.",
       "type": "object",
       "properties": {
         "days_ago": {

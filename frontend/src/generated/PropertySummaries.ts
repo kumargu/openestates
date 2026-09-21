@@ -152,6 +152,14 @@ export interface InventoryAvailability {
   price: Availability;
 }
 /**
+ * Get the learned_at timestamp from any fact matching the key, formatted as ISO string.
+ * Extract area intelligence from the knowledge graph for a given area.
+ * Returns None if no Reddit-sourced area intelligence facts exist.
+ * Extract builder trust from a facts slice — shared logic between direct and canonical builder.
+ * Extract builder trust data by traversing BuiltBy edges from society to builder node.
+ * If the builder has a `canonical_builder` fact (orphan resolution), follows the
+ * reference to the canonical builder node and reads delivery data from there.
+ * Returns None if no builder node found or no delivery data.
  * Legacy optional API shape. Search and detail responses do not calculate
  * freshness or age from timestamps.
  */

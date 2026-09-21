@@ -693,7 +693,6 @@ function makeDetail(card: PropertyCard): PropertyDetailResponse {
       infrastructure_tags: area.infrastructure_tags,
       community_notes: area.community_notes,
     },
-    similar_properties: fixtureProperties.filter((property) => property.id !== card.id && property.area === card.area).slice(0, 3),
     rera_report_ref: {
       registration_ids: [],
       href: `/property/${card.id}/rera`,
@@ -703,12 +702,6 @@ function makeDetail(card: PropertyCard): PropertyDetailResponse {
     project_status: card.project_status,
     project_status_display: card.project_status_display,
     home_state_display: card.home_state_display,
-    builder_trust: {
-      delivery_rate: card.root_source === "rera" ? 0.84 : 0.62,
-      project_count: 12,
-      delivery_display: card.builder_delivery_display ?? null,
-    },
-    data_freshness: card.data_freshness,
   };
 }
 

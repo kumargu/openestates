@@ -8,7 +8,6 @@ use axum::Json;
 use serde::{Deserialize, Serialize};
 
 use crate::dag_config::ui_surfaces_config;
-use crate::routes::enrichment::kg_entity_refs_for_property;
 use crate::search::proof::{resolve_proof_token, ProofResolutionError};
 use crate::security::security_tuning;
 use crate::state::AppState;
@@ -159,7 +158,7 @@ fn check_snapshot(
 }
 
 async fn build_property_surfaces_response(
-    state: &Arc<AppState>,
+    _state: &Arc<AppState>,
     runtime: Arc<crate::state::SearchRuntimeSnapshot>,
     property_id: &str,
     surface_ids: &[String],
@@ -180,9 +179,7 @@ async fn build_property_surfaces_response(
     let config = ui_surfaces_config()
         .map_err(|err| SurfaceRouteError::internal(format!("surface_config_invalid: {err}")))?;
 
-    let graph = state.knowledge.read().await;
-    let entity_refs = kg_entity_refs_for_property(&property, &graph);
-    drop(graph);
+    let entity_refs = runtime.entity_refs_for_property(&property);
     let society_name = runtime
         .societies
         .iter()

@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use backend::graph::GraphIndex;
-use backend::knowledge::{FactValue, KnowledgeGraph};
+use backend::knowledge::FactValue;
 use backend::models::{KgEntityRefs, Property, Society};
 use backend::recommendations::{
     build_recommendation_branches, RecommendationBranch, RecommendationBranchInputs,
@@ -233,7 +233,6 @@ fn execute(case: &ScenarioCase, reverse_candidates: bool) -> Vec<RecommendationB
     let properties = specs.iter().map(property).collect::<Vec<_>>();
     let societies = specs.iter().map(society).collect::<Vec<_>>();
     let bundle = build_bundle(case, &specs);
-    let graph = KnowledgeGraph::new();
     let anchor = properties
         .iter()
         .find(|property| property.id == case.anchor.id)
@@ -243,7 +242,6 @@ fn execute(case: &ScenarioCase, reverse_candidates: bool) -> Vec<RecommendationB
     build_recommendation_branches(RecommendationBranchInputs {
         current: anchor,
         current_evidence: &evidence,
-        graph: &graph,
         properties: &properties,
         societies: &societies,
         serving_bundle: Some(&bundle),

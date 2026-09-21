@@ -18,10 +18,6 @@ export type ReraEvidenceAvailability = "available" | "partial" | "unavailable";
 export interface PropertyDetail {
   area: AreaProfile | null;
   /**
-   * Area intelligence from Reddit and other sources (None if not yet enriched).
-   */
-  area_intelligence?: AreaIntelligence | null;
-  /**
    * Highest price_per_sqft among properties in the same area.
    */
   area_price_range_high: number | null;
@@ -34,15 +30,7 @@ export interface PropertyDetail {
    * Other locally tracked projects tied to the same normalized legal promoter name.
    */
   builder_portfolio?: BuilderPortfolio | null;
-  /**
-   * Builder delivery track record from knowledge graph
-   */
-  builder_trust?: BuilderTrust | null;
   contract_version: number;
-  /**
-   * Data freshness — how recently and richly the society data was updated
-   */
-  data_freshness?: DataFreshness | null;
   /**
    * Grouped project-check read model for the buyer-facing detail page.
    */
@@ -122,10 +110,6 @@ export interface PropertyDetail {
    * Where the society data originally came from: "rera", "seller", "discovered", "legacy"
    */
   root_source?: string | null;
-  /**
-   * Similar properties from locally precomputed society embeddings.
-   */
-  similar_properties: PropertyCard[];
   snapshot_identity: string;
   society: Society | null;
 }
@@ -159,24 +143,6 @@ export interface RedditSignals {
   recurring_concerns: string[];
   sentiment_label: string;
 }
-export interface AreaIntelligence {
-  community_vibe: string | null;
-  commute_reality: string | null;
-  deal_breakers: string[];
-  green_cover: string | null;
-  grocery_shopping: string | null;
-  healthcare_access: string | null;
-  hidden_gems: string[];
-  last_updated: string | null;
-  noise_level: string | null;
-  overall_sentiment: string | null;
-  recurring_complaints: string[];
-  safety: string | null;
-  school_quality: string | null;
-  source_count: number | null;
-  walkability: string | null;
-  water_supply: string | null;
-}
 export interface InventoryAvailability {
   area: Availability;
   bedrooms: Availability;
@@ -205,39 +171,6 @@ export interface BuilderProjectRecord {
   rera_registered: boolean;
   rera_status?: string;
   start_date?: string;
-}
-export interface BuilderTrust {
-  delivery_display: string | null;
-  delivery_rate: number | null;
-  project_count: number | null;
-}
-/**
- * Legacy optional API shape. Search and detail responses do not calculate
- * freshness or age from timestamps.
- */
-export interface DataFreshness {
-  /**
-   * How many days ago the node was last updated
-   */
-  days_ago: number;
-  /**
-   * Total number of facts on the node
-   */
-  fact_count: number;
-  /**
-   * Human-readable label: "Fresh", "Recent", "Stale", "Very stale"
-   */
-  freshness_label: string;
-  /**
-   * ISO timestamp of last enrichment
-   */
-  last_enriched: string;
-  /**
-   * Breakdown of facts by source type, e.g. {"Rera": 5, "Reddit": 3}
-   */
-  source_breakdown: {
-    [k: string]: number;
-  };
 }
 export interface DecisionCheckSummary {
   groups?: DecisionLabelGroup[];
@@ -759,6 +692,42 @@ export interface PropertyCard {
   title: string;
   total_floors: number;
   transparency_tags: string[];
+}
+/**
+ * Get the learned_at timestamp from any fact matching the key, formatted as ISO string.
+ * Extract area intelligence from the knowledge graph for a given area.
+ * Returns None if no Reddit-sourced area intelligence facts exist.
+ * Extract builder trust from a facts slice — shared logic between direct and canonical builder.
+ * Extract builder trust data by traversing BuiltBy edges from society to builder node.
+ * If the builder has a `canonical_builder` fact (orphan resolution), follows the
+ * reference to the canonical builder node and reads delivery data from there.
+ * Returns None if no builder node found or no delivery data.
+ * Legacy optional API shape. Search and detail responses do not calculate
+ * freshness or age from timestamps.
+ */
+export interface DataFreshness {
+  /**
+   * How many days ago the node was last updated
+   */
+  days_ago: number;
+  /**
+   * Total number of facts on the node
+   */
+  fact_count: number;
+  /**
+   * Human-readable label: "Fresh", "Recent", "Stale", "Very stale"
+   */
+  freshness_label: string;
+  /**
+   * ISO timestamp of last enrichment
+   */
+  last_enriched: string;
+  /**
+   * Breakdown of facts by source type, e.g. {"Rera": 5, "Reddit": 3}
+   */
+  source_breakdown: {
+    [k: string]: number;
+  };
 }
 export interface RecommendationEnvelope {
   cache_key: string;

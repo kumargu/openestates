@@ -43,13 +43,19 @@
         "targetId": "around-this-home"
       },
       "scene": {
-        "anchor": { "entityRef": "society" },
+        "anchor": {
+          "entityRef": "society"
+        },
         "layers": [
           {
             "id": "metro",
             "label": "Metro",
-            "factKeys": ["nearby_metro_stations"],
-            "edgeTypes": ["near_place"],
+            "factKeys": [
+              "nearby_metro_stations"
+            ],
+            "edgeTypes": [
+              "near_place"
+            ],
             "family": "access",
             "relationClass": "access",
             "renderKind": "pin",
@@ -62,8 +68,12 @@
           {
             "id": "schools",
             "label": "Schools",
-            "factKeys": ["nearby_schools"],
-            "edgeTypes": ["near_place"],
+            "factKeys": [
+              "nearby_schools"
+            ],
+            "edgeTypes": [
+              "near_place"
+            ],
             "family": "access",
             "relationClass": "access",
             "renderKind": "pin",
@@ -78,8 +88,12 @@
           {
             "id": "hospitals",
             "label": "Hospitals",
-            "factKeys": ["nearby_hospitals"],
-            "edgeTypes": ["near_place"],
+            "factKeys": [
+              "nearby_hospitals"
+            ],
+            "edgeTypes": [
+              "near_place"
+            ],
             "family": "access",
             "relationClass": "access",
             "renderKind": "pin",
@@ -88,15 +102,26 @@
             "maxItems": 5,
             "expandedMaxItems": 8,
             "spreadMinDistanceKm": 1.2,
-            "includeNameMarkers": ["hospital", "hospitals", "medical", "clinic", "health", "maternity"],
+            "includeNameMarkers": [
+              "hospital",
+              "hospitals",
+              "medical",
+              "clinic",
+              "health",
+              "maternity"
+            ],
             "enabledByDefault": true,
             "rank": 3
           },
           {
             "id": "tech",
             "label": "Tech parks",
-            "factKeys": ["nearby_tech_parks"],
-            "edgeTypes": ["near_place"],
+            "factKeys": [
+              "nearby_tech_parks"
+            ],
+            "edgeTypes": [
+              "near_place"
+            ],
             "family": "access",
             "relationClass": "access",
             "renderKind": "pin",
@@ -105,16 +130,27 @@
             "maxItems": 20,
             "expandedMaxItems": 20,
             "spreadMinDistanceKm": 2.0,
-            "includeNameMarkers": ["tech park", "technology park", "business park", "tech forest", "office park", "it park", "itpb"],
-            "includeRelatedSocietyFacts": true,
+            "includeNameMarkers": [
+              "tech park",
+              "technology park",
+              "business park",
+              "tech forest",
+              "office park",
+              "it park",
+              "itpb"
+            ],
             "enabledByDefault": true,
             "rank": 4
           },
           {
             "id": "fitness",
             "label": "Fitness",
-            "factKeys": ["nearby_fitness"],
-            "edgeTypes": ["near_place"],
+            "factKeys": [
+              "nearby_fitness"
+            ],
+            "edgeTypes": [
+              "near_place"
+            ],
             "family": "access",
             "relationClass": "access",
             "renderKind": "pin",
@@ -123,15 +159,22 @@
             "maxItems": 5,
             "expandedMaxItems": 8,
             "spreadMinDistanceKm": 1.0,
-            "includeNameMarkers": ["cult", "cult.fit"],
+            "includeNameMarkers": [
+              "cult",
+              "cult.fit"
+            ],
             "enabledByDefault": false,
             "rank": 5
           },
           {
             "id": "parks",
             "label": "Parks",
-            "factKeys": ["nearby_public_parks"],
-            "edgeTypes": ["near_place"],
+            "factKeys": [
+              "nearby_public_parks"
+            ],
+            "edgeTypes": [
+              "near_place"
+            ],
             "family": "environment",
             "relationClass": "context",
             "renderKind": "pin",
@@ -146,9 +189,16 @@
           {
             "id": "lakes",
             "label": "Lakes",
-            "factKeys": ["nearby_lakes", "lake_within_250m"],
-            "contextPolygonKinds": ["lake"],
-            "edgeTypes": ["near_place"],
+            "factKeys": [
+              "nearby_lakes",
+              "lake_within_250m"
+            ],
+            "contextPolygonKinds": [
+              "lake"
+            ],
+            "edgeTypes": [
+              "near_place"
+            ],
             "family": "environment",
             "relationClass": "context",
             "renderKind": "pin",
@@ -163,8 +213,12 @@
           {
             "id": "breweries",
             "label": "Breweries",
-            "factKeys": ["nearby_breweries"],
-            "edgeTypes": ["near_place"],
+            "factKeys": [
+              "nearby_breweries"
+            ],
+            "edgeTypes": [
+              "near_place"
+            ],
             "family": "access",
             "relationClass": "access",
             "renderKind": "pin",
@@ -173,7 +227,12 @@
             "maxItems": 5,
             "expandedMaxItems": 8,
             "spreadMinDistanceKm": 1.0,
-            "includeNameMarkers": ["brewery", "brewing", "biergarten", "beer garden"],
+            "includeNameMarkers": [
+              "brewery",
+              "brewing",
+              "biergarten",
+              "beer garden"
+            ],
             "enabledByDefault": false,
             "rank": 8
           },
@@ -207,7 +266,6 @@
             "expandedMaxItems": 8,
             "spreadMinDistanceKm": 1.0,
             "showReviewMetrics": false,
-            "includeRelatedSocietyFacts": true,
             "enabledByDefault": true,
             "rank": 9
           }
@@ -238,36 +296,42 @@
         "kind": "scene",
         "targetId": "remote-arrival"
       },
-    "scene": {
-      "anchor": {
-        "entityRef": "society",
-        "boundaryFactKey": "geo.geometry_geojson"
-      },
-      "experience": {
-        "revealDurationMs": 7000,
-        "startRangeM": 1800,
-        "finalRangeM": 700,
-        "finalTilt": 48,
-        "finalHeading": 210,
-        "rotationArcDegrees": 140,
-        "boundaryPadding": 1.35,
-        "mobileBoundaryPadding": 1.6,
-        "missingBoundaryState": "Society boundary not mapped",
-        "googleUnavailableState": "Map unavailable",
-        "societyPlayLabel": "Play society reveal",
-        "societyPauseLabel": "Pause society reveal",
-        "societyResumeLabel": "Resume society reveal",
-        "searchContextLabel": "Also in your search",
-        "searchContextViewHomeLabel": "View home",
-        "backToSocietyLabel": "Back to this society"
-      },
-      "layers": [
+      "scene": {
+        "anchor": {
+          "entityRef": "society",
+          "boundaryFactKey": "geo.geometry_geojson"
+        },
+        "experience": {
+          "revealDurationMs": 7000,
+          "startRangeM": 1800,
+          "finalRangeM": 700,
+          "finalTilt": 48,
+          "finalHeading": 210,
+          "rotationArcDegrees": 140,
+          "boundaryPadding": 1.35,
+          "mobileBoundaryPadding": 1.6,
+          "missingBoundaryState": "Society boundary not mapped",
+          "googleUnavailableState": "Map unavailable",
+          "societyPlayLabel": "Play society reveal",
+          "societyPauseLabel": "Pause society reveal",
+          "societyResumeLabel": "Resume society reveal",
+          "searchContextLabel": "Also in your search",
+          "searchContextViewHomeLabel": "View home",
+          "backToSocietyLabel": "Back to this society"
+        },
+        "layers": [
           {
             "id": "metro",
             "label": "Metro",
-            "factKeys": ["nearby_metro_stations"],
-            "sortPriorityFactKeys": ["nearby_metro_stations"],
-            "edgeTypes": ["near_place"],
+            "factKeys": [
+              "nearby_metro_stations"
+            ],
+            "sortPriorityFactKeys": [
+              "nearby_metro_stations"
+            ],
+            "edgeTypes": [
+              "near_place"
+            ],
             "family": "access",
             "relationClass": "access",
             "renderKind": "pin",
@@ -277,43 +341,49 @@
             "maxItems": 2,
             "enabledByDefault": true,
             "rank": 1
-        },
-        {
-          "id": "entrance",
-          "label": "Entrance",
-          "factKeys": [
-            "society.entrance_entity"
-          ],
-          "linkedEntityFactKeys": [
-            "society.entrance_entity"
-          ],
-          "family": "access",
-          "relationClass": "access",
-          "renderKind": "arrival_marker",
-          "mapPresentation": "immersive_3d",
-          "featureProperties": {
-            "status": "entrance.status",
-            "associationMethod": "entrance.association_method"
           },
-          "featureValueLabels": {
-            "status": {
-              "verified": "Entrance",
-              "inferred": "Likely entrance"
-            }
+          {
+            "id": "entrance",
+            "label": "Entrance",
+            "factKeys": [
+              "society.entrance_entity"
+            ],
+            "linkedEntityFactKeys": [
+              "society.entrance_entity"
+            ],
+            "family": "access",
+            "relationClass": "access",
+            "renderKind": "arrival_marker",
+            "mapPresentation": "immersive_3d",
+            "featureProperties": {
+              "status": "entrance.status",
+              "associationMethod": "entrance.association_method"
+            },
+            "featureValueLabels": {
+              "status": {
+                "verified": "Entrance",
+                "inferred": "Likely entrance"
+              }
+            },
+            "emptyState": "Entrance not mapped",
+            "icon": "entrance",
+            "sort": "distance",
+            "maxItems": 1,
+            "enabledByDefault": true,
+            "rank": 2
           },
-          "emptyState": "Entrance not mapped",
-          "icon": "entrance",
-          "sort": "distance",
-          "maxItems": 1,
-          "enabledByDefault": true,
-          "rank": 2
-        },
-        {
+          {
             "id": "approach_road",
             "label": "Approach road",
-            "factKeys": ["approach_road"],
-            "linkedEntityFactKeys": ["approach_road_entity"],
-            "sortPriorityFactKeys": ["approach_road"],
+            "factKeys": [
+              "approach_road"
+            ],
+            "linkedEntityFactKeys": [
+              "approach_road_entity"
+            ],
+            "sortPriorityFactKeys": [
+              "approach_road"
+            ],
             "family": "access",
             "relationClass": "access",
             "renderKind": "terrain_corridor",
@@ -353,11 +423,11 @@
             "sort": "distance",
             "maxItems": 1,
             "enabledByDefault": true,
-          "featureProperties": {
-            "direction": "road.direction",
-            "associationMethod": "road.association_method"
-          },
-          "rank": 3
+            "featureProperties": {
+              "direction": "road.direction",
+              "associationMethod": "road.association_method"
+            },
+            "rank": 3
           }
         ]
       }
@@ -384,13 +454,19 @@
         "targetId": "around-this-home"
       },
       "scene": {
-        "anchor": { "entityRef": "society" },
+        "anchor": {
+          "entityRef": "society"
+        },
         "layers": [
           {
             "id": "approach_traffic",
             "label": "Traffic",
-            "factKeys": ["risk.approach_road_traffic"],
-            "edgeTypes": ["served_by_road"],
+            "factKeys": [
+              "risk.approach_road_traffic"
+            ],
+            "edgeTypes": [
+              "served_by_road"
+            ],
             "family": "risk",
             "relationClass": "risk_externality",
             "renderKind": "evidence_list",
@@ -401,8 +477,12 @@
           {
             "id": "approach_waterlogging",
             "label": "Waterlogging",
-            "factKeys": ["risk.approach_road_waterlogging"],
-            "edgeTypes": ["served_by_road"],
+            "factKeys": [
+              "risk.approach_road_waterlogging"
+            ],
+            "edgeTypes": [
+              "served_by_road"
+            ],
             "family": "risk",
             "relationClass": "risk_externality",
             "renderKind": "evidence_list",
@@ -438,12 +518,16 @@
         "targetId": "around-this-home"
       },
       "scene": {
-        "anchor": { "entityRef": "society" },
+        "anchor": {
+          "entityRef": "society"
+        },
         "layers": [
           {
             "id": "groundwater",
             "label": "Groundwater",
-            "factKeys": ["environment.groundwater_potential_class"],
+            "factKeys": [
+              "environment.groundwater_potential_class"
+            ],
             "family": "environment",
             "relationClass": "context",
             "renderKind": "evidence_list",
@@ -454,8 +538,14 @@
           {
             "id": "water_bodies",
             "label": "Water bodies",
-            "factKeys": ["environment.water_body_distance_m", "nearby_lakes", "lake_within_250m"],
-            "edgeTypes": ["near_place"],
+            "factKeys": [
+              "environment.water_body_distance_m",
+              "nearby_lakes",
+              "lake_within_250m"
+            ],
+            "edgeTypes": [
+              "near_place"
+            ],
             "family": "environment",
             "relationClass": "context",
             "renderKind": "pin",
@@ -467,7 +557,9 @@
           {
             "id": "rainwater",
             "label": "Rainwater harvesting",
-            "factKeys": ["resilience.rainwater_harvesting_present"],
+            "factKeys": [
+              "resilience.rainwater_harvesting_present"
+            ],
             "family": "environment",
             "relationClass": "context",
             "renderKind": "evidence_list",
@@ -541,13 +633,19 @@
         "targetId": "around-this-home"
       },
       "scene": {
-        "anchor": { "entityRef": "society" },
+        "anchor": {
+          "entityRef": "society"
+        },
         "layers": [
           {
             "id": "road_waterlogging",
             "label": "Approach road",
-            "factKeys": ["risk.approach_road_waterlogging"],
-            "edgeTypes": ["served_by_road"],
+            "factKeys": [
+              "risk.approach_road_waterlogging"
+            ],
+            "edgeTypes": [
+              "served_by_road"
+            ],
             "family": "risk",
             "relationClass": "risk_externality",
             "renderKind": "evidence_list",
@@ -558,7 +656,9 @@
           {
             "id": "basement_seepage",
             "label": "Basement seepage",
-            "factKeys": ["risk.basement_seepage"],
+            "factKeys": [
+              "risk.basement_seepage"
+            ],
             "family": "risk",
             "relationClass": "risk_externality",
             "renderKind": "evidence_list",
@@ -569,8 +669,14 @@
           {
             "id": "drains",
             "label": "Drains",
-            "factKeys": ["stormwater_drain_nearby", "rajakaluve_nearby", "rajakaluve_encroachment_record"],
-            "linkedEntityFactKeys": ["stormwater_drain_place_entity"],
+            "factKeys": [
+              "stormwater_drain_nearby",
+              "rajakaluve_nearby",
+              "rajakaluve_encroachment_record"
+            ],
+            "linkedEntityFactKeys": [
+              "stormwater_drain_place_entity"
+            ],
             "family": "risk",
             "relationClass": "risk_externality",
             "renderKind": "line",

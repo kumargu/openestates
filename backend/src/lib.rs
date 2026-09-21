@@ -15,7 +15,6 @@ pub mod models;
 pub(crate) mod parquet_data;
 pub mod plans;
 pub mod recommendations;
-pub mod related_societies;
 pub mod routes;
 pub mod scoring;
 pub mod search;

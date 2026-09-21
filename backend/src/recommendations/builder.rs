@@ -1,6 +1,5 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 
-use crate::knowledge::graph::KnowledgeGraph;
 use crate::models::{Property, PropertyCard, Society};
 use crate::routes::enrichment::society_node_id;
 use crate::routes::properties::{
@@ -47,7 +46,6 @@ struct BranchBuildState<'a> {
 pub struct RecommendationBranchInputs<'a> {
     pub current: &'a Property,
     pub current_evidence: &'a PropertyEvidenceResponse,
-    pub graph: &'a KnowledgeGraph,
     pub properties: &'a [Property],
     pub societies: &'a [Society],
     pub serving_bundle: Option<&'a LoadedServingBundle>,
@@ -60,7 +58,6 @@ pub fn build_recommendation_branches(
     let RecommendationBranchInputs {
         current,
         current_evidence,
-        graph,
         properties,
         societies,
         serving_bundle,
@@ -78,7 +75,6 @@ pub fn build_recommendation_branches(
     let recall_policy = &policy.recommendation_recall;
     let candidates = recall_candidates(
         current,
-        graph,
         properties,
         societies,
         serving_bundle,
@@ -137,7 +133,6 @@ pub fn build_recommendation_branches(
 
 fn recall_candidates(
     current: &Property,
-    graph: &KnowledgeGraph,
     properties: &[Property],
     societies: &[Society],
     serving_bundle: Option<&LoadedServingBundle>,
@@ -246,7 +241,6 @@ fn recall_candidates(
                 serving_bundle.map(|bundle| &bundle.fact_index),
             );
             let source_panels = build_source_panels(
-                graph,
                 property,
                 serving_bundle.map(|bundle| &bundle.fact_index),
                 serving_bundle.map(|bundle| &bundle.graph_index),

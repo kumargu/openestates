@@ -157,8 +157,6 @@ pub struct UiSurfaceLayerRule {
     pub show_review_metrics: Option<bool>,
     #[serde(default, rename = "includeNameMarkers")]
     pub include_name_markers: Vec<String>,
-    #[serde(default, rename = "includeRelatedSocietyFacts")]
-    pub include_related_society_facts: bool,
     #[serde(default = "default_enabled", rename = "enabledByDefault")]
     pub enabled_by_default: bool,
     #[serde(default)]

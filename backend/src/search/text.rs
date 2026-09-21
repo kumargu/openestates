@@ -5,8 +5,7 @@ use std::collections::{HashMap, HashSet};
 use crate::dag_config::{
     nearby_place_category_for_fact_key, requested_nearby_place_categories, search_resolution_config,
 };
-use crate::knowledge::node::RootSource;
-use crate::knowledge::{FactValue, KnowledgeGraph};
+use crate::knowledge::FactValue;
 use crate::models::Property;
 #[cfg(test)]
 use crate::models::Society;
@@ -2596,61 +2595,6 @@ fn format_measurement(value: f64) -> String {
 
 /// Compute a confidence score for a property based on data quality dimensions.
 /// Used by search results (with graph_driven_pct from match explanation).
-pub fn compute_confidence(
-    graph: Option<&KnowledgeGraph>,
-    society_id: &str,
-    graph_driven_pct: f32,
-) -> Option<ConfidenceScore> {
-    let graph = graph?;
-    let node_id = society_node_id(society_id);
-    let node = graph.get_node(&node_id);
-
-    // Source quality: RERA=1.0, Discovered=0.5, Legacy/None=0.3
-    let (source_score, source_explanation) = compute_source_quality(&node);
-
-    // Fact coverage: min(fact_count/configured full-coverage threshold, 1.0)
-    let (coverage_score, coverage_explanation) = compute_fact_coverage(&node);
-
-    // Match quality: graph_driven_pct / 100.0
-    let match_score = (graph_driven_pct / 100.0) as f64;
-    let match_explanation = format!(
-        "{}% of scoring from verified graph data",
-        graph_driven_pct.round() as u32
-    );
-
-    // Observation time is provenance, not a quality signal.
-    let overall = source_score * 0.5 + coverage_score * 0.25 + match_score * 0.25;
-
-    let label = confidence_label(overall);
-
-    let components = vec![
-        ConfidenceComponent {
-            dimension: "source_quality".to_string(),
-            score: source_score,
-            weight: 0.5,
-            explanation: source_explanation,
-        },
-        ConfidenceComponent {
-            dimension: "fact_coverage".to_string(),
-            score: coverage_score,
-            weight: 0.25,
-            explanation: coverage_explanation,
-        },
-        ConfidenceComponent {
-            dimension: "match_quality".to_string(),
-            score: match_score,
-            weight: 0.25,
-            explanation: match_explanation,
-        },
-    ];
-
-    Some(ConfidenceScore {
-        overall: (overall * 100.0).round() / 100.0,
-        label,
-        components,
-    })
-}
-
 fn compute_confidence_from_serving_facts(
     serving_facts: &ServingFactIndex,
     society_entity_id: &str,
@@ -2725,105 +2669,6 @@ fn compute_confidence_from_serving_facts(
             },
         ],
     })
-}
-
-/// Compute a confidence score for the detail page, replacing match_quality
-/// (which is meaningless outside search context) with fact_source_quality
-/// (average confidence of the node's facts).
-pub fn compute_confidence_for_detail(
-    graph: Option<&KnowledgeGraph>,
-    society_id: &str,
-) -> Option<ConfidenceScore> {
-    let graph = graph?;
-    let node_id = society_node_id(society_id);
-    let node = graph.get_node(&node_id);
-
-    let (source_score, source_explanation) = compute_source_quality(&node);
-    let (coverage_score, coverage_explanation) = compute_fact_coverage(&node);
-    // Fact source quality: average confidence of all facts on this node.
-    // This replaces match_quality (graph_driven_pct) which is 0.0 on detail pages.
-    let (fact_quality_score, fact_quality_explanation) = if let Some(n) = &node {
-        if n.facts.is_empty() {
-            (0.0, "No facts available".to_string())
-        } else {
-            let avg: f64 =
-                n.facts.iter().map(|f| f.confidence as f64).sum::<f64>() / n.facts.len() as f64;
-            (
-                avg,
-                format!(
-                    "Average fact confidence: {:.0}% across {} facts",
-                    avg * 100.0,
-                    n.facts.len()
-                ),
-            )
-        }
-    } else {
-        (0.0, "No knowledge graph data".to_string())
-    };
-
-    let overall = source_score * 0.5 + coverage_score * 0.25 + fact_quality_score * 0.25;
-
-    let label = confidence_label(overall);
-
-    let components = vec![
-        ConfidenceComponent {
-            dimension: "source_quality".to_string(),
-            score: source_score,
-            weight: 0.5,
-            explanation: source_explanation,
-        },
-        ConfidenceComponent {
-            dimension: "fact_coverage".to_string(),
-            score: coverage_score,
-            weight: 0.25,
-            explanation: coverage_explanation,
-        },
-        ConfidenceComponent {
-            dimension: "fact_source_quality".to_string(),
-            score: fact_quality_score,
-            weight: 0.25,
-            explanation: fact_quality_explanation,
-        },
-    ];
-
-    Some(ConfidenceScore {
-        overall: (overall * 100.0).round() / 100.0,
-        label,
-        components,
-    })
-}
-
-// ---------------------------------------------------------------------------
-// Confidence scoring helpers — shared between search and detail variants
-// ---------------------------------------------------------------------------
-
-use crate::knowledge::node::Node;
-
-fn compute_source_quality(node: &Option<&Node>) -> (f64, String) {
-    if let Some(n) = node {
-        match n.root_source {
-            Some(RootSource::Rera) => (1.0, "RERA verified source".to_string()),
-            Some(RootSource::Seller) => (0.6, "Self-reported source".to_string()),
-            Some(RootSource::Discovered) => (
-                0.5,
-                "Discovered via search, verification pending".to_string(),
-            ),
-            Some(RootSource::Legacy) | None => (0.3, "Legacy/unclassified source".to_string()),
-        }
-    } else {
-        (0.3, "No knowledge graph data".to_string())
-    }
-}
-
-fn compute_fact_coverage(node: &Option<&Node>) -> (f64, String) {
-    let fact_count = node.as_ref().map(|n| n.facts.len()).unwrap_or(0);
-    let threshold = schema::ranking_policy().fact_coverage_threshold;
-    let score = (fact_count as f64 / threshold).min(1.0);
-    let explanation = format!(
-        "{} facts available ({} = full coverage)",
-        fact_count, threshold as u32
-    );
-    (score, explanation)
 }
 
 fn confidence_label(overall: f64) -> String {
@@ -3362,7 +3207,7 @@ mod tests {
     use super::*;
     use crate::knowledge::fact::{FactValue, SourcedFact};
     use crate::knowledge::graph::KnowledgeGraph;
-    use crate::knowledge::node::{Node, NodeType, RootSource};
+    use crate::knowledge::node::{Node, NodeType};
     use crate::search::schema::SQM_PER_ACRE;
     use crate::serving::{
         EvidenceRef, ServingEdgeRecord, ServingEntityRecord, ServingFactIndex, ServingFactRecord,
@@ -3647,197 +3492,26 @@ mod tests {
     // compute_confidence tests
     // ---------------------------------------------------------------
 
-    /// Helper: create a SourcedFact with a given key for padding fact counts.
-    fn make_fact(key: &str) -> SourcedFact {
-        SourcedFact::manual(key, FactValue::Text("test".into()))
-    }
-
-    /// Helper: build a graph with a society node having given root_source and fact count.
-    fn graph_with_society_node(
-        slug: &str,
-        root_source: Option<RootSource>,
-        fact_count: usize,
-    ) -> KnowledgeGraph {
-        let mut g = KnowledgeGraph::new();
-        let node_id = format!("society:{}", slug);
-        let mut node = Node::new(&node_id, NodeType::Society, slug);
-        node.root_source = root_source;
-        for i in 0..fact_count {
-            node.add_fact(make_fact(&format!("fact_{}", i)));
-        }
-        g.add_node(node);
-        g
-    }
-
     #[test]
-    fn test_confidence_rera_many_facts_is_high() {
-        let g = graph_with_society_node("well-known", Some(RootSource::Rera), 30);
-        let score = compute_confidence(Some(&g), "well-known", 80.0).unwrap();
-        assert_eq!(score.label, "High");
-        // source=1.0*0.5 + coverage=1.0*0.25 + match=0.8*0.25 = 0.95
-        assert!(
-            score.overall >= 0.7,
-            "Expected High, got overall={}",
-            score.overall
+    fn serving_confidence_ignores_observation_timestamps() {
+        let first = serving_fact(
+            "sample",
+            "google_rating",
+            FactValue::Numeric(4.2),
+            "Google",
+            0.9,
         );
-    }
-
-    #[test]
-    fn test_confidence_discovered_few_facts_is_low() {
-        // Discovered source (0.5) with only 2 facts and 0% graph-driven scoring.
-        // source=0.5*0.5 + coverage=(2/25)*0.25 + match=0.0*0.25 = 0.27.
-        let g = graph_with_society_node("unknown", Some(RootSource::Discovered), 2);
-        let score = compute_confidence(Some(&g), "unknown", 0.0).unwrap();
-        assert_eq!(score.label, "Low");
-        assert!(score.overall < 0.4, "Expected < 0.4, got {}", score.overall);
-
-        // Compare: Legacy source (0.3) with 1 fact also Low
-        let g2 = graph_with_society_node("legacy-sparse", Some(RootSource::Legacy), 1);
-        let score2 = compute_confidence(Some(&g2), "legacy-sparse", 0.0).unwrap();
-        assert_eq!(score2.label, "Low");
-    }
-
-    #[test]
-    fn test_confidence_threshold_calibration() {
-        // At exactly the configured coverage threshold, coverage should be 1.0.
-        let fact_coverage_threshold = schema::ranking_policy().fact_coverage_threshold as usize;
-        let g = graph_with_society_node(
-            "calibrated",
-            Some(RootSource::Legacy),
-            fact_coverage_threshold,
-        );
-        let score = compute_confidence(Some(&g), "calibrated", 0.0).unwrap();
-        let coverage_component = score
-            .components
-            .iter()
-            .find(|c| c.dimension == "fact_coverage")
-            .unwrap();
-        assert!(
-            (coverage_component.score - 1.0).abs() < 0.001,
-            "Expected coverage=1.0 at threshold, got {}",
-            coverage_component.score
-        );
-    }
-
-    #[test]
-    fn test_confidence_no_graph_returns_none() {
-        let result = compute_confidence(None, "any-society", 0.0);
-        assert!(result.is_none());
-    }
-
-    #[test]
-    fn test_confidence_unknown_society_still_returns() {
-        // Society not in graph — should still return a score (low)
-        let g = KnowledgeGraph::new();
-        let score = compute_confidence(Some(&g), "nonexistent", 0.0).unwrap();
-        assert_eq!(score.label, "Low");
-    }
-
-    #[test]
-    fn test_confidence_components_sum_weights() {
-        let g = graph_with_society_node("test", Some(RootSource::Rera), 10);
-        let score = compute_confidence(Some(&g), "test", 50.0).unwrap();
-        let total_weight: f64 = score.components.iter().map(|c| c.weight).sum();
-        assert!(
-            (total_weight - 1.0).abs() < 0.001,
-            "Component weights should sum to 1.0, got {}",
-            total_weight
-        );
-    }
-
-    // ---------------------------------------------------------------
-    // compute_confidence_for_detail tests (Day 71)
-    // ---------------------------------------------------------------
-
-    #[test]
-    fn test_confidence_detail_uses_fact_quality() {
-        // Detail page confidence uses average fact.confidence instead of graph_driven_pct.
-        // Create a node with high-confidence facts (RERA facts default to 0.9 confidence).
-        let mut g = KnowledgeGraph::new();
-        let node_id = "society:well-enriched";
-        let mut node = Node::new(node_id, NodeType::Society, "well-enriched");
-        node.root_source = Some(RootSource::Rera);
-        // Add facts with varying confidence
-        for i in 0..10 {
-            let mut fact = make_fact(&format!("fact_{}", i));
-            fact.confidence = 0.8;
-            node.add_fact(fact);
-        }
-        g.add_node(node);
-
-        let score = compute_confidence_for_detail(Some(&g), "well-enriched").unwrap();
-
-        // Should have "fact_source_quality" component instead of "match_quality"
-        let fsq = score
-            .components
-            .iter()
-            .find(|c| c.dimension == "fact_source_quality");
-        assert!(fsq.is_some(), "Should have fact_source_quality component");
-
-        let mq = score
-            .components
-            .iter()
-            .find(|c| c.dimension == "match_quality");
-        assert!(mq.is_none(), "Should NOT have match_quality component");
-
-        // fact_source_quality should be ~0.8 (all facts have 0.8 confidence)
-        let fsq = fsq.unwrap();
-        assert!(
-            (fsq.score - 0.8).abs() < 0.01,
-            "Expected ~0.8, got {}",
-            fsq.score
-        );
-
-        // Overall should be High (RERA + good coverage + high fact quality)
-        assert_eq!(score.label, "High");
-    }
-
-    #[test]
-    fn test_bulk_timestamp_is_not_a_confidence_component() {
-        let g = graph_with_society_node("bulk-created", Some(RootSource::Discovered), 5);
-        let score = compute_confidence_for_detail(Some(&g), "bulk-created").unwrap();
-        assert!(score
-            .components
-            .iter()
-            .all(|component| component.dimension != "freshness"));
-    }
-
-    #[test]
-    fn test_fact_timestamps_do_not_change_detail_confidence() {
-        let mut g = KnowledgeGraph::new();
-        let timestamp = Utc.timestamp_opt(1_700_000_000, 0).unwrap();
-        let mut same_time = Node::new("society:same-time", NodeType::Society, "same-time");
-        same_time.root_source = Some(RootSource::Rera);
-        let mut varied_time = Node::new("society:varied-time", NodeType::Society, "varied-time");
-        varied_time.root_source = Some(RootSource::Rera);
-        for i in 0..5 {
-            let mut same = make_fact(&format!("fact_{i}"));
-            same.learned_at = timestamp;
-            same_time.add_fact(same);
-            let mut varied = make_fact(&format!("fact_{i}"));
-            varied.learned_at = timestamp + chrono::Duration::days(i as i64 * 365);
-            varied_time.add_fact(varied);
-        }
-        g.add_node(same_time);
-        g.add_node(varied_time);
-
-        let same = compute_confidence_for_detail(Some(&g), "same-time").unwrap();
-        let varied = compute_confidence_for_detail(Some(&g), "varied-time").unwrap();
-        assert_eq!(same.overall, varied.overall);
-        assert_eq!(same.label, varied.label);
-        assert_eq!(same.components.len(), varied.components.len());
-        for (left, right) in same.components.iter().zip(&varied.components) {
-            assert_eq!(left.dimension, right.dimension);
-            assert_eq!(left.score, right.score);
-            assert_eq!(left.weight, right.weight);
-        }
-    }
-
-    #[test]
-    fn test_single_fact_confidence_does_not_depend_on_timestamp() {
-        let g = graph_with_society_node("single-fact", Some(RootSource::Discovered), 1);
-        let score = compute_confidence_for_detail(Some(&g), "single-fact").unwrap();
-        assert!(score
+        let mut later = first.clone();
+        later.learned_at += chrono::Duration::days(365);
+        let original = ServingFactIndex::from_records(vec![first], vec![]);
+        let changed = ServingFactIndex::from_records(vec![later], vec![]);
+        let left =
+            compute_confidence_from_serving_facts(&original, "society:sample", 50.0).unwrap();
+        let right =
+            compute_confidence_from_serving_facts(&changed, "society:sample", 50.0).unwrap();
+        assert_eq!(left.overall, right.overall);
+        assert_eq!(left.label, right.label);
+        assert!(left
             .components
             .iter()
             .all(|component| component.dimension != "freshness"));
