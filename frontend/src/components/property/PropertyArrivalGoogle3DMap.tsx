@@ -591,6 +591,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     () => arrivalAtlasRoute(accessLines, roadExperience?.routeDirection ?? "as-mapped"),
     [accessLines, roadExperience?.routeDirection],
   );
+  const corridorViewActive = approachViewActive && Boolean(atlasRoute);
   const roadFocus = useMemo(
     () => approachViewActive
       ? corridorCameraFocus(accessLines, {
@@ -736,7 +737,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
   }, [exitStreet, streetRequested]);
   const roadPlaybackCanPause = playbackState === "preparing" || playbackState === "playing";
   const roadPlaybackCanResume = playbackState === "paused";
-  const showRoutePlaybackControls = approachViewActive && Boolean(atlasRoute);
+  const showRoutePlaybackControls = corridorViewActive;
   const showArrivalViewControls = approachViewActive
     && Boolean(roadExperience)
     && (Boolean(atlasRoute) || Boolean(entranceAnchor));
@@ -1158,7 +1159,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       const style = (policy.geometryStyles as Record<string, typeof policy.boundary>)[polygon.kind] ?? policy.boundary;
       addPolygon(map, library, polygon, style, nextChildren);
     }
-    const illuminatedPlaces = approachViewActive || nearbyDepth === 'home' ? []
+    const illuminatedPlaces = corridorViewActive || nearbyDepth === 'home' ? []
       : isolatesSelection && selected ? [selected] : cameraMode === 'evidence' ? places : [];
     const subjects: SpotlightSubject[] = [{ anchor: {lat: home.latitude, lng: home.longitude},
       extent: home.boundary ? pathFromPolygon(home.boundary) : undefined, emphasis: 'home' },
@@ -1174,7 +1175,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     const removeSpotlight = quiet ? attachAtlasSpotlight(map, subjects,
       options => new library.Polygon3DElement({ ...options, altitudeMode: 'CLAMP_TO_GROUND', drawsOccludedSegments: false }),
       !window.matchMedia('(prefers-reduced-motion: reduce)').matches,
-      cameraMode === 'evidence' && !approachViewActive
+      cameraMode === 'evidence' && !corridorViewActive
         ? isolatesSelection ? policy.spotlight.nearbySelectedVeilFill : policy.spotlight.nearbyOverviewVeilFill
         : policy.spotlight.veilFill) : undefined;
     for (const society of secondarySocieties) {
@@ -1227,7 +1228,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
           nextChildren,
         );
         const labelPosition = lineLabelPosition(line);
-        if (labelPosition && !approachViewActive) {
+        if (labelPosition && !corridorViewActive) {
           const routeLabel = new library.Marker3DInteractiveElement({
             altitudeMode: "CLAMP_TO_GROUND",
             collisionBehavior: "REQUIRED",
@@ -1266,7 +1267,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
         );
       }
     }
-    if (!approachViewActive) {
+    if (!corridorViewActive) {
       const homeMarker = new library.Marker3DInteractiveElement({
         altitudeMode: cameraMode === "evidence" ? "RELATIVE_TO_GROUND" : "CLAMP_TO_GROUND",
         collisionBehavior: "REQUIRED",
@@ -1305,7 +1306,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       arc.dataset.atlasRelationship = 'true';
       map.append(arc); nextChildren.push(arc);
     }
-    const markerPlaces = approachViewActive || nearbyDepth === 'home'
+    const markerPlaces = corridorViewActive || nearbyDepth === 'home'
       ? []
       : places;
     for (const place of markerPlaces) {
@@ -1358,14 +1359,14 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       }
     }
     map.dataset.atlasDepth = nearbyDepth;
-    map.dataset.atlasVisibility = approachViewActive
+    map.dataset.atlasVisibility = corridorViewActive
       ? 'road'
       : nearbyDepth === 'home'
       ? 'home'
       : isolatesSelection
       ? 'pair'
       : 'category';
-    map.dataset.atlasMarkerCount = String(markerPlaces.length + (approachViewActive ? 0 : 1));
+    map.dataset.atlasMarkerCount = String(markerPlaces.length + (corridorViewActive ? 0 : 1));
     if (selected && isolatesSelection) {
       map.dataset.atlasPairDistance = String(distanceMetres(
         {lat: home.latitude, lng: home.longitude},
@@ -1391,6 +1392,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     onSelectSecondarySociety,
     showMetroLines,
     approachViewActive,
+    corridorViewActive,
     quiet,
     showBoundary,
     onSelectPlace,
