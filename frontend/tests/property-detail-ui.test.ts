@@ -773,6 +773,30 @@ test("surface scene projection preserves proof focus handles", () => {
   assert.equal(context?.proof_focus?.featureId, "around_this_home:hospitals:place-manipal");
   assert.equal(context?.places[0]?.feature_id, "around_this_home:hospitals:place-manipal");
   assert.equal(placeMatchesProofFocus(context!.places[0], context!.proof_focus), true);
+  // Another scene can carry a different observation of the same place. Keep
+  // its feature handle without replacing the proof's distance or source.
+  scene.receipts[0].sourceUrl = "https://example.test/exact";
+  const other = structuredClone(scene);
+  other.proofFocus = undefined;
+  other.features[0].id = "arrival_story:hospitals:place-manipal";
+  other.features[0].metrics = { distanceM: 4300 };
+  other.receipts[0].sourceUrl = "https://example.test/other-record";
+  const focused = propertyMapContextFromSurfaceScene(scene)!;
+  const merged = propertyMapContextFromSurfaceScene(other, focused)!;
+  assert.equal(merged.places.length, 1);
+  assert.equal(merged.places[0].distance_km, 2.7);
+  assert.equal(merged.places[0].source_url, "https://example.test/exact");
+  assert.equal(placeMatchesProofFocus(merged.places[0], merged.proof_focus), true);
+  assert.deepEqual(new Set(merged.places[0].feature_ids), new Set([
+    "around_this_home:hospitals:place-manipal", "arrival_story:hospitals:place-manipal",
+  ]));
+  const reversed = propertyMapContextFromSurfaceScene(scene, propertyMapContextFromSurfaceScene(other))!;
+  assert.equal(reversed.places[0].distance_km, 2.7);
+  assert.equal(reversed.places[0].source_url, "https://example.test/exact");
+  delete scene.receipts[0].sourceUrl;
+  const withoutSource = propertyMapContextFromSurfaceScene(other, propertyMapContextFromSurfaceScene(scene))!;
+  assert.equal(withoutSource.places[0].source_url, undefined, "never borrow another observation's source for the proof");
+
 });
 
 test("around-this-home layer discovery follows returned scene layers", () => {

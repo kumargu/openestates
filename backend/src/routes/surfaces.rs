@@ -266,7 +266,7 @@ fn resolve_surface_focus(
     };
     match resolve_proof_token(runtime, proof_token, Some(property_id)) {
         Ok(resolution) => Ok(SurfaceFocusOutcome {
-            focus: resolved_proof_focus(&resolution),
+            focus: resolved_proof_focus(runtime, &resolution),
             status: ProofFocusStatus::Applied,
             message: None,
         }),

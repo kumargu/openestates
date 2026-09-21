@@ -226,8 +226,7 @@ struct SpatialRevisionCase {
     utterance: String,
     expected_operation: JourneyOperation,
     expected_outcome: SpatialRevisionExpectedOutcome,
-    #[serde(rename = "expected_active_query")]
-    _expected_active_query: Option<String>,
+    expected_buyer_brief: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
@@ -463,10 +462,11 @@ fn issue_118_revision_scenarios_are_frozen_in_the_unified_bank() {
                 },
             )
             .expect("candidate revision projects a typed buyer brief");
-            assert!(
-                !buyer_brief(&present_intent(&candidate)).is_empty(),
-                "{}",
-                case.id
+            assert_eq!(
+                Some(buyer_brief(&present_intent(&candidate)).as_str()),
+                case.expected_buyer_brief.as_deref(),
+                "{} changed the accepted buyer intent",
+                case.id,
             );
         }
     }
@@ -727,6 +727,12 @@ fn issue_118_fixture() -> MockSearchFixture {
         "Kadugodi",
         "Varthur",
         "North Bengaluru",
+        "Sarjapur Road",
+        "Bellandur",
+        "HSR Layout",
+        "Devanahalli",
+        "Yelahanka",
+        "Electronic City",
     ] {
         builder.add_area(area);
     }

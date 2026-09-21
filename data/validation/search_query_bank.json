@@ -148,6 +148,13 @@
     }
   ],
   "suites": [
+    {
+      "id": "proof_handoff_live",
+      "runner": "rust_live_proof_handoff",
+      "benchmark": "Search receipt to visible detail evidence",
+      "required_serving_bundle_version": "catalog-71-299c3135-23aa-4945-8f26-2cf2fc775eaa",
+      "case_groups": ["proof_handoff_live"]
+    },
     { "id": "journey_api", "runner": "rust_journey_api", "case_groups": ["journey_api"] },
     {
       "id": "controlled_product",
@@ -306,6 +313,16 @@
     }
   ],
   "cases": [
+    {
+      "id": "PROOF-HANDOFF-NAMED-SCHOOL",
+      "group": "proof_handoff_live",
+      "query": "3BHK near Gopalan National School",
+      "expected": {
+        "proof_fact_key": "nearby_schools",
+        "target_label": "Gopalan National School",
+        "leading_property_ids": ["discovered-godrej-air-3bhk", "discovered-brigade-lakefront-crimson-3bhk"]
+      }
+    },
     {
       "id": "JA-005", "group": "journey_api", "query": "3BHK within 1 km of Fixture School 6 under 2.4 Cr",
       "steps": [
@@ -4603,7 +4620,7 @@
       "utterance": "Make it ready to move",
       "expected_operation": "refine",
       "expected_outcome": "candidate",
-      "expected_active_query": "3BHK in Whitefield under 2.5Cr · Make it ready to move"
+      "expected_buyer_brief": "3 BHK and in Whitefield and under ₹2.5Cr; prefer delivered society, prefer ready to move"
     },
     {
       "id": "SPATIAL-REVISION-TWO-ANCHORS",
@@ -4613,7 +4630,7 @@
       "utterance": "Near both Hoodi Metro and Manipal Hospital",
       "expected_operation": "refine",
       "expected_outcome": "candidate",
-      "expected_active_query": "3BHK in Whitefield under 2.5Cr · Near both Hoodi Metro and Manipal Hospital"
+      "expected_buyer_brief": "3 BHK and in Whitefield and under ₹2.5Cr and near Hoodi Metro and near Manipal Hospital; prefer metro access, prefer social infrastructure"
     },
     {
       "id": "SPATIAL-REVISION-BUDGET",
@@ -4623,7 +4640,7 @@
       "utterance": "Increase the budget to 3Cr",
       "expected_operation": "correct",
       "expected_outcome": "candidate",
-      "expected_active_query": "3BHK in Whitefield under 2.5Cr · Increase the budget to 3Cr"
+      "expected_buyer_brief": "3 BHK and in Whitefield and under ₹3Cr; prefer value for money"
     },
     {
       "id": "SPATIAL-REVISION-KADUGODI",
@@ -4633,7 +4650,7 @@
       "utterance": "Alternatively consider 3BHK in Kadugodi under 2.7Cr",
       "expected_operation": "expand",
       "expected_outcome": "candidate",
-      "expected_active_query": "3BHK in Whitefield under 2.5Cr or 3BHK in Kadugodi under 2.7Cr"
+      "expected_buyer_brief": "3 BHK and in Whitefield and under ₹2.5Cr | 3 BHK and in Kadugodi and under ₹2.7Cr"
     },
     {
       "id": "SPATIAL-REVISION-HOODI-BRANCH",
@@ -4643,7 +4660,7 @@
       "utterance": "Also consider 2BHK in Hoodi under 2Cr",
       "expected_operation": "expand",
       "expected_outcome": "candidate",
-      "expected_active_query": "3BHK in Whitefield under 2.5Cr or 2BHK in Hoodi under 2Cr"
+      "expected_buyer_brief": "3 BHK and in Whitefield and under ₹2.5Cr | 2 BHK and in Hoodi and under ₹2Cr"
     },
     {
       "id": "SPATIAL-REVISION-EXCLUDE",
@@ -4653,7 +4670,7 @@
       "utterance": "Exclude Varthur",
       "expected_operation": "exclude",
       "expected_outcome": "candidate",
-      "expected_active_query": "3BHK around Whitefield under 3Cr · Exclude Varthur"
+      "expected_buyer_brief": "3 BHK and in Whitefield and under ₹3Cr and not in Varthur"
     },
     {
       "id": "SPATIAL-REVISION-REPLACE",
@@ -4663,7 +4680,7 @@
       "utterance": "Instead, search for plots in North Bengaluru under 1.5Cr",
       "expected_operation": "replace",
       "expected_outcome": "candidate",
-      "expected_active_query": "Instead, search for plots in North Bengaluru under 1.5Cr"
+      "expected_buyer_brief": "in North Bengaluru and under ₹1.5Cr"
     },
     {
       "id": "SPATIAL-REVISION-REPHRASE",
@@ -4673,7 +4690,7 @@
       "utterance": "3 bedrooms in Hoodi costing no more than 2.4 crore",
       "expected_operation": "rephrase",
       "expected_outcome": "candidate",
-      "expected_active_query": "3 bedrooms in Hoodi costing no more than 2.4 crore"
+      "expected_buyer_brief": "3 BHK and in Hoodi and under ₹2.4Cr"
     },
     {
       "id": "SPATIAL-REVISION-CLARIFY",
@@ -4701,7 +4718,7 @@
       "utterance": "Make it 2BHK under 1.6Cr",
       "expected_operation": "refine",
       "expected_outcome": "candidate",
-      "expected_active_query": "3BHK in Whitefield under 2.5Cr · Make it 2BHK under 1.6Cr"
+      "expected_buyer_brief": "in Whitefield and 2 BHK and under ₹1.6Cr"
     },
     {
       "id": "SPATIAL-REVISION-ADD-DISTINCT-ANCHOR",
@@ -4711,7 +4728,7 @@
       "utterance": "And within 2 km of Manipal Hospital",
       "expected_operation": "refine",
       "expected_outcome": "candidate",
-      "expected_active_query": "3BHK within 2 km of Hoodi Metro under 2.5Cr · And within 2 km of Manipal Hospital"
+      "expected_buyer_brief": "3 BHK and under ₹2.5Cr and within 2 km of Hoodi Metro and within 2 km of Manipal Hospital; prefer metro access, prefer social infrastructure"
     },
     {
       "id": "SPATIAL-REVISION-CORRECT-ANCHOR-BY-IDENTITY",
@@ -4721,7 +4738,7 @@
       "utterance": "Change the distance to within 3 km of Hoodi Metro",
       "expected_operation": "correct",
       "expected_outcome": "candidate",
-      "expected_active_query": "3BHK within 2 km of Hoodi Metro and within 2 km of Manipal Hospital under 2.5Cr · Change the distance to within 3 km of Hoodi Metro"
+      "expected_buyer_brief": "3 BHK and under ₹2.5Cr and within 3 km of Hoodi Metro and within 2 km of Manipal Hospital; prefer metro access, prefer social infrastructure"
     },
     {
       "id": "SPATIAL-REVISION-EXPAND-MULTIPLE-ALTERNATIVES",
@@ -4731,7 +4748,7 @@
       "utterance": "Also consider 2BHK in Hoodi under 2Cr or 3BHK in Kadugodi under 2.7Cr",
       "expected_operation": "expand",
       "expected_outcome": "candidate",
-      "expected_active_query": "3BHK in Whitefield under 2.5Cr or 2BHK in Hoodi under 2Cr or 3BHK in Kadugodi under 2.7Cr"
+      "expected_buyer_brief": "3 BHK and in Whitefield and under ₹2.5Cr | 2 BHK and in Hoodi and under ₹2Cr | 3 BHK and in Kadugodi and under ₹2.7Cr"
     },
     {
       "id": "SPATIAL-REVISION-IMPLICIT-CONTEXT-RETENTION",
@@ -4741,7 +4758,7 @@
       "utterance": "2BHK under 1.6Cr",
       "expected_operation": "refine",
       "expected_outcome": "candidate",
-      "expected_active_query": "3BHK in Whitefield under 2.5Cr · 2BHK under 1.6Cr"
+      "expected_buyer_brief": "in Whitefield and 2 BHK and under ₹1.6Cr"
     },
     {
       "id": "SPATIAL-REVISION-THIRD-BRANCH",
@@ -4751,7 +4768,7 @@
       "utterance": "Increase the third budget to 2.2Cr",
       "expected_operation": "correct",
       "expected_outcome": "candidate",
-      "expected_active_query": "Whitefield 2BHK under 1.6Cr or Sarjapur Road 3BHK under 2Cr or North Bengaluru 3BHK under 1.8Cr · Increase the third budget to 2.2Cr"
+      "expected_buyer_brief": "2 BHK and in Whitefield and under ₹1.6Cr | 3 BHK and in Sarjapur Road and under ₹2Cr | 3 BHK and in North Bengaluru and under ₹2.2Cr; prefer value for money"
     },
     {
       "id": "SPATIAL-REVISION-EIGHTH-BRANCH",
@@ -4761,7 +4778,7 @@
       "utterance": "Increase the eighth budget to 1.4Cr",
       "expected_operation": "correct",
       "expected_outcome": "candidate",
-      "expected_active_query": "Whitefield 2BHK under 1.6Cr or Sarjapur Road 3BHK under 2Cr or North Bengaluru 3BHK under 1.8Cr or Bellandur 2BHK under 1.7Cr or HSR Layout 3BHK under 2.5Cr or Devanahalli 2BHK under 1.2Cr or Yelahanka 3BHK under 1.9Cr or Electronic City 2BHK under 1.1Cr · Increase the eighth budget to 1.4Cr"
+      "expected_buyer_brief": "2 BHK and in Whitefield and under ₹1.6Cr | 3 BHK and in Sarjapur Road and under ₹2Cr | 3 BHK and in North Bengaluru and under ₹1.8Cr | 2 BHK and in Bellandur and under ₹1.7Cr | 3 BHK and in HSR Layout and under ₹2.5Cr | 2 BHK and in Devanahalli and under ₹1.2Cr | 3 BHK and in Yelahanka and under ₹1.9Cr | 2 BHK and in Electronic City and under ₹1.4Cr; prefer value for money"
     },
     {
       "id": "SPATIAL-REVISION-UNDO",
@@ -4780,7 +4797,7 @@
       "utterance": "Start over: 2BHK in Hoodi under 2Cr",
       "expected_operation": "fresh",
       "expected_outcome": "candidate",
-      "expected_active_query": "2BHK in Hoodi under 2Cr"
+      "expected_buyer_brief": "2BHK in Hoodi under 2Cr"
     },
     {
       "id": "GEO-CELL-001",

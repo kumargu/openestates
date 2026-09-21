@@ -365,11 +365,13 @@ pub fn build_surface_scene_with_focus(
         let focused_candidate = requested_focus
             .filter(|focus| focus.layer_id == layer_rule.id)
             .and_then(|focus| {
-                candidates
-                    .iter()
-                    .find(|candidate| candidate_matches_focus(candidate, focus))
-            })
-            .cloned();
+                derived_focus_candidate(layer_rule, focus).or_else(|| {
+                    candidates
+                        .iter()
+                        .find(|candidate| candidate_matches_focus(candidate, focus))
+                        .cloned()
+                })
+            });
         dedup_candidates(&mut candidates);
         let mut available_count = candidates.len();
         if let Some(max_items) = layer_rule.max_items {
@@ -703,7 +705,50 @@ struct SceneFeatureCandidate {
     receipt: SceneReceipt,
 }
 
+fn derived_focus_candidate(
+    layer: &UiSurfaceLayerRule,
+    focus: &ResolvedProofFocus,
+) -> Option<SceneFeatureCandidate> {
+    let evidence = focus.scene_evidence.as_ref()?;
+    let label = focus.matched_label.clone()?;
+    Some(SceneFeatureCandidate {
+        observation_id: Some(evidence.source.observation_id.as_str().to_string()),
+        entity_id: Some(evidence.source.subject_entity_id.clone()),
+        kind: kind_for_layer(layer),
+        label: label.clone(),
+        short_label: None,
+        details: Vec::new(),
+        geometry: SceneGeometry::Point {
+            coordinates: evidence.coordinates,
+        },
+        coordinate_quality: CoordinateQuality::Derived,
+        distance_m: focus.distance_m,
+        rating: None,
+        review_count: None,
+        properties: HashMap::new(),
+        confidence: evidence.derivation.confidence,
+        receipt: SceneReceipt {
+            id: evidence.derivation.derivation_id.as_str().to_string(),
+            entity_id: evidence.derivation.subject_entity_id.clone(),
+            fact_key: focus.fact_key.clone(),
+            claim: label,
+            source_type: evidence.source.provider.clone(),
+            source_url: evidence.source.source_url.clone(),
+            learned_at: evidence.source.observed_at,
+            confidence: evidence.derivation.confidence,
+            scope: None,
+        },
+    })
+}
+
 fn candidate_matches_focus(candidate: &SceneFeatureCandidate, focus: &ResolvedProofFocus) -> bool {
+    if let Some(evidence) = focus.scene_evidence.as_ref() {
+        return candidate.receipt.id == evidence.derivation.derivation_id.as_str()
+            && candidate
+                .receipt
+                .fact_key
+                .eq_ignore_ascii_case(&focus.fact_key);
+    }
     if !focus.observation_ids.is_empty()
         && !candidate
             .observation_id
@@ -2602,6 +2647,7 @@ mod tests {
         };
         let focus = crate::search::proof::ResolvedProofFocus {
             observation_ids: Vec::new(),
+            scene_evidence: None,
             surface_id: "around_this_home".to_string(),
             layer_id: "red_flags".to_string(),
             fact_key: "nearby_graveyards".to_string(),

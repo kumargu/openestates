@@ -107,6 +107,98 @@ fn indexed_search_prunes_large_mock_corpus_before_ranking() {
 }
 
 #[test]
+fn dangling_named_place_search_evaluates_the_full_hard_eligible_corpus() {
+    const CORPUS_SIZE: usize = 10_000;
+    const MAX_DURATION: Duration = Duration::from_secs(2);
+
+    let mut properties = Vec::with_capacity(CORPUS_SIZE);
+    let mut entities = Vec::with_capacity(CORPUS_SIZE + 1);
+    let mut facts = Vec::with_capacity(CORPUS_SIZE * 2 + 3);
+    entities.push(ServingEntityRecord {
+        entity_id: "place:benchmark-tech-park".to_string(),
+        entity_type: "place".to_string(),
+        name: "Benchmark Tech Park".to_string(),
+        root_source: Some("google".to_string()),
+        visibility: Default::default(),
+        searchable_text: "Benchmark Tech Park".to_string(),
+    });
+    facts.extend([
+        serving_fact(
+            "place:benchmark-tech-park",
+            "geo.latitude",
+            FactValue::Numeric(12.97),
+        ),
+        serving_fact(
+            "place:benchmark-tech-park",
+            "geo.longitude",
+            FactValue::Numeric(77.59),
+        ),
+        serving_fact(
+            "place:benchmark-tech-park",
+            "place.category",
+            FactValue::Text("tech_park".to_string()),
+        ),
+    ]);
+
+    for index in 0..CORPUS_SIZE {
+        let id = format!("scale-society-{index:05}");
+        let mut property = property(id.clone(), "Bengaluru", 3, 18_000_000);
+        if index % 4 == 0 {
+            property.bhk = 2;
+        } else if index % 4 == 1 {
+            property.price = 25_000_000;
+        }
+        properties.push(property);
+        let entity_id = format!("society:{id}");
+        entities.push(ServingEntityRecord {
+            entity_id: entity_id.clone(),
+            entity_type: "society".to_string(),
+            name: id,
+            root_source: Some("serving_bundle".to_string()),
+            visibility: Default::default(),
+            searchable_text: String::new(),
+        });
+        let offset = 0.01 + index as f64 * 0.0000001;
+        facts.push(serving_fact(
+            &entity_id,
+            "geo.latitude",
+            FactValue::Numeric(12.97 + offset),
+        ));
+        facts.push(serving_fact(
+            &entity_id,
+            "geo.longitude",
+            FactValue::Numeric(77.59 + offset),
+        ));
+    }
+
+    let bundle = loaded_bundle(entities, facts);
+    let search_index = SearchIndex::build_with_serving_entities(&properties, &bundle.entities);
+    let snapshot = search_runtime_snapshot(bundle, &properties, search_index);
+    let started = Instant::now();
+    let output = SearchEngine::new(&snapshot).search("3bhk near Benchmark Tech Park under 2cr");
+    let elapsed = started.elapsed();
+
+    assert!(!output.results.is_empty());
+    assert!(output.compiled_plan.branches[0].geo_scope.is_bundle_wide());
+    assert!(output.results.len() <= 32);
+    assert!(output.eligible_result_count >= output.results.len());
+    assert!(output
+        .results
+        .iter()
+        .all(|result| result.card.bhk == 3 && result.card.price <= 20_000_000));
+    assert!(
+        output.diagnostics.recall.structured_count < CORPUS_SIZE,
+        "hard eligibility should prune before spatial recall"
+    );
+    assert!(
+        elapsed <= MAX_DURATION,
+        "full named-place search took {elapsed:?} across {CORPUS_SIZE} properties: {:?}; recall: {:?}",
+        output.diagnostics.layer_timings,
+        output.diagnostics.recall,
+    );
+}
+
+#[test]
 fn named_area_recall_uses_evidenced_geo_cells_not_coordinates() {
     let properties = vec![
         property(

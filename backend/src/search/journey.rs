@@ -326,6 +326,7 @@ pub fn buyer_brief(presentation: &IntentPresentation) -> String {
         .branches
         .iter()
         .map(|branch| {
+            let mut seen_preferences = HashSet::new();
             let constraints = std::iter::once(expression_brief(&branch.constraints))
                 .chain(branch.unresolved_requirements.iter().cloned())
                 .filter(|value| !value.is_empty())
@@ -342,6 +343,7 @@ pub fn buyer_brief(presentation: &IntentPresentation) -> String {
                         format!("{}{}", config.negative_preference_prefix, preference.label)
                     }
                 })
+                .filter(|value| seen_preferences.insert(value.clone()))
                 .collect::<Vec<_>>()
                 .join(", ");
             match (constraints.is_empty(), preferences.is_empty()) {
@@ -984,23 +986,17 @@ fn predicate_at_path<'a>(
 fn expression_brief(expression: &IntentExpression) -> String {
     let config = &crate::dag_config::intent_presentation_config().brief;
     match expression {
-        IntentExpression::All { clauses } => clauses
-            .iter()
-            .map(expression_brief)
-            .filter(|value| !value.is_empty())
-            .collect::<Vec<_>>()
-            .join(&config.all_separator),
-        IntentExpression::Any { clauses } => {
-            let joined = clauses
+        IntentExpression::All { clauses } | IntentExpression::Any { clauses } => {
+            let mut seen = HashSet::new();
+            let parts = clauses
                 .iter()
                 .map(expression_brief)
-                .filter(|value| !value.is_empty())
-                .collect::<Vec<_>>()
-                .join(&config.any_separator);
-            if joined.is_empty() {
-                String::new()
+                .filter(|value| !value.is_empty() && seen.insert(value.clone()))
+                .collect::<Vec<_>>();
+            if matches!(expression, IntentExpression::Any { .. }) && parts.len() > 1 {
+                format!("({})", parts.join(&config.any_separator))
             } else {
-                format!("({joined})")
+                parts.join(&config.all_separator)
             }
         }
         IntentExpression::Not { clause } => {

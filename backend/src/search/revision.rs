@@ -1038,7 +1038,7 @@ fn validate_signed_search_context(context: &SignedSearchContext) -> Result<(), S
         .map(|branch| branch.branch_id.as_str())
         .collect::<std::collections::HashSet<_>>();
     if branch_ids.len() != context.intent_ast.branches.len()
-        || !portable_root_is_valid(&context.intent_ast.root, &branch_ids)
+        || !context.intent_ast.root.references_only(&branch_ids)
     {
         return Err("revision intent root is invalid".to_string());
     }
@@ -1056,23 +1056,6 @@ fn validate_signed_search_context(context: &SignedSearchContext) -> Result<(), S
         return Err("revision intent predicate limit exceeded".to_string());
     }
     Ok(())
-}
-
-fn portable_root_is_valid(
-    root: &super::compiled_plan::BoolExpr<String>,
-    branch_ids: &std::collections::HashSet<&str>,
-) -> bool {
-    match root {
-        super::compiled_plan::BoolExpr::All(clauses)
-        | super::compiled_plan::BoolExpr::Any(clauses) => {
-            !clauses.is_empty()
-                && clauses
-                    .iter()
-                    .all(|clause| portable_root_is_valid(clause, branch_ids))
-        }
-        super::compiled_plan::BoolExpr::Not(clause) => portable_root_is_valid(clause, branch_ids),
-        super::compiled_plan::BoolExpr::Leaf(branch_id) => branch_ids.contains(branch_id.as_str()),
-    }
 }
 
 fn revision_id_for_plan(

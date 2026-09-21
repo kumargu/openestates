@@ -63,6 +63,23 @@ pub enum BoolExpr<T> {
     Leaf(T),
 }
 
+/// A portable plan must reference only its declared branches and contain no
+/// empty Boolean groups. Shared by token validation and plan hydration.
+impl BoolExpr<String> {
+    pub(crate) fn references_only(&self, branch_ids: &std::collections::HashSet<&str>) -> bool {
+        match self {
+            Self::All(clauses) | Self::Any(clauses) => {
+                !clauses.is_empty()
+                    && clauses
+                        .iter()
+                        .all(|clause| clause.references_only(branch_ids))
+            }
+            Self::Not(clause) => clause.references_only(branch_ids),
+            Self::Leaf(branch_id) => branch_ids.contains(branch_id.as_str()),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResolvedEntityHandle {
