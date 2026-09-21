@@ -60,6 +60,7 @@ pub(super) struct EnrichmentConfig {
     origin_collector: String,
     origin_dependents: Vec<String>,
     shared_fact_producers: BTreeMap<String, Vec<String>>,
+    society_fact_producers: BTreeMap<String, Vec<String>>,
     pub cleanup_enabled: bool,
     modules: BTreeMap<String, Module>,
     collectors: BTreeMap<String, Collector>,
@@ -126,6 +127,13 @@ pub(super) fn enrichment_config() -> Result<EnrichmentConfig, CatalogError> {
             )));
         }
     }
+    for (asset, producers) in &config.society_fact_producers {
+        if !config.collectors.contains_key(asset) || producers.is_empty() {
+            return Err(invalid(format!(
+                "invalid society contribution ownership for {asset}"
+            )));
+        }
+    }
     Ok(config)
 }
 
@@ -149,6 +157,8 @@ struct SocietyWork {
     input_lineage: BTreeMap<String, CatalogInputLineage>,
     pins: Vec<MaterializationRecord>,
     run_id: MaterializationId,
+    #[serde(default)]
+    patch_base: Option<CatalogRosterEntry>,
     snapshot: Option<CatalogRosterEntry>,
     error: Option<String>,
 }
@@ -498,32 +508,41 @@ impl CatalogStore {
                     })
                     .cloned();
                 if !operation.societies.contains_key(&id) {
-                    let (inputs, pins, input_lineage, error) = if let Some(entry) = &prior {
-                        let (manifest, records) = self.read_snapshot(entry).await?;
-                        let lineage_required = manifest.materializations.is_empty()
-                            && (!change.refresh_modules.is_empty()
-                                || !request.shared_refresh_modules.is_empty());
-                        let mut pins = if lineage_required {
-                            self.recover_snapshot_lineage(entry, &records).await?
+                    let (inputs, pins, input_lineage, patch_base, error) =
+                        if let Some(entry) = &prior {
+                            let (manifest, records) = self.read_snapshot(entry).await?;
+                            let lineage_required = manifest.materializations.is_empty()
+                                && (!change.refresh_modules.is_empty()
+                                    || !request.shared_refresh_modules.is_empty());
+                            let mut pins = if lineage_required {
+                                self.recover_snapshot_lineage(entry, &records).await?
+                            } else {
+                                manifest.materializations
+                            };
+                            let mut inputs = manifest.inputs;
+                            self.recover_collector_inputs(&pins, &mut inputs).await?;
+                            let registry = openestates_registry();
+                            pins.retain(|record| {
+                                registry.get(&record.asset_id).is_some()
+                                    && !config
+                                        .collectors
+                                        .get(record.asset_id.as_str())
+                                        .is_some_and(|collector| collector.scope == "shared")
+                            });
+                            let needs_patch =
+                                manifest.partial_lineage || (lineage_required && pins.is_empty());
+                            let patch_base = needs_patch.then(|| entry.clone());
+                            let error = if needs_patch
+                                && patch_producers(&change.refresh_modules, &config).is_none()
+                            {
+                                Some("no recoverable collection lineage".to_string())
+                            } else {
+                                None
+                            };
+                            (inputs, pins, manifest.input_lineage, patch_base, error)
                         } else {
-                            manifest.materializations
+                            (BTreeMap::new(), Vec::new(), BTreeMap::new(), None, None)
                         };
-                        let mut inputs = manifest.inputs;
-                        self.recover_collector_inputs(&pins, &mut inputs).await?;
-                        let registry = openestates_registry();
-                        pins.retain(|record| {
-                            registry.get(&record.asset_id).is_some()
-                                && !config
-                                    .collectors
-                                    .get(record.asset_id.as_str())
-                                    .is_some_and(|collector| collector.scope == "shared")
-                        });
-                        let error = (lineage_required && pins.is_empty())
-                            .then(|| "no recoverable collection lineage".to_string());
-                        (inputs, pins, manifest.input_lineage, error)
-                    } else {
-                        (BTreeMap::new(), Vec::new(), BTreeMap::new(), None)
-                    };
                     operation.societies.insert(
                         id.clone(),
                         SocietyWork {
@@ -532,6 +551,7 @@ impl CatalogStore {
                             pins,
                             input_lineage,
                             run_id: MaterializationId::new(),
+                            patch_base,
                             snapshot: None,
                             error,
                         },
@@ -576,7 +596,7 @@ impl CatalogStore {
                 // Bootstrap required evidence for a new society. An existing
                 // legacy snapshot without recoverable lineage remains intact;
                 // unrelated refreshes must not trigger regulatory collection.
-                if prior.is_none() && work.pins.is_empty() {
+                if (prior.is_none() || work.patch_base.is_some()) && work.pins.is_empty() {
                     wanted.extend(config.required_collectors.iter().cloned());
                 }
                 let origin_changed = prior.as_ref().is_some_and(|entry| {
@@ -807,12 +827,14 @@ impl CatalogStore {
                 }
                 forced.insert(SOCIETY_GOLD_SNAPSHOT_ASSET_ID.to_string());
                 // Inputs without recoverable provenance cannot be silently overwritten by empty contributions.
-                if work.pins.is_empty() && prior.is_some() {
+                if work.pins.is_empty() && prior.is_some() && work.patch_base.is_none() {
                     work.error = Some("no recoverable collection lineage".into());
-                } else if config.required_collectors.iter().any(|asset| {
-                    !work.inputs.contains_key(asset)
-                        && !work.pins.iter().any(|pin| pin.asset_id.as_str() == asset)
-                }) {
+                } else if work.patch_base.is_none()
+                    && config.required_collectors.iter().any(|asset| {
+                        !work.inputs.contains_key(asset)
+                            && !work.pins.iter().any(|pin| pin.asset_id.as_str() == asset)
+                    })
+                {
                     work.error = Some("required source evidence unavailable".into());
                 } else {
                     match materialize_society(
@@ -829,6 +851,17 @@ impl CatalogStore {
                     .await
                     {
                         Ok((records, warnings, pins)) => {
+                            let records = if let Some(base) = &work.patch_base {
+                                let (_, base_records) = self.read_snapshot(base).await?;
+                                replace_society_contributions(
+                                    base_records,
+                                    records,
+                                    patch_producers(&change.refresh_modules, &config)
+                                        .expect("patch eligibility checked"),
+                                )?
+                            } else {
+                                records
+                            };
                             let mut snapshot = self
                                 .write_snapshot(change.seed.clone(), &records, warnings)
                                 .await?;
@@ -844,6 +877,7 @@ impl CatalogStore {
                                 })
                                 .collect();
                             snapshot.producer_hash = producer_hash.clone();
+                            snapshot.partial_lineage = work.patch_base.is_some();
                             work.pins = snapshot.materializations.clone();
                             self.lake
                                 .put_json(
@@ -1422,6 +1456,118 @@ fn digest(bytes: &[u8]) -> String {
         .map(|byte| format!("{byte:02x}"))
         .collect()
 }
+
+fn patch_producers(modules: &[String], config: &EnrichmentConfig) -> Option<BTreeSet<String>> {
+    if modules.is_empty() {
+        return None;
+    }
+    let mut producers = BTreeSet::new();
+    for module_name in modules {
+        let module = config.modules.get(module_name)?;
+        for asset in &module.refresh {
+            producers.extend(config.society_fact_producers.get(asset)?.iter().cloned());
+        }
+    }
+    (!producers.is_empty()).then_some(producers)
+}
+
+fn replace_society_contributions(
+    mut base: CatalogRecords,
+    mut replacement: CatalogRecords,
+    producers: BTreeSet<String>,
+) -> Result<CatalogRecords, CatalogError> {
+    let removed_keys = base
+        .facts
+        .iter()
+        .filter(|fact| {
+            fact.skill_id
+                .as_ref()
+                .is_some_and(|skill| producers.contains(skill))
+        })
+        .map(|fact| (fact.entity_id.clone(), fact.fact_key.clone()))
+        .collect::<BTreeSet<_>>();
+    let removed_entity_ids = removed_keys
+        .iter()
+        .map(|(entity_id, _)| entity_id.clone())
+        .collect::<BTreeSet<_>>();
+    base.facts.retain(|fact| {
+        !fact
+            .skill_id
+            .as_ref()
+            .is_some_and(|skill| producers.contains(skill))
+    });
+    let remaining_keys = base
+        .facts
+        .iter()
+        .map(|fact| (fact.entity_id.clone(), fact.fact_key.clone()))
+        .collect::<BTreeSet<_>>();
+    base.search_metadata.retain(|row| {
+        let key = (row.entity_id.clone(), row.fact_key.clone());
+        !removed_keys.contains(&key) || remaining_keys.contains(&key)
+    });
+    let remaining_fact_entities = base
+        .facts
+        .iter()
+        .map(|fact| fact.entity_id.as_str())
+        .collect::<HashSet<_>>();
+    let removed_support_entities = base
+        .entities
+        .iter()
+        .filter(|entity| {
+            entity.entity_type == "place"
+                && removed_entity_ids.contains(&entity.entity_id)
+                && !remaining_fact_entities.contains(entity.entity_id.as_str())
+        })
+        .map(|entity| entity.entity_id.clone())
+        .collect::<HashSet<_>>();
+    base.entities
+        .retain(|entity| !removed_support_entities.contains(&entity.entity_id));
+    base.edges.retain(|edge| {
+        !removed_support_entities.contains(&edge.from_entity_id)
+            && !removed_support_entities.contains(&edge.to_entity_id)
+    });
+
+    replacement.facts.retain(|fact| {
+        fact.skill_id
+            .as_ref()
+            .is_some_and(|skill| producers.contains(skill))
+    });
+    let replacement_keys = replacement
+        .facts
+        .iter()
+        .map(|fact| (fact.entity_id.clone(), fact.fact_key.clone()))
+        .collect::<BTreeSet<_>>();
+    let replacement_entity_ids = replacement_keys
+        .iter()
+        .map(|(entity_id, _)| entity_id.clone())
+        .collect::<BTreeSet<_>>();
+    replacement
+        .search_metadata
+        .retain(|row| replacement_keys.contains(&(row.entity_id.clone(), row.fact_key.clone())));
+    replacement
+        .entities
+        .retain(|entity| replacement_entity_ids.contains(&entity.entity_id));
+    let final_entity_ids = base
+        .entities
+        .iter()
+        .map(|entity| entity.entity_id.clone())
+        .chain(
+            replacement
+                .entities
+                .iter()
+                .map(|entity| entity.entity_id.clone()),
+        )
+        .collect::<HashSet<_>>();
+    replacement.edges.retain(|edge| {
+        final_entity_ids.contains(&edge.from_entity_id)
+            && final_entity_ids.contains(&edge.to_entity_id)
+            && (replacement_entity_ids.contains(&edge.from_entity_id)
+                || replacement_entity_ids.contains(&edge.to_entity_id))
+    });
+    replacement.rera_evidence.clear();
+    merge_catalog_records(vec![base, replacement])
+}
+
 fn producer_hash(root: &Path) -> Result<String, CatalogError> {
     let mut digest = Sha256::new();
     for path in [

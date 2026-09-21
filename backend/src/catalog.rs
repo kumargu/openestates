@@ -150,6 +150,8 @@ pub struct SocietyGoldSnapshotManifest {
     pub producer_hash: String,
     #[serde(default)]
     pub input_lineage: BTreeMap<String, apply::CatalogInputLineage>,
+    #[serde(default)]
+    pub partial_lineage: bool,
     pub format_version: u32,
     pub snapshot_id: MaterializationId,
     pub society_id: String,
@@ -479,6 +481,7 @@ impl CatalogStore {
             materializations: Vec::new(),
             producer_hash: String::new(),
             input_lineage: BTreeMap::new(),
+            partial_lineage: false,
             format_version: GOLD_FORMAT_VERSION,
             snapshot_id: snapshot_id.clone(),
             society_id: canonical_seed_id(&seed).to_string(),
@@ -597,12 +600,14 @@ impl CatalogStore {
         }
         for entry in &roster.societies {
             let (manifest, records) = self.read_snapshot(entry).await?;
-            warnings.extend(
-                manifest
-                    .warnings
-                    .into_iter()
-                    .map(|warning| format!("{}: {warning}", entry.seed.name)),
-            );
+            if !manifest.partial_lineage {
+                warnings.extend(
+                    manifest
+                        .warnings
+                        .into_iter()
+                        .map(|warning| format!("{}: {warning}", entry.seed.name)),
+                );
+            }
             snapshots.push(records);
         }
         apply::replace_shared_contributions(&self.lake, &roster.shared_assets, &mut snapshots)
@@ -2222,7 +2227,7 @@ mod tests {
         let mut refresh = apply_request("legacy-lineage-skip");
         refresh.upserts.push(CatalogUpsert {
             seed: seed("alpha"),
-            refresh_modules: vec!["location".to_string()],
+            refresh_modules: vec!["legal".to_string()],
         });
 
         let report = store

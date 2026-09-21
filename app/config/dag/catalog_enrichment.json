@@ -198,5 +198,10 @@
     "osm_locality_boundary_facts": [
       "osm_locality_boundary_facts"
     ]
+  },
+  "society_fact_producers": {
+    "osm_society_access_facts": [
+      "osm_society_access_facts"
+    ]
   }
 }
