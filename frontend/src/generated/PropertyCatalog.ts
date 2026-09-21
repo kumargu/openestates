@@ -10,13 +10,8 @@ export type EvidenceId =
       kind: "derivation";
     };
 export type Availability = "available" | "unavailable";
+export type ArrayOf_PropertyCard = PropertyCard[];
 
-export interface PropertySummaries {
-  contractVersion: number;
-  items: PropertyCard[];
-  missingIds: string[];
-  snapshotIdentity: string;
-}
 /**
  * UI-ready property card for the results page.
  */

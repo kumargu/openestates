@@ -129,10 +129,6 @@ pub fn build_app_router_with_lake(state: Arc<AppState>, lake: LakeStore) -> Rout
             .route(
                 "/api/properties/surfaces/batch",
                 post(routes::surfaces::get_property_surfaces_batch),
-            )
-            .route(
-                "/api/properties/evidence/batch",
-                post(routes::properties::get_property_evidence_batch),
             ),
     );
 

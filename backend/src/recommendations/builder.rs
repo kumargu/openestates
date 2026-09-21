@@ -241,6 +241,9 @@ fn recall_candidates(
                 serving_bundle.map(|bundle| &bundle.fact_index),
             );
             let source_panels = build_source_panels(
+                serving_bundle
+                    .map(|bundle| bundle.manifest.proof_snapshot_identity())
+                    .unwrap_or(""),
                 property,
                 serving_bundle.map(|bundle| &bundle.fact_index),
                 serving_bundle.map(|bundle| &bundle.graph_index),

@@ -621,19 +621,7 @@ export type SourcePanel = {
   media?: EvidenceMediaStrip[];
 };
 
-export type SourceItem = {
-  entity_id: string;
-  key?: string;
-  label: string;
-  value: string;
-  scope?: string;
-  relationship?: string;
-  values?: string[];
-  source_type: string;
-  source_url?: string;
-  attributions?: SourceAttribution[];
-  learned_at: string;
-};
+export type SourceItem = import("../generated/PropertyEvidence.ts").SourceItem;
 
 export type EvidenceMediaFrame = {
   label: string;
@@ -664,12 +652,7 @@ export type EvidenceConstellation =
   | "commute"
   | "investment";
 
-export type SourceAttribution = {
-  value: string;
-  source_url?: string;
-  source_type: string;
-  learned_at: string;
-};
+export type SourceAttribution = import("../generated/PropertyEvidence.ts").SourceAttribution;
 
 export type EvidenceSection = import('../generated/PropertyDetail.ts').EvidenceSection;
 

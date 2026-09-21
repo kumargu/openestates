@@ -7,8 +7,12 @@ import contextSchema from "../generated/schema/PropertyContext.json" with { type
 
 import proofFailureSchema from "../generated/schema/SearchProofFailure.json" with { type: "json" };
 
+import catalogSchema from "../generated/schema/PropertyCatalog.json" with { type: "json" };
+import evidenceSchema from "../generated/schema/PropertyEvidence.json" with { type: "json" };
+
 const ajv = new Ajv({ strict: false, validateFormats: false });
 const validators: Record<string, ValidateFunction> = {
+  catalog: ajv.compile(catalogSchema), evidence: ajv.compile(evidenceSchema),
   journey: ajv.compile(journeySchema), proof: ajv.compile(proofSchema), proofFailure: ajv.compile(proofFailureSchema),
   detail: ajv.compile(detailSchema), summaries: ajv.compile(summarySchema), context: ajv.compile(contextSchema),
 };

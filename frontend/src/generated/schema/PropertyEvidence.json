@@ -1,0 +1,468 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PropertyEvidenceResponse",
+  "type": "object",
+  "properties": {
+    "entity_refs": {
+      "$ref": "#/definitions/KgEntityRefs"
+    },
+    "property_id": {
+      "type": "string"
+    },
+    "sections": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/EvidenceSection"
+      }
+    },
+    "serving_bundle_version": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "property_id",
+    "entity_refs",
+    "sections"
+  ],
+  "definitions": {
+    "CommunityPulse": {
+      "type": "object",
+      "properties": {
+        "concerns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "paragraph": {
+          "type": "string"
+        },
+        "positives": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "quotes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CommunityPulseQuote"
+          }
+        },
+        "sentiment_band": {
+          "type": "string"
+        },
+        "source_label": {
+          "type": "string"
+        },
+        "source_urls": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "source_label",
+        "sentiment_band",
+        "paragraph",
+        "positives",
+        "concerns",
+        "quotes",
+        "source_urls"
+      ]
+    },
+    "CommunityPulseQuote": {
+      "type": "object",
+      "properties": {
+        "polarity": {
+          "type": "string"
+        },
+        "source_type": {
+          "type": "string"
+        },
+        "source_url": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "source_type",
+        "polarity"
+      ]
+    },
+    "EvidenceId": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "observation"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "derivation"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ]
+        }
+      ]
+    },
+    "EvidenceMediaFrame": {
+      "type": "object",
+      "properties": {
+        "capture_date": {
+          "type": "string"
+        },
+        "distance_from_gate_m": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "fov": {
+          "type": "number",
+          "format": "double"
+        },
+        "heading": {
+          "type": "number",
+          "format": "double"
+        },
+        "image_url": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "pitch": {
+          "type": "number",
+          "format": "double"
+        },
+        "source_url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "label",
+        "distance_from_gate_m",
+        "image_url",
+        "heading",
+        "pitch",
+        "fov",
+        "capture_date",
+        "source_url"
+      ]
+    },
+    "EvidenceMediaStrip": {
+      "type": "object",
+      "properties": {
+        "caption": {
+          "type": "string"
+        },
+        "capture_date_label": {
+          "type": "string"
+        },
+        "coverage_quality": {
+          "type": "string"
+        },
+        "frames": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/EvidenceMediaFrame"
+          }
+        },
+        "kind": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "provider",
+        "title",
+        "caption",
+        "capture_date_label",
+        "coverage_quality",
+        "frames"
+      ]
+    },
+    "EvidencePresentation": {
+      "type": "object",
+      "properties": {
+        "density": {
+          "type": "string"
+        },
+        "max_preview_items": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "variant": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "variant",
+        "density",
+        "max_preview_items"
+      ]
+    },
+    "EvidenceRef": {
+      "type": "object",
+      "properties": {
+        "evidence_id": {
+          "$ref": "#/definitions/EvidenceId"
+        },
+        "snapshot_identity": {
+          "type": "string"
+        },
+        "subject_entity_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "snapshot_identity",
+        "subject_entity_id",
+        "evidence_id"
+      ]
+    },
+    "EvidenceSection": {
+      "type": "object",
+      "properties": {
+        "community_pulse": {
+          "$ref": "#/definitions/CommunityPulse"
+        },
+        "confidence_pct": {
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        },
+        "constellation": {
+          "type": "string"
+        },
+        "entity_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "header_meta": {
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SourceItem"
+          }
+        },
+        "kind": {
+          "type": "string"
+        },
+        "media": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/EvidenceMediaStrip"
+          }
+        },
+        "missing": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "presentation": {
+          "$ref": "#/definitions/EvidencePresentation"
+        },
+        "priority": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "relationship": {
+          "type": "string"
+        },
+        "scope": {
+          "type": "string"
+        },
+        "source_types": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "subtitle": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "title",
+        "summary",
+        "subtitle",
+        "scope",
+        "priority",
+        "constellation",
+        "header_meta",
+        "confidence_pct",
+        "source_types",
+        "entity_ids",
+        "presentation",
+        "items",
+        "missing"
+      ]
+    },
+    "KgEntityRefs": {
+      "description": "Minimal entity identity bundle attached to property/search/detail responses.\n\nThese fields are stable API identifiers, not display copy and not a complete\nserving export. They exist so the UI can ask follow-up endpoints for richer\ncontext when a user shows intent: opens a property, expands a card, compares\nhomes, clicks a source trail, or requests a nearby/risk/community breakdown.\n\nCurrent usage pattern:\n1. Render fast listing data from `PropertyCard` or `PropertyDetailResponse`.\n2. Use `source_entity_ids` as opaque provenance handles for the property,\n   society, area, and builder.\n3. Use source/evidence read models when the UI needs a larger drill-down\n   such as builder portfolio, nearby projects, or lineage.\n4. Build optional UI sections from facts with source/confidence metadata.\n5. Hide sections that have no backed facts instead of rendering empty cards.\n\nImportant distinction: these are KG node IDs, not necessarily canonical RERA\nIDs. Some societies have an alias node such as `society:prestige-park-grove`\nwhile lake artifacts may also contain a RERA-rooted canonical ID. The UI\nshould not infer canonicalization from the string shape. It should treat the\nIDs as opaque handles and follow the API.",
+      "type": "object",
+      "properties": {
+        "area_entity_id": {
+          "description": "Area/locality node for traffic, waterlogging, metro, schools, price trend,\nand other externalities.",
+          "type": "string"
+        },
+        "builder_entity_id": {
+          "description": "Builder node when the society has a known BuiltBy edge in the KG.",
+          "type": "string"
+        },
+        "property_entity_id": {
+          "description": "Listing-level node for facts specific to this flat/unit/listing.",
+          "type": "string"
+        },
+        "society_entity_id": {
+          "description": "Society/project node for RERA, reviews, nearby places, amenities, and\ncommunity evidence.",
+          "type": "string"
+        },
+        "source_entity_ids": {
+          "description": "Existing graph nodes the UI can safely prefetch first.\n\nThis list is backend-filtered to nodes present in the current KG, sorted,\nand deduplicated. It may omit an otherwise valid field ID if that node has\nnot been materialized yet. UI code should treat it as a convenient fetch\nplan, not as a complete semantic model.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "property_entity_id",
+        "society_entity_id",
+        "area_entity_id"
+      ]
+    },
+    "SourceAttribution": {
+      "type": "object",
+      "properties": {
+        "evidence": {
+          "$ref": "#/definitions/EvidenceRef"
+        },
+        "learned_at": {
+          "type": "string"
+        },
+        "source_type": {
+          "type": "string"
+        },
+        "source_url": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence",
+        "value",
+        "source_type",
+        "learned_at"
+      ]
+    },
+    "SourceItem": {
+      "type": "object",
+      "properties": {
+        "attributions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SourceAttribution"
+          }
+        },
+        "entity_id": {
+          "type": "string"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/EvidenceRef"
+          }
+        },
+        "key": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "learned_at": {
+          "type": "string"
+        },
+        "relationship": {
+          "type": "string"
+        },
+        "scope": {
+          "type": "string"
+        },
+        "source_type": {
+          "type": "string"
+        },
+        "source_url": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "evidence",
+        "entity_id",
+        "key",
+        "label",
+        "value",
+        "scope",
+        "source_type",
+        "learned_at"
+      ]
+    }
+  }
+}

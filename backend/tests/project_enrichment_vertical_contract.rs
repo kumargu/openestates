@@ -450,6 +450,29 @@ async fn materialized_contract(carpet: bool) {
                 .unwrap(),
         )
         .unwrap();
+        let evidence = detail["evidence"]["sections"].as_array().unwrap();
+        for item in evidence
+            .iter()
+            .flat_map(|section| section["items"].as_array().unwrap())
+        {
+            let references = item["evidence"]
+                .as_array()
+                .expect("every buyer claim binds evidence");
+            assert!(!references.is_empty());
+            for reference in references {
+                let reference: backend::serving::EvidenceRef =
+                    serde_json::from_value(reference.clone()).unwrap();
+                assert_eq!(reference.snapshot_identity, snapshot_identity);
+                match reference.evidence_id {
+                    backend::serving::EvidenceId::Observation(ref id) => {
+                        assert!(loaded.evidence_index.observation(id).is_some())
+                    }
+                    backend::serving::EvidenceId::Derivation(ref id) => {
+                        assert!(loaded.evidence_index.derivation(id).is_some())
+                    }
+                }
+            }
+        }
         let measurement = &detail["property"]["area_measurement"];
         assert_eq!(
             measurement["evidence"]["snapshot_identity"],
@@ -477,6 +500,14 @@ async fn materialized_contract(carpet: bool) {
             )
             .unwrap();
             assert_eq!(batch["items"].as_array().unwrap().len(), 2);
+            for item in batch["items"].as_array().unwrap() {
+                if item["area_measurement"]["basis"] != "carpet" {
+                    assert!(
+                        item.get("carpet_area_sqft").is_none(),
+                        "summary must preserve measurement basis"
+                    );
+                }
+            }
             assert_eq!(batch["items"][0]["id"], ids[1]);
             assert_eq!(batch["items"][1]["id"], ids[0]);
             assert_eq!(batch["missingIds"], serde_json::json!(["missing"]));

@@ -63,7 +63,6 @@ fn main() {
         "  GET /api/properties/{{id}}/surfaces | /api/properties/{{id}}/surfaces/{{surface_id}}"
     );
     println!("  POST /api/properties/surfaces/batch");
-    println!("  POST /api/properties/evidence/batch");
     println!("  GET /api/areas | /api/areas/tracker | /api/areas/{{id}}");
     println!("  GET /api/discovery");
     println!("  GET /api/search?q=...");

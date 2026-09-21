@@ -16,6 +16,8 @@ fn main() {
     export::<backend::search::journey::SearchJourneyEnvelope>(&root, "SearchJourneyEnvelope");
     export::<backend::search::proof::ProofResolutionFailure>(&root, "SearchProofFailure");
     export::<backend::search::proof::ProofResolution>(&root, "SearchProofResolution");
+    export::<Vec<backend::models::PropertyCard>>(&root, "PropertyCatalog");
+    export::<backend::routes::properties::PropertyEvidenceResponse>(&root, "PropertyEvidence");
     export::<backend::routes::properties::PropertyDetail>(&root, "PropertyDetail");
     export::<backend::routes::properties::PropertySummaries>(&root, "PropertySummaries");
     export::<backend::surfaces::SurfaceSceneResponse>(&root, "PropertyContext");

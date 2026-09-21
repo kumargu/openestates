@@ -1,7 +1,6 @@
 /* Generated from Rust public DTOs. Run npm run contracts:generate. */
 
 export type Availability = "available" | "unavailable";
-export type ReviewTone = "positive" | "concern" | "neutral";
 export type EvidenceId =
   | {
       id: string;
@@ -11,12 +10,12 @@ export type EvidenceId =
       id: string;
       kind: "derivation";
     };
+export type ReviewTone = "positive" | "concern" | "neutral";
 export type BranchLens = "proof" | "value" | "trust" | "commute";
 export type RecommendationStatus = "pending" | "ready" | "unavailable";
 export type ReraEvidenceAvailability = "available" | "partial" | "unavailable";
 
 export interface PropertyDetail {
-  area: AreaProfile | null;
   /**
    * Highest price_per_sqft among properties in the same area.
    */
@@ -88,7 +87,7 @@ export interface PropertyDetail {
    * Human-readable project status from skill's display_template
    */
   project_status_display?: string | null;
-  property: Property;
+  property: PropertyAttributes;
   /**
    * Counterfactual branches — why you might consider an alternative instead.
    */
@@ -111,37 +110,7 @@ export interface PropertyDetail {
    */
   root_source?: string | null;
   snapshot_identity: string;
-  society: Society | null;
-}
-export interface AreaProfile {
-  airport_noise_summary: string;
-  city: string;
-  community_notes: string;
-  externality_tags: string[];
-  id: string;
-  infrastructure_tags: string[];
-  last_updated: string;
-  livability_summary: string;
-  median_price_per_sqft: number;
-  metro_access_summary: string;
-  name: string;
-  price_range_per_sqft: PriceRange;
-  reddit_signals: RedditSignals;
-  sample_size: number;
-  traffic_summary: string;
-  trend_direction: string;
-  trend_summary: string;
-  waterlogging_summary: string;
-}
-export interface PriceRange {
-  high: number;
-  low: number;
-}
-export interface RedditSignals {
-  decision_drivers: string[];
-  last_updated: string;
-  recurring_concerns: string[];
-  sentiment_label: string;
+  society: SocietySummary | null;
 }
 export interface InventoryAvailability {
   area: Availability;
@@ -308,6 +277,7 @@ export interface CommunityPulseQuote {
 export interface SourceItem {
   attributions?: SourceAttribution[];
   entity_id: string;
+  evidence: EvidenceRef[];
   key: string;
   label: string;
   learned_at: string;
@@ -319,10 +289,16 @@ export interface SourceItem {
   values?: string[];
 }
 export interface SourceAttribution {
+  evidence: EvidenceRef;
   learned_at: string;
   source_type: string;
   source_url?: string;
   value: string;
+}
+export interface EvidenceRef {
+  evidence_id: EvidenceId;
+  snapshot_identity: string;
+  subject_entity_id: string;
 }
 export interface EvidenceMediaStrip {
   caption: string;
@@ -486,57 +462,28 @@ export interface SiteOverviewPlan {
   source_url?: string;
   thumbnail_url?: string;
 }
-export interface Property {
-  airport_noise_score?: number;
+export interface PropertyAttributes {
   area: string;
   area_id: string;
   area_measurement?: Measurement;
   bhk?: number;
   builder_name: string;
-  builder_quality_score?: number;
   carpet_area_sqft?: number;
   city: string;
-  days_on_market: number;
   description_summary: string;
-  document_completeness_score?: number;
-  facing: string;
-  floor: number;
-  greenery_score: number | null;
   hero_image: string;
   id: string;
   images: string[];
-  interest_level: string | null;
   listing_type: string;
-  litigation_risk?: number;
-  maintenance_cost_monthly: number;
-  metro_distance_mins: number;
-  noise_score?: number;
-  offers_last_7d: number | null;
-  open_space_score: number | null;
   possession_status: string;
   price?: number;
-  /**
-   * Inclusive listing band when the source is a range, not a point asking price.
-   */
   price_max?: number;
-  /**
-   * Inclusive listing band when the source is a range, not a point asking price.
-   */
   price_min?: number;
   price_per_sqft?: number;
   property_type: string;
-  resale_strength_score: number | null;
-  saves_last_7d: number | null;
   society_id: string;
-  society_quality_score?: number;
-  source_reference: string;
-  sunlight_score?: number;
   super_builtup_sqft?: number;
   title: string;
-  total_floors: number;
-  traffic_score?: number;
-  transparency_tags: string[];
-  waterlogging_risk_score?: number;
 }
 /**
  * A measurement is never a display number: its basis, scope and receipt travel together.
@@ -549,11 +496,6 @@ export interface Measurement {
   minimum?: number;
   unit: string;
   value: number;
-}
-export interface EvidenceRef {
-  evidence_id: EvidenceId;
-  snapshot_identity: string;
-  subject_entity_id: string;
 }
 export interface RecommendationBranch {
   branch_id: string;
@@ -694,14 +636,6 @@ export interface PropertyCard {
   transparency_tags: string[];
 }
 /**
- * Get the learned_at timestamp from any fact matching the key, formatted as ISO string.
- * Extract area intelligence from the knowledge graph for a given area.
- * Returns None if no Reddit-sourced area intelligence facts exist.
- * Extract builder trust from a facts slice — shared logic between direct and canonical builder.
- * Extract builder trust data by traversing BuiltBy edges from society to builder node.
- * If the builder has a `canonical_builder` fact (orphan resolution), follows the
- * reference to the canonical builder node and reads delivery data from there.
- * Returns None if no builder node found or no delivery data.
  * Legacy optional API shape. Search and detail responses do not calculate
  * freshness or age from timestamps.
  */
@@ -840,22 +774,10 @@ export interface ReraReportRef {
   href: string;
   registration_ids: string[];
 }
-export interface Society {
+export interface SocietySummary {
   area: string;
   builder_name: string;
   city: string;
-  common_complaints: string[];
-  common_positives: string[];
-  future_google_place_id: string | null;
-  future_google_place_name: string;
-  future_review_enrichment_status: string;
-  google_reviews_url?: string;
   id: string;
-  livability_sentiment: string;
-  maintenance_sentiment: string;
   name: string;
-  review_summary: string;
-  summary: string;
-  total_units: number;
-  year_built: number;
 }

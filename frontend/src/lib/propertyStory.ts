@@ -327,7 +327,7 @@ function projectMedia(
       sourceType: supplied?.sourceType ?? "unknown",
       lifecycle: supplied?.lifecycle ?? "unknown",
       capturedAt: supplied?.capturedAt,
-      sourceUrl: supplied?.sourceUrl ?? sourceUrl(data.property.source_reference),
+      sourceUrl: supplied?.sourceUrl,
       focalPoint: focalPoint(supplied?.focalPoint),
     } satisfies StoryMediaFrame;
   });

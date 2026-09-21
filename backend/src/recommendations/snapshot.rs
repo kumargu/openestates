@@ -66,6 +66,7 @@ mod tests {
             },
             items: (0..facts)
                 .map(|idx| crate::routes::properties::SourceItem {
+                    evidence: Vec::new(),
                     entity_id: "society:sample".to_string(),
                     key: format!("fact_{idx}"),
                     label: format!("Fact {idx}"),

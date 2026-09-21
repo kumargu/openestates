@@ -3,16 +3,6 @@
   "title": "PropertyDetail",
   "type": "object",
   "properties": {
-    "area": {
-      "anyOf": [
-        {
-          "$ref": "#/definitions/AreaProfile"
-        },
-        {
-          "type": "null"
-        }
-      ]
-    },
     "area_price_range_high": {
       "description": "Highest price_per_sqft among properties in the same area.",
       "type": [
@@ -163,7 +153,7 @@
       ]
     },
     "property": {
-      "$ref": "#/definitions/Property"
+      "$ref": "#/definitions/PropertyAttributes"
     },
     "recommendation_branches": {
       "description": "Counterfactual branches — why you might consider an alternative instead.",
@@ -212,7 +202,7 @@
     "society": {
       "anyOf": [
         {
-          "$ref": "#/definitions/Society"
+          "$ref": "#/definitions/SocietySummary"
         },
         {
           "type": "null"
@@ -228,7 +218,6 @@
     "entity_refs",
     "evidence",
     "society",
-    "area",
     "recommendations",
     "rera_report_ref",
     "area_price_range_low",
@@ -236,95 +225,6 @@
     "interest_count"
   ],
   "definitions": {
-    "AreaProfile": {
-      "type": "object",
-      "properties": {
-        "airport_noise_summary": {
-          "type": "string"
-        },
-        "city": {
-          "type": "string"
-        },
-        "community_notes": {
-          "type": "string"
-        },
-        "externality_tags": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "id": {
-          "type": "string"
-        },
-        "infrastructure_tags": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "last_updated": {
-          "type": "string"
-        },
-        "livability_summary": {
-          "type": "string"
-        },
-        "median_price_per_sqft": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        },
-        "metro_access_summary": {
-          "type": "string"
-        },
-        "name": {
-          "type": "string"
-        },
-        "price_range_per_sqft": {
-          "$ref": "#/definitions/PriceRange"
-        },
-        "reddit_signals": {
-          "$ref": "#/definitions/RedditSignals"
-        },
-        "sample_size": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
-        "traffic_summary": {
-          "type": "string"
-        },
-        "trend_direction": {
-          "type": "string"
-        },
-        "trend_summary": {
-          "type": "string"
-        },
-        "waterlogging_summary": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "id",
-        "name",
-        "city",
-        "median_price_per_sqft",
-        "price_range_per_sqft",
-        "trend_direction",
-        "trend_summary",
-        "metro_access_summary",
-        "airport_noise_summary",
-        "traffic_summary",
-        "waterlogging_summary",
-        "livability_summary",
-        "externality_tags",
-        "infrastructure_tags",
-        "reddit_signals",
-        "community_notes",
-        "sample_size",
-        "last_updated"
-      ]
-    },
     "Availability": {
       "type": "string",
       "enum": [
@@ -510,7 +410,7 @@
       ]
     },
     "DataFreshness": {
-      "description": "Get the learned_at timestamp from any fact matching the key, formatted as ISO string.\nExtract area intelligence from the knowledge graph for a given area.\nReturns None if no Reddit-sourced area intelligence facts exist.\nExtract builder trust from a facts slice — shared logic between direct and canonical builder.\nExtract builder trust data by traversing BuiltBy edges from society to builder node.\nIf the builder has a `canonical_builder` fact (orphan resolution), follows the\nreference to the canonical builder node and reads delivery data from there.\nReturns None if no builder node found or no delivery data.\nLegacy optional API shape. Search and detail responses do not calculate\nfreshness or age from timestamps.",
+      "description": "Legacy optional API shape. Search and detail responses do not calculate\nfreshness or age from timestamps.",
       "type": "object",
       "properties": {
         "days_ago": {
@@ -1544,25 +1444,6 @@
         "evidence"
       ]
     },
-    "PriceRange": {
-      "type": "object",
-      "properties": {
-        "high": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        },
-        "low": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        }
-      },
-      "required": [
-        "low",
-        "high"
-      ]
-    },
     "ProjectPlansView": {
       "type": "object",
       "properties": {
@@ -1599,13 +1480,9 @@
         "coverage_quality"
       ]
     },
-    "Property": {
+    "PropertyAttributes": {
       "type": "object",
       "properties": {
-        "airport_noise_score": {
-          "type": "number",
-          "format": "double"
-        },
         "area": {
           "type": "string"
         },
@@ -1623,10 +1500,6 @@
         "builder_name": {
           "type": "string"
         },
-        "builder_quality_score": {
-          "type": "number",
-          "format": "double"
-        },
         "carpet_area_sqft": {
           "type": "integer",
           "format": "uint32",
@@ -1635,33 +1508,8 @@
         "city": {
           "type": "string"
         },
-        "days_on_market": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
         "description_summary": {
           "type": "string"
-        },
-        "document_completeness_score": {
-          "type": "number",
-          "format": "double"
-        },
-        "facing": {
-          "type": "string"
-        },
-        "floor": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
-        "greenery_score": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "format": "double",
-          "default": null
         },
         "hero_image": {
           "type": "string"
@@ -1675,50 +1523,8 @@
             "type": "string"
           }
         },
-        "interest_level": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        },
         "listing_type": {
           "type": "string"
-        },
-        "litigation_risk": {
-          "type": "number",
-          "format": "double"
-        },
-        "maintenance_cost_monthly": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
-        "metro_distance_mins": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
-        "noise_score": {
-          "type": "number",
-          "format": "double"
-        },
-        "offers_last_7d": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint32",
-          "default": null,
-          "minimum": 0
-        },
-        "open_space_score": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "format": "double",
-          "default": null
         },
         "possession_status": {
           "type": "string"
@@ -1729,13 +1535,11 @@
           "minimum": 0
         },
         "price_max": {
-          "description": "Inclusive listing band when the source is a range, not a point asking price.",
           "type": "integer",
           "format": "uint64",
           "minimum": 0
         },
         "price_min": {
-          "description": "Inclusive listing band when the source is a range, not a point asking price.",
           "type": "integer",
           "format": "uint64",
           "minimum": 0
@@ -1748,36 +1552,8 @@
         "property_type": {
           "type": "string"
         },
-        "resale_strength_score": {
-          "type": [
-            "number",
-            "null"
-          ],
-          "format": "double",
-          "default": null
-        },
-        "saves_last_7d": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint32",
-          "default": null,
-          "minimum": 0
-        },
         "society_id": {
           "type": "string"
-        },
-        "society_quality_score": {
-          "type": "number",
-          "format": "double"
-        },
-        "source_reference": {
-          "type": "string"
-        },
-        "sunlight_score": {
-          "type": "number",
-          "format": "double"
         },
         "super_builtup_sqft": {
           "type": "integer",
@@ -1786,25 +1562,6 @@
         },
         "title": {
           "type": "string"
-        },
-        "total_floors": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
-        "traffic_score": {
-          "type": "number",
-          "format": "double"
-        },
-        "transparency_tags": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "waterlogging_risk_score": {
-          "type": "number",
-          "format": "double"
         }
       },
       "required": [
@@ -1817,24 +1574,10 @@
         "builder_name",
         "property_type",
         "listing_type",
-        "floor",
-        "total_floors",
-        "facing",
         "possession_status",
-        "metro_distance_mins",
-        "maintenance_cost_monthly",
-        "days_on_market",
-        "greenery_score",
-        "open_space_score",
-        "resale_strength_score",
-        "interest_level",
-        "saves_last_7d",
-        "offers_last_7d",
         "images",
         "hero_image",
-        "description_summary",
-        "transparency_tags",
-        "source_reference"
+        "description_summary"
       ]
     },
     "PropertyCard": {
@@ -2238,35 +1981,6 @@
         "pending",
         "ready",
         "unavailable"
-      ]
-    },
-    "RedditSignals": {
-      "type": "object",
-      "properties": {
-        "decision_drivers": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "last_updated": {
-          "type": "string"
-        },
-        "recurring_concerns": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "sentiment_label": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "decision_drivers",
-        "recurring_concerns",
-        "sentiment_label",
-        "last_updated"
       ]
     },
     "ReraComplaintScopeSummary": {
@@ -2951,7 +2665,7 @@
         "confidence"
       ]
     },
-    "Society": {
+    "SocietySummary": {
       "type": "object",
       "properties": {
         "area": {
@@ -2963,60 +2677,11 @@
         "city": {
           "type": "string"
         },
-        "common_complaints": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "common_positives": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "future_google_place_id": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "future_google_place_name": {
-          "type": "string"
-        },
-        "future_review_enrichment_status": {
-          "type": "string"
-        },
-        "google_reviews_url": {
-          "type": "string"
-        },
         "id": {
-          "type": "string"
-        },
-        "livability_sentiment": {
-          "type": "string"
-        },
-        "maintenance_sentiment": {
           "type": "string"
         },
         "name": {
           "type": "string"
-        },
-        "review_summary": {
-          "type": "string"
-        },
-        "summary": {
-          "type": "string"
-        },
-        "total_units": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
-        "year_built": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
         }
       },
       "required": [
@@ -3024,23 +2689,15 @@
         "name",
         "area",
         "city",
-        "builder_name",
-        "year_built",
-        "total_units",
-        "summary",
-        "maintenance_sentiment",
-        "livability_sentiment",
-        "common_positives",
-        "common_complaints",
-        "review_summary",
-        "future_google_place_name",
-        "future_google_place_id",
-        "future_review_enrichment_status"
+        "builder_name"
       ]
     },
     "SourceAttribution": {
       "type": "object",
       "properties": {
+        "evidence": {
+          "$ref": "#/definitions/EvidenceRef"
+        },
         "learned_at": {
           "type": "string"
         },
@@ -3055,6 +2712,7 @@
         }
       },
       "required": [
+        "evidence",
         "value",
         "source_type",
         "learned_at"
@@ -3071,6 +2729,12 @@
         },
         "entity_id": {
           "type": "string"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/EvidenceRef"
+          }
         },
         "key": {
           "type": "string"
@@ -3104,6 +2768,7 @@
         }
       },
       "required": [
+        "evidence",
         "entity_id",
         "key",
         "label",

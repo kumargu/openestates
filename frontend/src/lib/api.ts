@@ -100,6 +100,8 @@ function decodeWire<T>(path: string, value: unknown): T {
   const route = path.split("?")[0];
   if (["/api/search", "/api/search/revisions", "/api/search/resume"].includes(route)) return validateWire<T>("journey", value);
   if (route === "/api/search/proofs/resolve") return validateWire<T>("proof", value);
+  if (route === "/api/properties") return validateWire<T>("catalog", value);
+  if (/^\/api\/properties\/[^/]+\/evidence$/.test(route)) return validateWire<T>("evidence", value);
   if (route === "/api/properties/batch") return validateWire<T>("summaries", value);
   if (/^\/api\/properties\/[^/]+$/.test(route)) return validateWire<T>("detail", value);
   if (/^\/api\/properties\/[^/]+\/surfaces\/[^/]+$/.test(route)) return validateWire<T>("context", value);

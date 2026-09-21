@@ -1,4 +1,5 @@
 pub mod api;
+pub mod public_contract;
 pub mod assets;
 pub mod catalog;
 pub mod community;
