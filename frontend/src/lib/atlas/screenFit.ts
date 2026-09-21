@@ -141,7 +141,8 @@ export function fitCameraToScreen(input: Readonly<{
   };
   // The initial affine fit is only a seed. In an oblique view foreground
   // geometry grows with perspective; fitting its flat projection crops it.
-  // Refine the camera against the same pinhole projection used by the lens.
+  // Refine against the same pinhole projection used by the lens, but cap each
+  // step because a point near the camera plane can produce a uselessly large ratio.
   for (let iteration = 0; iteration < 40; iteration++) {
     const screen = points.map(point => projectCameraPointToScreen(camera, point, input.frame, input.fieldOfViewDegrees));
     const x0 = Math.min(...screen.map(p => p.x)), x1 = Math.max(...screen.map(p => p.x));
@@ -149,7 +150,7 @@ export function fitCameraToScreen(input: Readonly<{
     if (x0 >= safeLeft - 0.1 && x1 <= safeRight + 0.1 && y0 >= safeTop - 0.1 && y1 <= safeBottom + 0.1) break;
     const growth = Math.max((x1-x0)/availableWidth, (y1-y0)/availableHeight);
     if (growth > 1.001) {
-      camera = {...camera, range: camera.range * Math.max(1.02, growth)};
+      camera = {...camera, range: camera.range * Math.min(1.5, Math.max(1.02, growth))};
       continue;
     }
     const dx = x0 < safeLeft ? x0-safeLeft : x1 > safeRight ? x1-safeRight : 0;
