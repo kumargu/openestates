@@ -102,7 +102,6 @@ pub struct Property {
     pub images: Vec<String>,
     pub hero_image: String,
     pub description_summary: String,
-    pub transparency_tags: Vec<String>,
     pub source_reference: String,
 }
 
@@ -152,9 +151,6 @@ impl Property {
             builder_name: p.builder_name.clone(),
             images: p.images.clone(),
             hero_image: p.hero_image.clone(),
-            transparency_tags: crate::routes::enrichment::compact_transparency_tags(
-                &p.transparency_tags,
-            ),
             description_summary: p.description_summary.clone(),
             possession_status: p.possession_status.clone(),
             metro_distance_mins: p.metro_distance_mins,
@@ -252,7 +248,6 @@ pub struct PropertyCard {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub images: Vec<String>,
     pub hero_image: String,
-    pub transparency_tags: Vec<String>,
     pub description_summary: String,
     pub possession_status: String,
     pub metro_distance_mins: u32,

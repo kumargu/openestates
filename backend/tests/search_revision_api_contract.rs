@@ -555,7 +555,6 @@ async fn regression_surface_keeps_exact_resolved_receipt() {
             Arc::new(bundle),
             properties,
             Vec::new(),
-            Vec::new(),
             search_index,
         )));
     let references = [EvidenceRef::for_observation(
@@ -1168,7 +1167,6 @@ async fn proof_tokens_reject_tampering_stale_snapshots_wrong_properties_and_miss
             Arc::new(damaged_bundle),
             test_properties(false),
             Vec::new(),
-            Vec::new(),
             SearchIndex::build(&test_properties(false)),
         )));
     let missing = post_proof(&app, json!({"proofToken": token}), 96).await;
@@ -1188,7 +1186,6 @@ async fn proof_tokens_reject_tampering_stale_snapshots_wrong_properties_and_miss
         .store(Arc::new(SearchRuntimeSnapshot::new(
             current.bundle.clone(),
             remapped_properties,
-            Vec::new(),
             Vec::new(),
             remapped_index,
         )));
@@ -1368,7 +1365,6 @@ fn install_runtime(
             bundle,
             properties,
             Vec::new(),
-            Vec::new(),
             search_index,
         )));
 }
@@ -1391,7 +1387,6 @@ fn install_runtime_without_second_home(state: &Arc<AppState>, bundle_version: &s
         .store(Arc::new(SearchRuntimeSnapshot::new(
             bundle,
             properties,
-            Vec::new(),
             Vec::new(),
             search_index,
         )));
@@ -1460,7 +1455,6 @@ async fn test_app_fixture_with_identity(
         bundle.clone(),
         properties.clone(),
         Vec::new(),
-        Vec::new(),
         search_index.clone(),
     );
     let (search_event_tx, search_event_rx) = mpsc::channel(8);
@@ -1480,7 +1474,7 @@ async fn test_app_fixture_with_identity(
         properties: RwLock::new(properties),
         search_index: RwLock::new(search_index),
         recommendation_cache: RwLock::new(HashMap::new()),
-        areas: RwLock::new(Vec::new()),
+
         societies: RwLock::new(Vec::new()),
         discovery_config: backend::discovery::load_discovery_config(),
         map_overlays: Arc::new(backend::routes::map_overlays::CityMapOverlays::default()),
@@ -1951,7 +1945,6 @@ fn install_collection_inventory(state: &Arc<AppState>, topology: bool) {
             Arc::new(bundle),
             properties,
             Vec::new(),
-            Vec::new(),
             search_index,
         )));
 }
@@ -2184,7 +2177,7 @@ fn test_property(id: &str, title: &str, society_id: &str, price: u64) -> Propert
         images: Vec::new(),
         hero_image: String::new(),
         description_summary: "Revision API contract fixture".to_string(),
-        transparency_tags: Vec::new(),
+
         source_reference: "revision_api_contract".to_string(),
     }
 }

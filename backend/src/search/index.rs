@@ -194,15 +194,14 @@ impl SearchIndex {
         self.price_max_by_id.insert(property.id.clone(), price_max);
 
         let text = format!(
-            "{} {} {} {} {} {} {} {}",
+            "{} {} {} {} {} {} {}",
             property.title,
             property.area,
             property.city,
             property.society_id.replace('-', " "),
             property.society_id,
             property.builder_name,
-            property.description_summary,
-            property.transparency_tags.join(" ")
+            property.description_summary
         );
         for token in analyzer::search_tokens(&text, super::schema::query_stopwords()) {
             push_unique(self.by_token.entry(token).or_default(), &property.id);
@@ -1340,7 +1339,7 @@ mod tests {
             images: Vec::new(),
             hero_image: String::new(),
             description_summary: String::new(),
-            transparency_tags: Vec::new(),
+
             source_reference: "unit-test".to_string(),
         }
     }

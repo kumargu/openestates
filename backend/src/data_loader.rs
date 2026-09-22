@@ -13,8 +13,7 @@ use crate::dag_config::{
 };
 use crate::discovery::load_discovery_config;
 use crate::knowledge::fact::FactValue;
-use crate::models::area_profile::{PriceRange, RedditSignals};
-use crate::models::{AreaProfile, Property, Society};
+use crate::models::{Property, Society};
 use crate::search::SearchIndex;
 use crate::security::ExecutionLanes;
 use crate::serving::{
@@ -45,11 +44,9 @@ pub async fn load_app_state_with_execution(
         .await
         .unwrap_or_else(|err| panic!("Serving bundle startup contract failed: {err}"));
 
-
     let search_runtime = runtime_snapshot_from_serving_bundle(bundle.clone());
     let properties = search_runtime.properties.to_vec();
     let societies = search_runtime.societies.to_vec();
-    let areas = search_runtime.areas.to_vec();
     let search_index = search_runtime.search_index.clone();
     if properties.is_empty() {
         panic!(
@@ -58,10 +55,9 @@ pub async fn load_app_state_with_execution(
         );
     }
     println!(
-        "Derived {} properties, {} societies, {} areas from serving bundle {}",
+        "Derived {} properties, {} societies from serving bundle {}",
         properties.len(),
         societies.len(),
-        areas.len(),
         bundle.manifest.bundle_version
     );
 
@@ -71,9 +67,8 @@ pub async fn load_app_state_with_execution(
     );
 
     println!(
-        "Loaded {} properties, {} areas, {} societies",
+        "Loaded {} properties, {} societies",
         properties.len(),
-        areas.len(),
         societies.len()
     );
 
@@ -97,7 +92,7 @@ pub async fn load_app_state_with_execution(
         properties: RwLock::new(properties),
         search_index: RwLock::new(search_index),
         recommendation_cache: RwLock::new(std::collections::HashMap::new()),
-        areas: RwLock::new(areas),
+
         societies: RwLock::new(societies),
         discovery_config,
         map_overlays,
@@ -113,10 +108,9 @@ pub fn runtime_snapshot_from_serving_bundle(
 ) -> RuntimeServingSnapshot {
     let properties = properties_from_serving_bundle(&bundle);
     let societies = societies_from_serving_bundle(&bundle);
-    let areas = areas_from_serving_properties(&properties);
     let search_index =
         SearchIndex::build_with_serving_graph(&properties, &bundle.entities, &bundle.edges);
-    SearchRuntimeSnapshot::new(bundle, properties, societies, areas, search_index)
+    SearchRuntimeSnapshot::new(bundle, properties, societies, search_index)
 }
 
 pub async fn load_serving_bundle(project_root: &Path) -> Result<Arc<LoadedServingBundle>, String> {
@@ -357,19 +351,6 @@ fn representative_property_from_serving_society(
     let builder_name = latest_text(Some(rows), "builder_name")
         .or_else(|| latest_text(Some(rows), "rera_promoter_name"))
         .unwrap_or_default();
-    let root_source = entity
-        .and_then(|entity| entity.root_source.as_deref())
-        .unwrap_or("serving_bundle");
-    let mut transparency_tags = vec![
-        format!("Source: {}", root_source_display_label(root_source)),
-        "Fresh area scan".to_string(),
-    ];
-    if latest_bool(Some(rows), "rera_registered").unwrap_or(false) {
-        transparency_tags.push("RERA verified".to_string());
-    }
-    if price == 0 {
-        transparency_tags.push("Price unavailable".to_string());
-    }
 
     Property {
         id,
@@ -424,7 +405,6 @@ fn representative_property_from_serving_society(
         hero_image: latest_text(Some(rows), "hero_image").unwrap_or_default(),
         description_summary: latest_text(Some(rows), "summary")
             .unwrap_or_else(|| format!("{society_name} in {area}")),
-        transparency_tags,
         source_reference: format!("catalog_bundle:{bundle_version}"),
     }
 }
@@ -468,7 +448,6 @@ fn property_from_serving_entity(
         .unwrap_or(0.0)
         .round()
         .max(0.0) as u64;
-    let had_direct_asking_price = price > 0;
     let mut carpet_area_sqft = latest_numeric(rows, "carpet_area_sqft")
         .unwrap_or(0.0)
         .round()
@@ -511,24 +490,6 @@ fn property_from_serving_entity(
         }
     });
 
-    let root_source = entity.root_source.as_deref().unwrap_or("serving_bundle");
-    let mut transparency_tags = latest_tags(rows, "transparency_tags").unwrap_or_default();
-    if transparency_tags.is_empty() {
-        transparency_tags.push(format!(
-            "Source: {}",
-            root_source_display_label(root_source)
-        ));
-        transparency_tags.push("Lake indexed".to_string());
-    }
-    if had_direct_asking_price
-        && price == 0
-        && bhk > 0
-        && !transparency_tags
-            .iter()
-            .any(|tag| tag.eq_ignore_ascii_case("Price unavailable"))
-    {
-        transparency_tags.push("Price unavailable".to_string());
-    }
     let possession_status = latest_text(rows, "possession_status")
         .or_else(|| serving_society_text(fact_index, &society_id, "rera_status"))
         .unwrap_or_else(|| "unknown".to_string());
@@ -595,7 +556,6 @@ fn property_from_serving_entity(
         images: latest_tags(rows, "images").unwrap_or_default(),
         hero_image: latest_text(rows, "hero_image").unwrap_or_default(),
         description_summary,
-        transparency_tags,
         source_reference: format!("catalog_bundle:{bundle_version}"),
     }
 }
@@ -704,72 +664,6 @@ fn resolve_serving_society_area(
         .or_else(|| latest_text(rows, "listing_locality"))
         .or_else(|| area_lookup.society_area(society_entity_id))
         .unwrap_or_default()
-}
-
-fn areas_from_serving_properties(properties: &[Property]) -> Vec<AreaProfile> {
-    let mut by_area = BTreeMap::<String, Vec<&Property>>::new();
-    for property in properties {
-        if !property.area.trim().is_empty() {
-            by_area
-                .entry(property.area.trim().to_string())
-                .or_default()
-                .push(property);
-        }
-    }
-
-    by_area
-        .into_iter()
-        .map(|(area, properties)| {
-            let mut prices = properties
-                .iter()
-                .filter_map(|property| {
-                    (property.price_per_sqft > 0).then_some(property.price_per_sqft)
-                })
-                .collect::<Vec<_>>();
-            prices.sort_unstable();
-            let median_price_per_sqft = median_u64(&prices).unwrap_or(0);
-            let (low, high) = match (prices.first(), prices.last()) {
-                (Some(low), Some(high)) => (*low, *high),
-                _ => (0, 0),
-            };
-            let city = properties
-                .iter()
-                .find_map(|property| (!property.city.is_empty()).then_some(property.city.clone()))
-                .unwrap_or_else(|| "Bengaluru".to_string());
-            AreaProfile {
-                id: format!("area-{}", slug(&area)),
-                name: area,
-                city,
-                median_price_per_sqft,
-                price_range_per_sqft: PriceRange { low, high },
-                trend_direction: String::new(),
-                trend_summary: String::new(),
-                metro_access_summary: String::new(),
-                airport_noise_summary: String::new(),
-                traffic_summary: String::new(),
-                waterlogging_summary: String::new(),
-                livability_summary: String::new(),
-                externality_tags: Vec::new(),
-                infrastructure_tags: Vec::new(),
-                reddit_signals: RedditSignals {
-                    decision_drivers: Vec::new(),
-                    recurring_concerns: Vec::new(),
-                    sentiment_label: String::new(),
-                    last_updated: String::new(),
-                },
-                community_notes: String::new(),
-                sample_size: properties.len() as u32,
-                last_updated: chrono::Utc::now().to_rfc3339(),
-            }
-        })
-        .collect()
-}
-
-fn median_u64(values: &[u64]) -> Option<u64> {
-    if values.is_empty() {
-        return None;
-    }
-    Some(values[values.len() / 2])
 }
 
 fn market_pricing_for_serving_property(
@@ -939,13 +833,6 @@ fn latest_numeric(rows: Option<&ServingEntityFactRows>, fact_key: &str) -> Optio
     })
 }
 
-fn latest_bool(rows: Option<&ServingEntityFactRows>, fact_key: &str) -> Option<bool> {
-    latest_fact(rows, fact_key).and_then(|fact| match &fact.value {
-        FactValue::Bool(value) => Some(*value),
-        _ => None,
-    })
-}
-
 fn latest_tags(rows: Option<&ServingEntityFactRows>, fact_key: &str) -> Option<Vec<String>> {
     latest_fact(rows, fact_key).and_then(|fact| match &fact.value {
         FactValue::Tags(values) => Some(
@@ -964,23 +851,6 @@ fn latest_tags(rows: Option<&ServingEntityFactRows>, fact_key: &str) -> Option<V
 
 fn latest_confidence(rows: Option<&ServingEntityFactRows>, fact_key: &str) -> Option<f32> {
     latest_fact(rows, fact_key).map(|fact| fact.confidence)
-}
-
-fn slug(value: &str) -> String {
-    let mut output = String::new();
-    let mut pending_dash = false;
-    for character in value.trim().to_lowercase().chars() {
-        if character.is_ascii_alphanumeric() {
-            if pending_dash && !output.is_empty() {
-                output.push('-');
-            }
-            output.push(character);
-            pending_dash = false;
-        } else {
-            pending_dash = true;
-        }
-    }
-    output
 }
 
 fn title_case_slug(value: &str) -> String {
@@ -1261,17 +1131,6 @@ fn should_replace_sqft(sqft: u32, sqft_confidence: f32, pricing: MarketPricing) 
     let sqft_low_floor = pricing.sqft_low.saturating_mul(1) / 2;
     let sqft_high_ceiling = pricing.sqft_high.saturating_mul(3) / 2;
     sqft == 0 || sqft < sqft_low_floor || sqft > sqft_high_ceiling
-}
-
-fn root_source_display_label(root_source: &str) -> &'static str {
-    match root_source {
-        "seller" => "Self-reported",
-        "rera" => "RERA",
-        "discovered" => "Discovery",
-        "legacy" => "Legacy",
-        "serving_bundle" => "Serving bundle",
-        _ => "Serving bundle",
-    }
 }
 
 #[cfg(test)]
@@ -1682,10 +1541,6 @@ mod tests {
         assert_eq!(property.id, "discovered-prestige-elm-park-3bhk");
         assert_eq!(property.price, 12_500_000);
         assert_eq!(property.possession_status, "New Launch");
-        assert!(property
-            .transparency_tags
-            .iter()
-            .any(|tag| tag == "RERA verified"));
     }
 
     #[test]
@@ -1884,12 +1739,6 @@ mod tests {
         assert!(properties
             .iter()
             .all(|property| property.price_per_sqft == 0));
-        assert!(properties.iter().all(|property| {
-            property
-                .transparency_tags
-                .iter()
-                .any(|tag| tag == "Price unavailable")
-        }));
     }
 
     #[test]

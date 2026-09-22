@@ -11,8 +11,6 @@ import type {
   ReraEvidenceReportResponse,
   ProofFocus,
   RecommendationResponse,
-  AreaListItem,
-  AreaDetail,
   DiscoveryResponse,
   SearchResponse,
   SearchJourneyEnvelope,
@@ -305,14 +303,6 @@ export function getPropertyContextsBatch(propertyIds: string[], options?: ApiFet
   return withCallerAbort(request, options?.signal);
 }
 
-export function getAreas(options?: ApiFetchOptions): Promise<AreaListItem[]> {
-  return fetchJson("/api/areas", options);
-}
-
-export function getArea(id: string): Promise<AreaDetail> {
-  return fetchJson(`/api/areas/${encodeURIComponent(id)}`);
-}
-
 export function searchProperties(
   query: string,
   options?: ApiFetchOptions,
@@ -394,24 +384,4 @@ export function getDiscovery(options?: ApiFetchOptions): Promise<DiscoveryRespon
     void request.then(clearRequest, clearRequest);
   }
   return withCallerAbort(request, options?.signal);
-}
-
-export type PlatformStats = {
-  properties: number;
-  societies: number;
-  areas: number;
-};
-
-export async function getStats(options?: ApiFetchOptions): Promise<PlatformStats> {
-  const [props, areas] = await Promise.all([
-    getProperties(options),
-    getAreas(options),
-  ]);
-  const societyCount = new Set(props.map((p) => p.society_name).filter(Boolean)).size;
-
-  return {
-    properties: props.length,
-    societies: societyCount,
-    areas: areas.length,
-  };
 }

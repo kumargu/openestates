@@ -413,7 +413,7 @@ fn property(spec: &PropertySpec) -> Property {
         images: Vec::new(),
         hero_image: String::new(),
         description_summary: "Controlled recommendation scenario".to_string(),
-        transparency_tags: Vec::new(),
+
         source_reference: "recommendation-scenarios-contract".to_string(),
     }
 }

@@ -2743,17 +2743,6 @@ fn score_property(property: &Property, society_name: &str, terms: &[&str]) -> (f
                 }
             }
         }
-
-        // Also check transparency tags.
-        for tag in &property.transparency_tags {
-            if crate::search::index::text_field_matches_term(&tag.to_lowercase(), term) {
-                total_score += 1.0;
-                if !term_matched {
-                    reasons.push(format!("matched '{}' in tags", term));
-                    term_matched = true;
-                }
-            }
-        }
     }
 
     (total_score, reasons)
@@ -3594,7 +3583,7 @@ mod tests {
             images: vec![format!("/media/{id}.webp")],
             hero_image: format!("/media/{id}.webp"),
             description_summary: "Local test listing".to_string(),
-            transparency_tags: Vec::new(),
+
             source_reference: "unit-test".to_string(),
         }
     }
@@ -4168,9 +4157,6 @@ mod tests {
         unknown_price.price = 0;
         unknown_price.price_min = None;
         unknown_price.price_max = None;
-        unknown_price
-            .transparency_tags
-            .push("Price unavailable".to_string());
 
         let properties = vec![supported, unknown_price];
         let society_names = local_society_names(&properties);

@@ -847,12 +847,8 @@ fn society_key_from_card(property: &PropertyCard) -> String {
 
 fn recommendation_query(current: &Property) -> String {
     format!(
-        "{} {} {} {} {}",
-        current.title,
-        current.area,
-        current.society_id,
-        current.builder_name,
-        current.transparency_tags.join(" ")
+        "{} {} {} {}",
+        current.title, current.area, current.society_id, current.builder_name
     )
 }
 

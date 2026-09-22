@@ -566,17 +566,3 @@ pub fn property_node_id(property_id: &str) -> String {
 // ---------------------------------------------------------------------------
 // Property card enrichment — used by /properties, /search, /properties/:id
 // ---------------------------------------------------------------------------
-
-pub fn compact_transparency_tags(tags: &[String]) -> Vec<String> {
-    let mut compact = tags.iter().take(3).cloned().collect::<Vec<_>>();
-    if tags
-        .iter()
-        .any(|tag| tag.eq_ignore_ascii_case("Price unavailable"))
-        && !compact
-            .iter()
-            .any(|tag| tag.eq_ignore_ascii_case("Price unavailable"))
-    {
-        compact.push("Price unavailable".to_string());
-    }
-    compact
-}

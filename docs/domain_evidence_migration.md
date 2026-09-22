@@ -124,3 +124,11 @@ The existing capability test reproduced low-confidence and nonnumeric rows adver
 Producers: promoted fact/metadata pairs and scoring config. Consumers: capability checks, required-preference evaluation and serving validation. Deleted the parallel observation-only admission path and source-specific threshold branches. Promotion reports unavailable entity/fact/preference bindings separately; raw society facts remain usable even when a claimed search capability is unavailable. UI destinations are not admission requirements.
 
 Verification: 667 library tests, 15 frozen semantic contracts, 24 journey contracts and the two-snapshot materialized vertical contract pass (`/tmp/openestates-contracts-capability-check.log`). Clippy passes for all targets. Frozen expectations remain unchanged.
+
+## Checkpoint 9: retire synthetic area and tag models
+
+Producers: admitted property attributes and contextual facts. Consumers: catalog, detail, recommendation input and frontend context projection. Removed orphan area routes, area profile loading/state, search areaContext and the synthetic transparency_tags field. Comparable median prices now require the same canonical area, measurement basis and unit. Deleted assertions covered only retired fabricated tags; canonical identity and financial contracts remain.
+
+Replaced the retired smoke script with real HTTP journey, bounded detail/context/batch, receipt, resume, revision and stale-snapshot assertions. Restored configured geographical spreading in the frontend context projector while preserving additive exact-proof focus. The existing presenter contract now covers that behavior.
+
+Verification: 667 library, 15 frozen semantic, 24 journey, two recommendation and the two-snapshot materializer contract pass. Frontend 306 tests, type checking, lint and build pass. Real API smoke passes with bounded hydration and resolved identity receipts (`/tmp/openestates-contracts-api-smoke.log`). Generated schemas are refreshed.

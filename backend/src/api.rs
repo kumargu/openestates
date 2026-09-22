@@ -78,8 +78,6 @@ pub fn build_app_router_with_lake(state: Arc<AppState>, lake: LakeStore) -> Rout
                 "/api/properties/{id}/context",
                 get(routes::property_context::get_property_context),
             )
-            .route("/api/areas", get(routes::areas::list_areas))
-            .route("/api/areas/{id}", get(routes::areas::get_area))
             .route("/api/shortlist", get(routes::shortlist::get_shortlist))
             .route("/api/discovery", get(routes::discovery::discovery_home))
             .route(

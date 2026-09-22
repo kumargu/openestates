@@ -3126,7 +3126,6 @@ impl MockSearchFixture {
             self.bundle.clone(),
             self.properties.clone(),
             mock_societies(&self.properties),
-            Vec::new(),
             index,
         )
     }
@@ -3990,7 +3989,7 @@ fn property(spec: &HomeSpec, society_id: &str) -> Property {
         images: Vec::new(),
         hero_image: String::new(),
         description_summary: "Controlled conversational-search fixture".to_string(),
-        transparency_tags: Vec::new(),
+
         source_reference: "conversational-semantics-contract".to_string(),
     }
 }

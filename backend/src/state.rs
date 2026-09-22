@@ -15,7 +15,7 @@ use tokio::sync::RwLock;
 use crate::discovery::{BrowsePropertyCard, DiscoveryConfig};
 use crate::knowledge::SearchEvent;
 use crate::lake::{LakeKey, LakeStore};
-use crate::models::{AreaProfile, Property, Society};
+use crate::models::{Property, Society};
 use crate::recommendations::RecommendationResponse;
 use crate::routes::enrichment::society_node_id;
 use crate::scoring::scoring_policy;
@@ -39,7 +39,6 @@ pub struct SearchRuntimeSnapshot {
     pub search_index: SearchIndex,
     pub societies: Arc<[Society]>,
     pub society_names: HashMap<String, String>,
-    pub areas: Arc<[AreaProfile]>,
     pub geo_cell_max_hops: u8,
     pub geo_cell_max_distance_km: f64,
     pub version_key: RuntimeVersionKey,
@@ -87,7 +86,6 @@ impl SearchRuntimeSnapshot {
         bundle: Arc<LoadedServingBundle>,
         properties: Vec<Property>,
         societies: Vec<Society>,
-        areas: Vec<AreaProfile>,
         search_index: SearchIndex,
     ) -> Self {
         let discovery_config = crate::discovery::load_discovery_config();
@@ -176,7 +174,6 @@ impl SearchRuntimeSnapshot {
             search_index,
             societies: Arc::from(societies),
             society_names,
-            areas: Arc::from(areas),
             geo_cell_max_hops: geo_cell_policy.geo_cell_max_hops,
             geo_cell_max_distance_km: geo_cell_policy.geo_cell_max_distance_km,
             version_key,
@@ -806,7 +803,6 @@ pub struct AppState {
     pub search_index: RwLock<SearchIndex>,
     /// In-process cache keyed by property + bundle + scoring policy + engine version.
     pub recommendation_cache: RwLock<std::collections::HashMap<String, RecommendationResponse>>,
-    pub areas: RwLock<Vec<AreaProfile>>,
     pub societies: RwLock<Vec<Society>>,
     /// Product-facing discovery copy and shelf metadata from app/config/product/discovery_home.json.
     pub discovery_config: DiscoveryConfig,
@@ -854,7 +850,7 @@ mod tests {
                 result_sets: Vec::new(),
                 ordered_result_ids: Vec::new(),
                 total_matches: 0,
-                area_context: None,
+
                 state: "no_matches".to_string(),
                 search_guidance: None,
             }),

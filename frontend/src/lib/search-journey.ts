@@ -74,7 +74,6 @@ export function projectSearchJourney(journey: SearchJourneyEnvelope, previous?: 
     orderedResultIds: results.orderedResultIds,
     totalMatches: results.totalMatches,
     state: results.state,
-    areaContext: results.areaContext,
     searchGuidance: results.guidance,
   };
 }

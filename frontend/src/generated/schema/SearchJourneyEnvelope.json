@@ -25,95 +25,6 @@
     "attempt"
   ],
   "definitions": {
-    "AreaProfile": {
-      "type": "object",
-      "properties": {
-        "airport_noise_summary": {
-          "type": "string"
-        },
-        "city": {
-          "type": "string"
-        },
-        "community_notes": {
-          "type": "string"
-        },
-        "externality_tags": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "id": {
-          "type": "string"
-        },
-        "infrastructure_tags": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "last_updated": {
-          "type": "string"
-        },
-        "livability_summary": {
-          "type": "string"
-        },
-        "median_price_per_sqft": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        },
-        "metro_access_summary": {
-          "type": "string"
-        },
-        "name": {
-          "type": "string"
-        },
-        "price_range_per_sqft": {
-          "$ref": "#/definitions/PriceRange"
-        },
-        "reddit_signals": {
-          "$ref": "#/definitions/RedditSignals"
-        },
-        "sample_size": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
-        "traffic_summary": {
-          "type": "string"
-        },
-        "trend_direction": {
-          "type": "string"
-        },
-        "trend_summary": {
-          "type": "string"
-        },
-        "waterlogging_summary": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "id",
-        "name",
-        "city",
-        "median_price_per_sqft",
-        "price_range_per_sqft",
-        "trend_direction",
-        "trend_summary",
-        "metro_access_summary",
-        "airport_noise_summary",
-        "traffic_summary",
-        "waterlogging_summary",
-        "livability_summary",
-        "externality_tags",
-        "infrastructure_tags",
-        "reddit_signals",
-        "community_notes",
-        "sample_size",
-        "last_updated"
-      ]
-    },
     "Availability": {
       "type": "string",
       "enum": [
@@ -689,54 +600,6 @@
         "negative"
       ]
     },
-    "PriceRange": {
-      "type": "object",
-      "properties": {
-        "high": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        },
-        "low": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0
-        }
-      },
-      "required": [
-        "low",
-        "high"
-      ]
-    },
-    "RedditSignals": {
-      "type": "object",
-      "properties": {
-        "decision_drivers": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "last_updated": {
-          "type": "string"
-        },
-        "recurring_concerns": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "sentiment_label": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "decision_drivers",
-        "recurring_concerns",
-        "sentiment_label",
-        "last_updated"
-      ]
-    },
     "ResultDelta": {
       "type": "object",
       "properties": {
@@ -931,9 +794,6 @@
         {
           "type": "object",
           "properties": {
-            "areaContext": {
-              "$ref": "#/definitions/AreaProfile"
-            },
             "guidance": {
               "$ref": "#/definitions/SearchGuidance"
             },

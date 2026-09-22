@@ -84,3 +84,18 @@ test("presentation caps expand for the exact receipt without replacing default c
     "presentation must not mutate domain context",
   );
 });
+
+
+test("configured geographic spread adds distant choices without replacing the nearest defaults", () => {
+  const context = atlasFixtureContext();
+  const school = context.features.find(feature => feature.fact.factKey === "nearby_schools")!;
+  context.features = Array.from({ length: 6 }, (_, index) => ({
+    ...structuredClone(school),
+    fact: { ...structuredClone(school.fact), id: `spread:${index}` },
+    target: { ...structuredClone(school.target!), entityId: `place:spread-${index}`, name: `School ${index}`,
+      geometry: { type: "Point" as const, coordinates: [77.6 + (index === 5 ? 0.1 : 0), 13] as [number, number] } },
+  }));
+  const scene = projectPropertyContext(context, "around_this_home")!;
+  assert.equal(scene.features.length, 6);
+  assert.ok(context.features.every(feature => scene.receipts.some(receipt => receipt.id === feature.fact.id)));
+});

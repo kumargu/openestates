@@ -528,7 +528,7 @@ mod inventory_tests {
             images: Vec::new(),
             hero_image: String::new(),
             description_summary: String::new(),
-            transparency_tags: Vec::new(),
+
             source_reference: "test".to_string(),
         }
     }

@@ -722,31 +722,6 @@ export type TransparencyScore = {
   explainer: string;
 };
 
-export type AreaListItem = {
-  id: string;
-  name: string;
-  median_price_per_sqft: number;
-  trend_direction: string;
-  primary_signal: string;
-  signals?: string[];
-};
-
-export type AreaDetail = {
-  id: string;
-  name: string;
-  city: string;
-  median_price_per_sqft: number;
-  trend_direction: string;
-  trend_summary: string;
-  metro_access_summary: string;
-  traffic_summary: string;
-  waterlogging_summary: string;
-  livability_summary: string;
-  externality_tags: string[];
-  infrastructure_tags: string[];
-  community_notes: string;
-};
-
 export type UpcomingLaunchCard = {
   id: string;
   builder_name: string;
@@ -863,22 +838,6 @@ export type SearchResultItem = Omit<JourneyResultCard, "matchTier"> & {
   collectionTitle?: string;
 };
 
-export type SearchAreaContext = {
-  id: string;
-  name: string;
-  city: string;
-  median_price_per_sqft: number;
-  trend_direction: string;
-  trend_summary: string;
-  metro_access_summary: string;
-  traffic_summary: string;
-  waterlogging_summary: string;
-  livability_summary: string;
-  externality_tags: string[];
-  infrastructure_tags: string[];
-  community_notes: string;
-};
-
 export type SourcedClaim = {
   entity_name: string;
   claim: string;
@@ -925,7 +884,6 @@ export type SearchResponse = {
   orderedResultIds: string[];
   totalMatches: number;
   runtimeVersion: SearchRuntimeVersion;
-  areaContext?: SearchAreaContext;
   state: "results" | "no_matches";
   searchGuidance?: SearchGuidance;
 };

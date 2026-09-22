@@ -7,8 +7,8 @@ pub mod engine;
 pub mod evaluation;
 pub mod geo;
 pub mod guard;
-pub mod index;
 pub mod identity;
+pub mod index;
 pub mod intent;
 pub mod journey;
 pub(crate) mod parser;
@@ -50,7 +50,7 @@ pub use text::{CandidateEvaluationRequest, CandidateEvaluator, SearchEvaluationC
 
 use serde::{Deserialize, Serialize};
 
-use crate::models::{AreaProfile, PropertyCard};
+use crate::models::PropertyCard;
 use crate::serving::EvidenceId;
 
 /// Exact serving identity selected by ranking before a snapshot-qualified
@@ -229,7 +229,6 @@ pub struct SearchExecution {
     pub result_sets: Vec<SearchResultSet>,
     pub ordered_result_ids: Vec<String>,
     pub total_matches: usize,
-    pub area_context: Option<AreaProfile>,
     pub state: String,
     pub search_guidance: Option<SearchGuidance>,
 }

@@ -574,12 +574,6 @@
           "type": "integer",
           "format": "uint32",
           "minimum": 0
-        },
-        "transparency_tags": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
         }
       },
       "required": [
@@ -591,7 +585,6 @@
         "society_name",
         "builder_name",
         "hero_image",
-        "transparency_tags",
         "description_summary",
         "possession_status",
         "metro_distance_mins",

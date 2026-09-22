@@ -826,7 +826,7 @@ fn empty_response(query: &str) -> SearchExecution {
         result_sets: Vec::new(),
         ordered_result_ids: Vec::new(),
         total_matches: 0,
-        area_context: None,
+
         state: "no_matches".to_string(),
         search_guidance: None,
     }
@@ -962,7 +962,6 @@ fn search_runtime_snapshot(
         Arc::new(bundle),
         properties.to_vec(),
         mock_societies(properties),
-        Vec::new(),
         search_index,
     )
 }
@@ -1177,7 +1176,7 @@ fn property_with_description(
         images: Vec::new(),
         hero_image: String::new(),
         description_summary: description_summary.to_string(),
-        transparency_tags: Vec::new(),
+
         source_reference: "search-efficiency-contract".to_string(),
     }
 }

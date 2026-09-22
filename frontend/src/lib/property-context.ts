@@ -1,3 +1,4 @@
+import { distanceMetres } from "./atlas/geometry.ts";
 import presentation from "../../../app/config/ui/property-context.json" with { type: "json" };
 import { resolvedProofFocus } from "./proof-focus.ts";
 import type {
@@ -252,6 +253,19 @@ export function projectPropertyContext(
           ),
     );
     const selected = unique.slice(0, rule.maxItems ?? unique.length);
+    const expandedCap = Math.max(selected.length, rule.expandedMaxItems ?? selected.length);
+    const spreadMetres = (rule.spreadMinDistanceKm ?? 0) * 1000;
+    if (spreadMetres > 0) {
+      for (const candidate of unique.slice(selected.length)) {
+        if (selected.length >= expandedCap) break;
+        const point = candidate.feature.geometry;
+        if (point.type !== "Point") continue;
+        const distinct = selected.every(({ feature }) => feature.geometry.type === "Point" &&
+          distanceMetres({ lng: point.coordinates[0], lat: point.coordinates[1] },
+            { lng: feature.geometry.coordinates[0], lat: feature.geometry.coordinates[1] }) >= spreadMetres);
+        if (distinct) selected.push(candidate);
+      }
+    }
     const matched = projected.find(
       ({ candidate }) =>
         proof?.factKey === candidate.fact.factKey &&

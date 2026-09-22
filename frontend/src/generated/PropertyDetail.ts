@@ -743,7 +743,6 @@ export interface PropertyCard {
   super_builtup_sqft?: number;
   title: string;
   total_floors: number;
-  transparency_tags: string[];
 }
 /**
  * Legacy optional API shape. Search and detail responses do not calculate

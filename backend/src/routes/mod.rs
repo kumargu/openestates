@@ -1,5 +1,4 @@
 pub mod admin;
-pub mod areas;
 pub mod discovery;
 pub mod enrichment;
 pub mod interests;

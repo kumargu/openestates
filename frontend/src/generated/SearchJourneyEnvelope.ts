@@ -38,7 +38,6 @@ export type BoolExpr =
     };
 export type SearchJourneyResults =
   | {
-      areaContext?: AreaProfile;
       guidance?: SearchGuidance;
       kind: "current";
       orderedResultIds: string[];
@@ -145,36 +144,6 @@ export interface IntentPreferencePresentation {
   priority?: number;
   required: boolean;
   weight: number;
-}
-export interface AreaProfile {
-  airport_noise_summary: string;
-  city: string;
-  community_notes: string;
-  externality_tags: string[];
-  id: string;
-  infrastructure_tags: string[];
-  last_updated: string;
-  livability_summary: string;
-  median_price_per_sqft: number;
-  metro_access_summary: string;
-  name: string;
-  price_range_per_sqft: PriceRange;
-  reddit_signals: RedditSignals;
-  sample_size: number;
-  traffic_summary: string;
-  trend_direction: string;
-  trend_summary: string;
-  waterlogging_summary: string;
-}
-export interface PriceRange {
-  high: number;
-  low: number;
-}
-export interface RedditSignals {
-  decision_drivers: string[];
-  last_updated: string;
-  recurring_concerns: string[];
-  sentiment_label: string;
 }
 export interface SearchGuidance {
   message: string;

@@ -736,29 +736,20 @@ fn recommendation_envelope_for(
 fn area_median_ppsf_for(
     property: &crate::models::Property,
     properties: &[crate::models::Property],
-    areas: &[crate::models::AreaProfile],
 ) -> Option<u64> {
-    areas
+    let measurement = property.area_measurement.as_ref()?;
+    let mut values = properties
         .iter()
-        .find(|area| {
-            area_lookup_key(&area.id) == area_lookup_key(&property.area_id)
-                || area_lookup_key(&area.name) == area_lookup_key(&property.area)
-        })
-        .map(|area| area.median_price_per_sqft)
-        .or_else(|| {
-            let mut values = properties
-                .iter()
-                .filter(|candidate| {
-                    candidate.area_id == property.area_id && candidate.price_per_sqft > 0
+        .filter(|candidate| {
+            candidate.area_id == property.area_id
+                && candidate.area_measurement.as_ref().is_some_and(|other| {
+                    other.basis == measurement.basis && other.unit == measurement.unit
                 })
-                .map(|candidate| candidate.price_per_sqft)
-                .collect::<Vec<_>>();
-            if values.is_empty() {
-                return None;
-            }
-            values.sort_unstable();
-            Some(values[values.len() / 2])
         })
+        .filter_map(|candidate| (candidate.price_per_sqft > 0).then_some(candidate.price_per_sqft))
+        .collect::<Vec<_>>();
+    values.sort_unstable();
+    values.get(values.len() / 2).copied()
 }
 
 fn find_property_by_request_id<'a>(
@@ -787,14 +778,6 @@ fn project_status_display_for(
     SocietyFactProjection::from_index(facts?, society_id)
         .project_status(None, None)
         .display
-}
-
-fn area_lookup_key(id_or_name: &str) -> String {
-    let normalized = id_or_name.to_lowercase().replace(['_', ' '], "-");
-    normalized
-        .strip_prefix("area-")
-        .unwrap_or(&normalized)
-        .to_string()
 }
 
 fn fact_value_display(value: &FactValue) -> String {
@@ -2150,7 +2133,7 @@ pub async fn get_property_recommendations(
         &property,
         Some(runtime.bundle.as_ref()),
     );
-    let area_median_ppsf = area_median_ppsf_for(&property, &runtime.properties, &runtime.areas);
+    let area_median_ppsf = area_median_ppsf_for(&property, &runtime.properties);
     let items = build_recommendation_branches(RecommendationBranchInputs {
         current: &property,
         current_evidence: &evidence,
@@ -4953,7 +4936,7 @@ mod serving_state_tests {
             images: Vec::new(),
             hero_image: String::new(),
             description_summary: String::new(),
-            transparency_tags: Vec::new(),
+
             source_reference: String::new(),
         }
     }

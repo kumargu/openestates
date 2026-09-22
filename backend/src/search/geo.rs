@@ -2233,7 +2233,7 @@ mod tests {
             images: Vec::new(),
             hero_image: String::new(),
             description_summary: "Local test listing".to_string(),
-            transparency_tags: Vec::new(),
+
             source_reference: "unit-test".to_string(),
         }
     }

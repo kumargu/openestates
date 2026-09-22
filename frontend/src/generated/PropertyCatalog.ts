@@ -130,7 +130,6 @@ export interface PropertyCard {
   super_builtup_sqft?: number;
   title: string;
   total_floors: number;
-  transparency_tags: string[];
 }
 /**
  * A measurement is never a display number: its basis, scope and receipt travel together.

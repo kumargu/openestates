@@ -76,15 +76,6 @@ fn build_search_output(
         .iter()
         .map(|result| result.card.id.clone())
         .collect();
-    // Look up area context if the intent identified an area.
-    let area_context = parsed_intent.area.as_ref().and_then(|area_name| {
-        snapshot
-            .areas
-            .iter()
-            .find(|a| a.name.eq_ignore_ascii_case(area_name))
-            .cloned()
-    });
-
     let results_returned = results.len();
     let (graph_nodes_hit, mut enrichment_gaps) = {
         let mut matched_society_ids: Vec<String> = Vec::new();
@@ -124,7 +115,6 @@ fn build_search_output(
         result_sets,
         ordered_result_ids,
         total_matches,
-        area_context,
         state: if total_matches == 0 {
             "no_matches".to_string()
         } else {
@@ -554,7 +544,7 @@ mod tests {
             result_sets: Vec::new(),
             ordered_result_ids: Vec::new(),
             total_matches: 0,
-            area_context: None,
+
             state: "no_matches".to_string(),
             search_guidance: None,
         };
@@ -788,7 +778,7 @@ mod tests {
             images: vec![],
             hero_image: String::new(),
             description_summary: "Test property".into(),
-            transparency_tags: vec![],
+
             source_reference: "test".into(),
         };
 
@@ -901,7 +891,7 @@ pub(crate) fn guarded_search_output(
             result_sets: Vec::new(),
             ordered_result_ids: Vec::new(),
             total_matches: 0,
-            area_context: None,
+
             state: "no_matches".to_string(),
             search_guidance: guidance,
         }),

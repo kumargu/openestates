@@ -2520,7 +2520,7 @@ mod tests {
             images: Vec::new(),
             hero_image: String::new(),
             description_summary: String::new(),
-            transparency_tags: Vec::new(),
+
             source_reference: "test".to_string(),
         }
     }
@@ -2782,7 +2782,6 @@ mod tests {
                     future_review_enrichment_status: String::new(),
                 })
                 .collect(),
-            Vec::new(),
             search_index,
         );
         snapshot.inventory_options = properties

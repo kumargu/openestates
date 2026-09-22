@@ -314,7 +314,6 @@ async fn materialized_contract(carpet: bool) -> (tempfile::TempDir, Arc<AppState
     );
     let properties = runtime.properties.to_vec();
     let societies = runtime.societies.to_vec();
-    let areas = runtime.areas.to_vec();
     let search_index = runtime.search_index.clone();
     let (search_event_tx, _search_event_rx) = mpsc::channel(8);
     let state = Arc::new(AppState {
@@ -333,7 +332,7 @@ async fn materialized_contract(carpet: bool) -> (tempfile::TempDir, Arc<AppState
         properties: RwLock::new(properties),
         search_index: RwLock::new(search_index),
         recommendation_cache: RwLock::new(std::collections::HashMap::new()),
-        areas: RwLock::new(areas),
+
         societies: RwLock::new(societies),
         discovery_config: backend::discovery::load_discovery_config(),
         map_overlays: Arc::new(backend::routes::map_overlays::CityMapOverlays::default()),
@@ -539,6 +538,7 @@ async fn materialized_contract(carpet: bool) -> (tempfile::TempDir, Arc<AppState
                 panic!("context fact must retain its observation");
             };
             assert!(loaded.evidence_index.observation(&id).is_some());
+
         }
         let measurement = &detail["property"]["area_measurement"];
         assert_eq!(

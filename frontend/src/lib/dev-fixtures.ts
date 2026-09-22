@@ -1,10 +1,8 @@
 import type {
-  AreaListItem,
   BrowsePropertyCard,
   DiscoveryResponse,
   PropertyCard,
   PropertyDetailResponse,
-  SearchAreaContext,
   SearchJourneyEnvelope,
 } from "./types.ts";
 import { atlasFixtureCard, atlasFixtureId, atlasFixtureContext } from './dev-atlas-fixtures.ts';
@@ -44,7 +42,6 @@ const fixturePropertyRows: Array<Omit<PropertyCard, "kg_entity_refs" | "carpet_a
     society_name: "Prestige Lakeside Habitat",
     builder_name: "Prestige Group",
     hero_image: "",
-    transparency_tags: ["RERA rooted", "Docs visible", "Market checked"],
     description_summary: "Lake-facing tower with strong source confidence and a clean ownership trail.",
     possession_status: "ready",
     metro_distance_mins: 12,
@@ -71,7 +68,6 @@ const fixturePropertyRows: Array<Omit<PropertyCard, "kg_entity_refs" | "carpet_a
     society_name: "Samadhura Capitol Residences",
     builder_name: "Samadhura",
     hero_image: "",
-    transparency_tags: ["Below median", "Plan visible", "RERA rooted"],
     description_summary: "Efficient resale option near the corridor with strong price discipline.",
     possession_status: "ready",
     metro_distance_mins: 8,
@@ -98,7 +94,6 @@ const fixturePropertyRows: Array<Omit<PropertyCard, "kg_entity_refs" | "carpet_a
     society_name: "Vaswani Starlight",
     builder_name: "Vaswani",
     hero_image: "",
-    transparency_tags: ["Self-reported", "Risk review", "Negotiation required"],
     description_summary: "Premium ask with stronger due-diligence needs before visit.",
     possession_status: "under_construction",
     metro_distance_mins: 15,
@@ -125,7 +120,6 @@ const fixturePropertyRows: Array<Omit<PropertyCard, "kg_entity_refs" | "carpet_a
     society_name: "Sobha Royal Pavilion",
     builder_name: "Sobha",
     hero_image: "",
-    transparency_tags: ["Premium society", "Amenity dense", "Resale depth"],
     description_summary: "Premium family-sized home with strong society signal and higher entry price.",
     possession_status: "ready",
     metro_distance_mins: 18,
@@ -152,7 +146,6 @@ const fixturePropertyRows: Array<Omit<PropertyCard, "kg_entity_refs" | "carpet_a
     society_name: "The Prestige City",
     builder_name: "Prestige Group",
     hero_image: "",
-    transparency_tags: ["Township", "School access", "Value band"],
     description_summary: "Township option with practical family tradeoffs and better price discipline.",
     possession_status: "under_construction",
     metro_distance_mins: 22,
@@ -179,7 +172,6 @@ const fixturePropertyRows: Array<Omit<PropertyCard, "kg_entity_refs" | "carpet_a
     society_name: "Embassy Pristine",
     builder_name: "Embassy",
     hero_image: "",
-    transparency_tags: ["Lake externality", "Premium resale", "Traffic caution"],
     description_summary: "Premium Bellandur option with strong resale demand and externality checks.",
     possession_status: "ready",
     metro_distance_mins: 14,
@@ -206,7 +198,6 @@ const fixturePropertyRows: Array<Omit<PropertyCard, "kg_entity_refs" | "carpet_a
     society_name: "Adarsh Palm Retreat",
     builder_name: "Adarsh",
     hero_image: "",
-    transparency_tags: ["Established community", "Negotiation room", "Commute tradeoff"],
     description_summary: "Established gated community with livability strength and commute tradeoffs.",
     possession_status: "ready",
     metro_distance_mins: 16,
@@ -233,7 +224,6 @@ const fixturePropertyRows: Array<Omit<PropertyCard, "kg_entity_refs" | "carpet_a
     society_name: "Karle Zenith Residences",
     builder_name: "Karle",
     hero_image: "",
-    transparency_tags: ["North corridor", "Premium tower", "Airport access"],
     description_summary: "North Bengaluru premium tower with airport access and higher carrying cost.",
     possession_status: "ready",
     metro_distance_mins: 20,
@@ -258,13 +248,6 @@ export const fixtureProperties: PropertyCard[] = fixturePropertyRows.map((proper
   ...property,
   kg_entity_refs: fixtureKgEntityRefs(property),
 }));
-
-export const fixtureAreas: AreaListItem[] = [
-  { id: "whitefield", name: "Whitefield", median_price_per_sqft: 14520, trend_direction: "up", primary_signal: "Metro access is now the key value unlock." },
-  { id: "sarjapur-road", name: "Sarjapur Road", median_price_per_sqft: 15430, trend_direction: "up", primary_signal: "Township supply is deep, but phase risk matters." },
-  { id: "bellandur", name: "Bellandur", median_price_per_sqft: 17350, trend_direction: "stable", primary_signal: "Premium demand with lake and traffic externalities." },
-  { id: "hebbal", name: "Hebbal", median_price_per_sqft: 16800, trend_direction: "up", primary_signal: "Airport corridor premium is holding." },
-];
 
 export const fixtureDiscovery: DiscoveryResponse = {
   product_story: {
@@ -341,69 +324,6 @@ export const fixtureDiscovery: DiscoveryResponse = {
   ],
 };
 
-const areaContexts: Record<string, SearchAreaContext> = {
-  whitefield: {
-    id: "whitefield",
-    name: "Whitefield",
-    city: "Bengaluru",
-    median_price_per_sqft: 14520,
-    trend_direction: "up",
-    trend_summary: "Ready homes near the metro corridor are holding value, while stretched asks need proof from recent resale comps.",
-    metro_access_summary: "Operational metro access improves commute certainty, but station distance still matters tower by tower.",
-    traffic_summary: "Peak-hour traffic remains heavy around ITPL and Varthur Road.",
-    waterlogging_summary: "Waterlogging risk is localized; verify the final access road and basement history.",
-    livability_summary: "Strong schools, offices, malls, and hospital access make the area resilient for family demand.",
-    externality_tags: ["traffic-sensitive", "monsoon-check"],
-    infrastructure_tags: ["metro-corridor", "office-demand"],
-    community_notes: "Add homes by exact approach road, not only society name.",
-  },
-  "sarjapur road": {
-    id: "sarjapur-road",
-    name: "Sarjapur Road",
-    city: "Bengaluru",
-    median_price_per_sqft: 15430,
-    trend_direction: "up",
-    trend_summary: "Large township inventory gives choice, but phase handover and school commute should drive ranking.",
-    metro_access_summary: "Metro is more future optionality than current daily convenience.",
-    traffic_summary: "Outer Ring Road access is useful but can add time during school and office peaks.",
-    waterlogging_summary: "Pockets vary; verify basement and entry-road drainage.",
-    livability_summary: "Strong family demand because of schools, offices, and newer gated supply.",
-    externality_tags: ["phase-risk", "school-commute"],
-    infrastructure_tags: ["orr-access", "township-supply"],
-    community_notes: "Prefer projects with visible handover history and active resident maintenance feedback.",
-  },
-  bellandur: {
-    id: "bellandur",
-    name: "Bellandur",
-    city: "Bengaluru",
-    median_price_per_sqft: 17350,
-    trend_direction: "stable",
-    trend_summary: "Premium communities trade at a corridor premium; discount homes often carry commute or externality risk.",
-    metro_access_summary: "Metro access is indirect today; commute depends heavily on office side and daily timing.",
-    traffic_summary: "Heavy traffic on ORR is the primary buyer tradeoff.",
-    waterlogging_summary: "Lake-adjacent pockets need explicit monsoon and basement checks.",
-    livability_summary: "Mature social infrastructure and premium gated stock keep resale demand deep.",
-    externality_tags: ["lake-externality", "orr-traffic"],
-    infrastructure_tags: ["office-demand", "premium-resale"],
-    community_notes: "Do not compare Bellandur only by price per sqft; externality risk changes fair value.",
-  },
-  hebbal: {
-    id: "hebbal",
-    name: "Hebbal",
-    city: "Bengaluru",
-    median_price_per_sqft: 16800,
-    trend_direction: "up",
-    trend_summary: "North Bengaluru premium supply benefits from airport access and business-park demand.",
-    metro_access_summary: "Current metro convenience is limited; airport and ring-road access matter more today.",
-    traffic_summary: "Flyover bottlenecks are timing-sensitive.",
-    waterlogging_summary: "Lower waterlogging risk in many pockets, but tower-level drainage still matters.",
-    livability_summary: "Premium towers have improving retail and school access.",
-    externality_tags: ["airport-corridor", "flyover-bottleneck"],
-    infrastructure_tags: ["north-growth", "business-parks"],
-    community_notes: "Rank by maintenance corpus and tower density, not just airport distance.",
-  },
-};
-
 export function getFixtureResponse(path: string): unknown | null {
   const [pathname, queryString = ""] = path.split("?");
   const params = new URLSearchParams(queryString);
@@ -411,7 +331,6 @@ export function getFixtureResponse(path: string): unknown | null {
   if (pathname === `/api/properties/${atlasFixtureId}/context`) return atlasFixtureContext();
 
   if (pathname === "/api/properties") return fixtureProperties;
-  if (pathname === "/api/areas") return fixtureAreas;
   if (pathname === "/api/discovery") return fixtureDiscovery;
 
   if (pathname === "/api/search") {
@@ -431,7 +350,6 @@ export function getFixtureResponse(path: string): unknown | null {
 function searchFixtureProperties(query: string): SearchJourneyEnvelope {
   const normalized = query.trim().toLowerCase();
   const intent = parseIntent(normalized);
-  const areaContext = intent.area ? areaContexts[intent.area.toLowerCase()] ?? null : null;
   const scored = fixtureProperties
     .map((property) => {
       const match = scoreFixtureProperty(property, normalized, intent);
@@ -464,7 +382,6 @@ function searchFixtureProperties(query: string): SearchJourneyEnvelope {
         resultSets: results.length > 0 ? [{ branchId: "branch-1", label: "Matches", results }] : [],
         orderedResultIds: results.map((result) => result.id),
         totalMatches: results.length,
-        areaContext: areaContext ? { ...areaContext, airport_noise_summary: "", last_updated: "", price_range_per_sqft: { low: 0, high: 0 }, reddit_signals: { decision_drivers: [], recurring_concerns: [], sentiment_label: "", last_updated: "" }, sample_size: 0 } : undefined,
         state: results.length > 0 ? "results" : "no_matches",
       },
     },
@@ -490,7 +407,7 @@ function parseIntent(query: string): {
   budgetMax: number | null;
   preferences: string[];
 } {
-  const area = Object.values(areaContexts).find((ctx) => query.includes(ctx.name.toLowerCase()))?.name ?? null;
+  const area = fixtureProperties.find((home) => query.includes(home.area.toLowerCase()))?.area ?? null;
   const bhk = Number(query.match(/\b([1-5])\s*bhk\b/)?.[1] ?? "") || null;
   const croreMatch = query.match(/(?:under|below|upto|up to)\s*([0-9.]+)\s*(?:cr|crore)/);
   const lakhMatch = query.match(/(?:under|below|upto|up to)\s*([0-9.]+)\s*(?:l|lac|lakh)/);
@@ -545,7 +462,6 @@ function scoreFixtureProperty(
     property.society_name,
     property.builder_name,
     property.description_summary,
-    ...property.transparency_tags,
   ].join(" ").toLowerCase();
 
   if (!query) return { score: 70, reason: "Showing all locally available properties." };
@@ -606,7 +522,6 @@ function scoreFixtureProperty(
 }
 
 function makeDetail(card: PropertyCard): PropertyDetailResponse {
-  const area = areaContexts[card.area.toLowerCase()] ?? areaContexts.whitefield;
 
   return {
     context: card.id === atlasFixtureId ? atlasFixtureContext() : {
@@ -624,7 +539,7 @@ function makeDetail(card: PropertyCard): PropertyDetailResponse {
       id: card.id,
       title: card.title,
       area: card.area,
-      area_id: area.id,
+      area_id: card.kg_entity_refs.area_entity_id,
       city: "Bengaluru",
       society_id: slug(card.society_name),
       builder_name: card.builder_name,

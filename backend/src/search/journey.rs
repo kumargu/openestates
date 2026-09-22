@@ -5,7 +5,6 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 use crate::discovery::BrowsePropertyCard;
-use crate::models::AreaProfile;
 use crate::serving::{EvidenceId, EvidenceRef};
 use crate::state::SearchRuntimeSnapshot;
 
@@ -80,9 +79,6 @@ pub enum SearchJourneyResults {
         ordered_result_ids: Vec<String>,
         total_matches: usize,
         state: SearchResultState,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        #[schemars(with = "Box<AreaProfile>")]
-        area_context: Option<Box<AreaProfile>>,
         #[serde(skip_serializing_if = "Option::is_none")]
         #[schemars(with = "SearchGuidance")]
         guidance: Option<SearchGuidance>,
@@ -439,7 +435,6 @@ pub fn project_current_results(
         total_matches: execution.total_matches,
         state: serde_json::from_value(serde_json::Value::String(execution.state.clone()))
             .expect("validated search state"),
-        area_context: execution.area_context.clone().map(Box::new),
         guidance: execution.search_guidance.clone(),
     }
 }
