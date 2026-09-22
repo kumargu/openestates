@@ -132,7 +132,7 @@ async fn materialized_contract(carpet: bool) -> (tempfile::TempDir, Arc<AppState
         )
         .await
         .unwrap();
-    assert_eq!(listings_record.row_count, 3);
+    assert_eq!(listings_record.row_count, 5);
     assert!(listings_record.artifacts.iter().any(|artifact| {
         artifact.content_type == "application/vnd.apache.parquet"
             && artifact.key.ends_with("listings/part-00000.parquet")
@@ -295,7 +295,7 @@ async fn materialized_contract(carpet: bool) -> (tempfile::TempDir, Arc<AppState
 
     let loaded = Arc::new(loaded);
     let runtime = backend::data_loader::runtime_snapshot_from_serving_bundle(loaded.clone());
-    assert_eq!(runtime.properties.len(), 3);
+    assert_eq!(runtime.properties.len(), 4);
     let whitefield_market_id = loaded
         .entities
         .iter()
@@ -468,10 +468,36 @@ async fn materialized_contract(carpet: bool) -> (tempfile::TempDir, Arc<AppState
     )
     .unwrap();
     assert_eq!(
-        journey["active"]["results"]["totalMatches"],
-        if carpet { 1 } else { 0 },
-        "only explicit carpet observations can prove carpet area"
+        journey["active"]["results"]["totalMatches"], 0,
+        "carpet search is deferred even when the source contains carpet measurements"
     );
+    for (query, expected) in [
+        ("2BHK%20under%201.5Cr%20above%201400%20sqft", 0),
+        ("3BHK%20above%201500%20sqft", 3),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/search?q={query}"))
+                    .extension(ConnectInfo(SocketAddr::from(([192, 0, 2, 14], 41000))))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let result: Value = serde_json::from_slice(
+            &to_bytes(response.into_body(), 4 * 1024 * 1024)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            result["active"]["results"]["totalMatches"], expected,
+            "{query}"
+        );
+    }
     let ids = body["active"]["results"]["orderedResultIds"]
         .as_array()
         .unwrap();
@@ -563,9 +589,7 @@ async fn materialized_contract(carpet: bool) -> (tempfile::TempDir, Arc<AppState
             snapshot_identity
         );
         assert_eq!(measurement["unit"], "sqft");
-        if measurement["basis"] != "carpet" {
-            assert!(detail["property"].get("carpet_area_sqft").is_none());
-        }
+        assert!(detail["property"].get("carpet_area_sqft").is_none());
     }
     assert!(
         context_receipt_count > 0,
@@ -759,10 +783,16 @@ fn source_inputs(
             }
         })
         .collect();
-    let external_listing_records = projects
+    let mut external_listing_records: Vec<_> = projects
         .iter()
         .map(|project| ExternalListingObservationRecord {
             entity_id: canonical_id(project.registration),
+            property_id: Some(format!(
+                "discovered-{}-3bhk",
+                canonical_id(project.registration)
+                    .strip_prefix("society:")
+                    .unwrap()
+            )),
             project_key: Some(project.registration.to_string()),
             source_name: "MagicBricks".to_string(),
             source_url: Some(format!("https://listings.example/{}", slug(project.name))),
@@ -788,6 +818,22 @@ fn source_inputs(
             observed_at,
         })
         .collect();
+    // Two actual offers must never be combined into one qualifying home.
+    for (price, area) in [(10_000_000.0, 1_000.0), (30_000_000.0, 2_000.0)] {
+        let mut offer = external_listing_records[0].clone();
+        offer.property_id = None;
+        offer.bhk = Some(2.0);
+        offer.configuration = Some("2BHK".into());
+        offer.price = Some(price);
+        offer.price_min = Some(price);
+        offer.price_max = Some(price);
+        offer.area_sqft = Some(area);
+        offer.area_sqft_min = Some(area);
+        offer.area_sqft_max = Some(area);
+        offer.area_type = Some("built-up".into());
+        offer.source_url = Some(format!("https://listings.example/offer-{price}"));
+        external_listing_records.push(offer);
+    }
     let osm_power_records = projects
         .iter()
         .enumerate()

@@ -3019,9 +3019,21 @@
   },
   "numeric_constraints": [
     {
+      "dimension": "listing_area",
+      "label": "Listed area",
+      "fact_keys": [],
+      "measurement_basis": "*",
+      "query_excludes": ["carpet", "usable"],
+      "query_units": [{"unit": "sqft", "aliases": ["sqft", "sq ft", "square feet"], "to_canonical": 1.0}],
+      "proof_sources": [],
+      "scoring_method": "inventory-measurement"
+    },
+    {
       "dimension": "carpet_area",
       "label": "Carpet area",
       "fact_keys": [],
+      "supported": false,
+      "query_requires": ["carpet", "usable"],
       "measurement_basis": "carpet",
       "query_units": [
         {

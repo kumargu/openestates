@@ -78,6 +78,8 @@ pub fn inventory_facts(properties: &[Property]) -> Vec<ServingFactRecord> {
             )
             .unwrap();
             let value = serde_json::json!({
+                "property_id": property.id,
+                "listing_type": "sale",
                 "bhk": property.bhk,
                 "price": property.price,
                 "area_sqft": property.super_builtup_sqft,

@@ -188,9 +188,7 @@ pub fn overlay_project_plans_on_card(
     else {
         return;
     };
-    let Some(matched) =
-        matched_floor_plan_for_listing(&plans, card.bhk, Some(card.carpet_area_sqft))
-    else {
+    let Some(matched) = matched_floor_plan_for_listing(&plans, card.bhk, None) else {
         return;
     };
     card.floor_plan_preview_url = Some(matched.preview_url.clone());

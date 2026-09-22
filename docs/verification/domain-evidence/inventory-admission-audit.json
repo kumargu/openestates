@@ -1,0 +1,275 @@
+{
+  "admitted_inventory": 31,
+  "bundle": "domain-evidence-contract-20260922-typed",
+  "edge_count": 12323,
+  "inconsistent_admitted_measurements": 0,
+  "promotion_issues": [
+    {
+      "code": "eligibility_policy_version_mismatch",
+      "message": "runtime policy is version 7, bundle pins version 6"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory bedrooms must be a positive integer",
+      "reference": "society:rera-1bb852b438567a14/listing_3_5bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory bedrooms must be a positive integer",
+      "reference": "society:rera-1bb852b438567a14/rent_3_5bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory value is outside its observed range",
+      "reference": "society:rera-1c5ed25d455f2628/listing_5bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory value is outside its observed range",
+      "reference": "society:rera-20f63624d25038cb/listing_4bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory value is outside its observed range",
+      "reference": "society:rera-25c0f766df515a4a/listing_3bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory bedrooms must be a positive integer",
+      "reference": "society:rera-3befa7927348d2f3/listing_3_5bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory bedrooms must be a positive integer",
+      "reference": "society:rera-3befa7927348d2f3/rent_3_5bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory bedrooms must be a positive integer",
+      "reference": "society:rera-3cf3565aa4739401/listing_2_5bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory bedrooms must be a positive integer",
+      "reference": "society:rera-3cf3565aa4739401/listing_3_5bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory bedrooms must be a positive integer",
+      "reference": "society:rera-3cf3565aa4739401/rent_3_5bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory bedrooms must be a positive integer",
+      "reference": "society:rera-46bf4705cef5e279/rent_3_5bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory value is outside its observed range",
+      "reference": "society:rera-50a0074af8c0d8be/listing_4bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory bedrooms must be a positive integer",
+      "reference": "society:rera-53117ea502ea0cd0/listing_3_5bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory bedrooms must be a positive integer",
+      "reference": "society:rera-53117ea502ea0cd0/rent_3_5bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory value is outside its observed range",
+      "reference": "society:rera-53c0b81882e6acc6/listing_1bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory bedrooms must be a positive integer",
+      "reference": "society:rera-53c0b81882e6acc6/rent_3_5bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory bedrooms must be a positive integer",
+      "reference": "society:rera-67ba4bfb38da8a8c/rent_3_5bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory bedrooms must be a positive integer",
+      "reference": "society:rera-697fbbfce88898f2/listing_3_5bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory value is outside its observed range",
+      "reference": "society:rera-697fbbfce88898f2/listing_5bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory value is outside its observed range",
+      "reference": "society:rera-699d44c234988565/listing_3bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory value is outside its observed range",
+      "reference": "society:rera-6df3e8af3f384bee/listing_2bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory value is outside its observed range",
+      "reference": "society:rera-78131c93a2d222cd/listing_2bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory bedrooms must be a positive integer",
+      "reference": "society:rera-78131c93a2d222cd/rent_3_5bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory bedrooms must be a positive integer",
+      "reference": "society:rera-7886bc98e6a977a5/listing_2_5bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory bedrooms must be a positive integer",
+      "reference": "society:rera-7886bc98e6a977a5/listing_3_5bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory bedrooms must be a positive integer",
+      "reference": "society:rera-7886bc98e6a977a5/rent_2_5bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory bedrooms must be a positive integer",
+      "reference": "society:rera-7886bc98e6a977a5/rent_3_5bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory value is outside its observed range",
+      "reference": "society:rera-7aebcaf51f604095/listing_3bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory value is outside its observed range",
+      "reference": "society:rera-7b9bb252368eec94/listing_4bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory bedrooms must be a positive integer",
+      "reference": "society:rera-817a906317d2c7bd/rent_3_5bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory bedrooms must be a positive integer",
+      "reference": "society:rera-8dae7e2ebcb812f1/rent_2_5bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory value is outside its observed range",
+      "reference": "society:rera-a19f2cf2456fc549/listing_1bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory bedrooms must be a positive integer",
+      "reference": "society:rera-a19f2cf2456fc549/listing_2_5bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory value is outside its observed range",
+      "reference": "society:rera-a4ceb5a33ccd42b6/listing_2bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory value is outside its observed range",
+      "reference": "society:rera-af36618d49c94b92/listing_3bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory value is outside its observed range",
+      "reference": "society:rera-b26d1b258b181639/listing_3bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory value is outside its observed range",
+      "reference": "society:rera-b26d1b258b181639/listing_4bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory value is outside its observed range",
+      "reference": "society:rera-b64904e17950889a/listing_2bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory bedrooms must be a positive integer",
+      "reference": "society:rera-b719e74c670a7d43/listing_2_5bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory value is outside its observed range",
+      "reference": "society:rera-c1af3dd6c1581e3e/listing_2bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory value is outside its observed range",
+      "reference": "society:rera-c1af3dd6c1581e3e/listing_3bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory value is outside its observed range",
+      "reference": "society:rera-ccfa353d22484c7b/listing_2bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory value is outside its observed range",
+      "reference": "society:rera-ccfa353d22484c7b/listing_4bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory bedrooms must be a positive integer",
+      "reference": "society:rera-cd6d20ba75389465/listing_3_5bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory bedrooms must be a positive integer",
+      "reference": "society:rera-cfa189726c230587/listing_3_5bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory bedrooms must be a positive integer",
+      "reference": "society:rera-d3090a201815d30f/rent_3_5bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory bedrooms must be a positive integer",
+      "reference": "society:rera-de36720f386e8a3f/listing_3_5bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory bedrooms must be a positive integer",
+      "reference": "society:rera-de36720f386e8a3f/rent_2_5bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory value is outside its observed range",
+      "reference": "society:rera-e120e2f085c2819f/listing_4bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory bedrooms must be a positive integer",
+      "reference": "society:rera-e120e2f085c2819f/rent_2_5bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory value is outside its observed range",
+      "reference": "society:rera-ed26990c2d277fa6/listing_2bhk"
+    },
+    {
+      "code": "inconsistent_inventory_measurement",
+      "message": "inventory value is outside its observed range",
+      "reference": "society:rera-f5582864641239f3/listing_2bhk"
+    }
+  ],
+  "promotion_passed": false,
+  "property_count": 149,
+  "note": "Historical isolated bundle rejected by corrected admission. Original lake pointer unchanged; aggregated records require source recollection."
+}

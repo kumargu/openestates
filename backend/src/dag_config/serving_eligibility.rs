@@ -8,6 +8,8 @@ use super::loader::{dag_root, load_json, DagConfigError};
 pub struct ServingEligibilityFile {
     pub version: u32,
     #[serde(default)]
+    pub inventory_listing_types: Vec<String>,
+    #[serde(default)]
     pub observation_required_fact_keys: Vec<String>,
     #[serde(default)]
     pub observation_required_prefixes: Vec<String>,
@@ -140,7 +142,8 @@ mod tests {
     #[test]
     fn serving_eligibility_config_loads() {
         let config = load_serving_eligibility().expect("serving_eligibility.json should load");
-        assert_eq!(config.version, 6);
+        assert_eq!(config.version, 7);
+        assert_eq!(config.inventory_listing_types, ["sale"]);
         assert_eq!(config.property_requirements.len(), 1);
         assert!(config.society_requirements.is_empty());
     }

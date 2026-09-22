@@ -155,6 +155,9 @@ Rules:
 - Legacy local data stores must not silently mix with DAG outputs; mixed truth makes quality impossible to measure.
 - Area Tracker is explicitly deferred. Keep search-event ingestion for enrichment; do not restore its retired endpoint or disconnected UI as a fallback.
 
+### Inventory admission
+Individual inventory keeps price, BHK, observed size/basis and its receipt on one source record. Project ranges and derived size estimates cannot prove a combination for a home. Specific properties require explicit record bindings; one shared selector supplies both API projections and search witnesses. Carpet-specific matching and legacy listing carpet fields are deferred; retain raw source/official-plan evidence. Reject inconsistent measurements before promotion and recollect aggregate-only inputs rather than reconstructing offers.
+
 ### Fact model > feature-specific blobs
 Keep canonical facts separate from search metadata, derived scores, UI copy, and cache indexes. New features should consume facts through typed views or serving products, not mutate the canonical layer.
 

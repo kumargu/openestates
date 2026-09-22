@@ -4041,6 +4041,8 @@ fn serving_fact(entity_id: &str, fact_key: &str, value: FactValue) -> ServingFac
 
 fn inventory_receipt_fact(entity_id: &str, spec: &HomeSpec) -> ServingFactRecord {
     let value = serde_json::json!({
+        "property_id": spec.id,
+        "listing_type": "sale",
         "bhk": spec.bhk,
         "price": spec.price,
         "area_sqft": 1_600,

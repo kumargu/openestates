@@ -339,6 +339,25 @@ pub async fn validate_search_serving_candidate(
     }
     let fact_index = ServingFactIndex::from_records(facts.clone(), metadata.clone());
     let capabilities = crate::search::SearchCapabilityIndex::from_bundle(&entities, &fact_index);
+    let mut excluded_search_capabilities = capabilities.excluded_bindings().to_vec();
+    for fact in &facts {
+        let FactValue::Text(encoded) = &fact.value else {
+            continue;
+        };
+        let Ok(value) =
+            serde_json::from_str::<crate::search::evaluation::InventoryObservationValue>(encoded)
+        else {
+            continue;
+        };
+        if value.validate().is_err() || !value.is_individual() {
+            excluded_search_capabilities.push(crate::search::capabilities::CapabilityExclusion {
+                entity_id: fact.entity_id.clone(),
+                fact_key: fact.fact_key.clone(),
+                preference: "inventory".into(),
+                reason: "requires_consistent_individual_offer".into(),
+            });
+        }
+    }
     let properties = crate::data_loader::properties_from_serving_records_with_edges(
         &entities,
         &edges,
@@ -375,7 +394,7 @@ pub async fn validate_search_serving_candidate(
         rera_evidence_count: rera_evidence.len(),
         edge_count: edges.len(),
         media_references_checked,
-        excluded_search_capabilities: capabilities.excluded_bindings().to_vec(),
+        excluded_search_capabilities,
         passed: issues.is_empty(),
         issues,
     })
@@ -570,6 +589,21 @@ fn validate_record_relations(
 
     let mut fact_pairs = BTreeSet::new();
     for fact in facts {
+        if let FactValue::Text(encoded) = &fact.value {
+            if let Ok(value) = serde_json::from_str::<
+                crate::search::evaluation::InventoryObservationValue,
+            >(encoded)
+            {
+                if let Err(reason) = value.validate() {
+                    issue(
+                        issues,
+                        "inconsistent_inventory_measurement",
+                        reason,
+                        Some(format!("{}/{}", fact.entity_id, fact.fact_key)),
+                    );
+                }
+            }
+        }
         if !entity_ids.contains(fact.entity_id.as_str()) {
             issue(
                 issues,
@@ -999,5 +1033,18 @@ mod tests {
         );
 
         assert!(issues.is_empty(), "unexpected issues: {issues:?}");
+
+        let inconsistent = fact(FactValue::Text(r#"{"bhk":3,"price":10000000,"area_sqft":1112,"area_sqft_min":742,"area_sqft_max":764,"area_type":"carpet"}"#.into()));
+        validate_record_relations(
+            &entities,
+            &[inconsistent],
+            &[],
+            &[],
+            "test-bundle",
+            &mut issues,
+        );
+        assert!(issues
+            .iter()
+            .any(|issue| issue.code == "inconsistent_inventory_measurement"));
     }
 }

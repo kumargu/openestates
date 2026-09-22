@@ -30,11 +30,13 @@ pub const EXTERNAL_LISTINGS_WEEKLY_ASSET_ID: &str = "external_listings_weekly";
 pub const EXTERNAL_LISTING_FACTS_ASSET_ID: &str = "external_listing_facts";
 pub const BUILDER_RERA_AGGREGATES_ASSET_ID: &str = "builder_rera_aggregates";
 
-const OBSERVATION_FORMAT_VERSION: u32 = 1;
+const OBSERVATION_FORMAT_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ExternalListingObservationRecord {
     pub entity_id: String,
+    #[serde(default)]
+    pub property_id: Option<String>,
     pub project_key: Option<String>,
     pub source_name: String,
     pub source_url: Option<String>,
@@ -489,6 +491,7 @@ fn append_listing_facts(
     );
     let clean_locality = row.locality.as_deref().and_then(clean_listing_locality);
     let listing_payload = serde_json::json!({
+        "property_id": row.property_id,
         "price": price_inr as u64,
         "price_min": price_min as u64,
         "price_max": price_max as u64,
@@ -1181,6 +1184,24 @@ fn validate_external_listing_input(
                 "external listing record is missing entity or source".to_string(),
             ));
         }
+        for (value, minimum, maximum) in [
+            (record.price, record.price_min, record.price_max),
+            (record.area_sqft, record.area_sqft_min, record.area_sqft_max),
+        ] {
+            if [value, minimum, maximum]
+                .into_iter()
+                .flatten()
+                .any(|v| !v.is_finite() || v <= 0.0)
+                || minimum.zip(maximum).is_some_and(|(lo, hi)| lo > hi)
+                || value.zip(minimum).is_some_and(|(v, lo)| v < lo)
+                || value.zip(maximum).is_some_and(|(v, hi)| v > hi)
+            {
+                return Err(ProjectEnrichmentAssetError::InvalidInput(format!(
+                    "listing measurement outside observed range for {}",
+                    record.entity_id
+                )));
+            }
+        }
         if record.price.is_none() || record.area_sqft.is_none() || record.bhk.is_none() {
             return Err(ProjectEnrichmentAssetError::InvalidInput(format!(
                 "external listing record for {} is missing price, area, or bhk",
@@ -1196,6 +1217,7 @@ fn write_external_listing_parquet(
 ) -> Result<Vec<u8>, ProjectEnrichmentAssetError> {
     let schema = Arc::new(Schema::new(vec![
         Field::new("entity_id", DataType::Utf8, false),
+        Field::new("property_id", DataType::Utf8, true),
         Field::new("project_key", DataType::Utf8, true),
         Field::new("source_name", DataType::Utf8, false),
         Field::new("source_url", DataType::Utf8, true),
@@ -1224,6 +1246,7 @@ fn write_external_listing_parquet(
         schema.clone(),
         vec![
             strings(records.iter().map(|record| record.entity_id.clone())),
+            optional_string_array(records.iter().map(|record| record.property_id.clone())),
             optional_string_array(records.iter().map(|record| record.project_key.clone())),
             strings(records.iter().map(|record| record.source_name.clone())),
             optional_string_array(records.iter().map(|record| record.source_url.clone())),
@@ -1264,6 +1287,7 @@ async fn read_external_listing_rows(
     let mut rows = Vec::new();
     for batch in parquet_batches(bytes)? {
         let entity_id = string_column(&batch, "entity_id")?;
+        let property_id = string_column(&batch, "property_id")?;
         let project_key = string_column(&batch, "project_key")?;
         let source_name = string_column(&batch, "source_name")?;
         let source_url = string_column(&batch, "source_url")?;
@@ -1290,6 +1314,7 @@ async fn read_external_listing_rows(
         for row in 0..batch.num_rows() {
             rows.push(ExternalListingObservationRecord {
                 entity_id: required_string(entity_id, row, "entity_id")?,
+                property_id: optional_string(property_id, row),
                 project_key: optional_string(project_key, row),
                 source_name: required_string(source_name, row, "source_name")?,
                 source_url: optional_string(source_url, row),
@@ -1558,6 +1583,7 @@ mod tests {
     fn listing_row(price: f64) -> ExternalListingObservationRecord {
         ExternalListingObservationRecord {
             entity_id: "society:one".to_string(),
+            property_id: None,
             project_key: Some("project-one".to_string()),
             source_name: "Magicbricks".to_string(),
             source_url: Some("https://example.test/listing/one".to_string()),

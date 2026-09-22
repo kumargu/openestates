@@ -229,6 +229,16 @@ pub(crate) fn properties_from_serving_records_with_edges(
             bundle_version,
         );
         if let Some(inventory) = inventory {
+            property.price = inventory.price_min.unwrap_or(0);
+            property.price_min = None;
+            property.price_max = None;
+            property.carpet_area_sqft = 0;
+            property.super_builtup_sqft = 0;
+            property.price_per_sqft = inventory
+                .size_sqft
+                .filter(|v| *v > 0)
+                .map(|size| property.price / u64::from(size))
+                .unwrap_or(0);
             property.area_measurement = inventory.area_measurement;
         } else {
             property.bhk = 0;
@@ -313,41 +323,6 @@ fn representative_property_from_serving_society(
         .get(&society_id)
         .cloned()
         .unwrap_or_default();
-    let pricing = serving_market_pricing(rows, bhk);
-    let price = pricing
-        .map(|pricing| pricing.representative_price())
-        .unwrap_or(0);
-    let listed_area_sqft = pricing
-        .map(|pricing| pricing.representative_sqft())
-        .unwrap_or(0);
-    let (price_min, price_max) = pricing.map(listing_band).unwrap_or((None, None));
-    let carpet_area_sqft = pricing
-        .filter(|p| p.area_basis == AreaBasis::Carpet)
-        .map(|p| p.sqft)
-        .unwrap_or(0);
-    let super_builtup_sqft = pricing
-        .filter(|p| p.area_basis == AreaBasis::SuperBuiltUp)
-        .map(|p| p.sqft)
-        .unwrap_or(0);
-    let area_measurement = pricing.and_then(|pricing| {
-        let fact = latest_fact(Some(rows), &format!("listing_{bhk}bhk"))?;
-        let observation = fact.observation.as_ref()?;
-        observation.validate().ok()?;
-        Some(crate::models::Measurement {
-            value: pricing.sqft as f64,
-            minimum: Some(pricing.sqft_low as f64),
-            maximum: Some(pricing.sqft_high as f64),
-            unit: "sqft".to_string(),
-            basis: pricing.area_basis.label().to_string(),
-            entity_id: id.clone(),
-            evidence: crate::serving::EvidenceRef::for_observation(bundle_version, observation),
-        })
-    });
-    let price_per_sqft = if price > 0 && listed_area_sqft > 0 {
-        price / listed_area_sqft as u64
-    } else {
-        0
-    };
     let builder_name = latest_text(Some(rows), "builder_name")
         .or_else(|| latest_text(Some(rows), "rera_promoter_name"))
         .unwrap_or_default();
@@ -368,13 +343,13 @@ fn representative_property_from_serving_society(
             .unwrap_or_else(|| "Apartment".to_string()),
         listing_type: "Project".to_string(),
         bhk,
-        price,
-        price_min,
-        price_max,
-        price_per_sqft,
-        carpet_area_sqft,
-        super_builtup_sqft,
-        area_measurement,
+        price: 0,
+        price_min: None,
+        price_max: None,
+        price_per_sqft: 0,
+        carpet_area_sqft: 0,
+        super_builtup_sqft: 0,
+        area_measurement: None,
         floor: 0,
         total_floors: 0,
         facing: "Not specified".to_string(),
@@ -444,38 +419,6 @@ fn property_from_serving_entity(
         .cloned()
         .unwrap_or_default();
     let bhk = latest_numeric(rows, "bhk").unwrap_or(0.0).round().max(0.0) as u32;
-    let mut price = latest_numeric(rows, "price")
-        .unwrap_or(0.0)
-        .round()
-        .max(0.0) as u64;
-    let mut carpet_area_sqft = latest_numeric(rows, "carpet_area_sqft")
-        .unwrap_or(0.0)
-        .round()
-        .max(0.0) as u32;
-    let mut price_min = None;
-    let mut price_max = None;
-
-    if let Some(pricing) = market_pricing_for_serving_property(fact_index, &society_id, bhk) {
-        let price_confidence = latest_confidence(rows, "price").unwrap_or(0.0);
-        let sqft_confidence = latest_confidence(rows, "carpet_area_sqft").unwrap_or(0.0);
-        (price, carpet_area_sqft, price_min, price_max) = resolve_listing_pricing(
-            price,
-            carpet_area_sqft,
-            price_confidence,
-            sqft_confidence,
-            pricing,
-        );
-    }
-
-    let price_per_sqft = if carpet_area_sqft > 0 && price > 0 {
-        price / carpet_area_sqft as u64
-    } else {
-        latest_numeric(rows, "price_per_sqft")
-            .unwrap_or(0.0)
-            .round()
-            .max(0.0) as u64
-    };
-
     let builder_name = latest_text(rows, "builder_name").unwrap_or_default();
     let description_summary = latest_text(rows, "description_summary").unwrap_or_else(|| {
         let project_name = project_name_from_title_or_id(&title, &id, bhk);
@@ -506,15 +449,12 @@ fn property_from_serving_entity(
             .unwrap_or_else(|| "Apartment".to_string()),
         listing_type: latest_text(rows, "listing_type").unwrap_or_else(|| "Resale".to_string()),
         bhk,
-        price,
-        price_min,
-        price_max,
-        price_per_sqft,
-        carpet_area_sqft,
-        super_builtup_sqft: latest_numeric(rows, "super_builtup_sqft")
-            .unwrap_or(0.0)
-            .round()
-            .max(0.0) as u32,
+        price: 0,
+        price_min: None,
+        price_max: None,
+        price_per_sqft: 0,
+        carpet_area_sqft: 0,
+        super_builtup_sqft: 0,
         area_measurement: None,
         floor: latest_numeric(rows, "floor")
             .unwrap_or(0.0)
@@ -664,32 +604,6 @@ fn resolve_serving_society_area(
         .or_else(|| latest_text(rows, "listing_locality"))
         .or_else(|| area_lookup.society_area(society_entity_id))
         .unwrap_or_default()
-}
-
-fn market_pricing_for_serving_property(
-    fact_index: &ServingFactIndex,
-    society_id: &str,
-    bhk: u32,
-) -> Option<MarketPricing> {
-    if bhk == 0 {
-        return None;
-    }
-    serving_society_text(fact_index, society_id, &format!("listing_{}bhk", bhk))
-        .and_then(|listing| parse_listing_pricing(&listing))
-        .or_else(|| {
-            let pricing =
-                serving_society_text(fact_index, society_id, &format!("pricing_{}bhk", bhk))?;
-            parse_market_pricing(&pricing)
-        })
-}
-
-fn serving_market_pricing(rows: &ServingEntityFactRows, bhk: u32) -> Option<MarketPricing> {
-    latest_text(Some(rows), &format!("listing_{}bhk", bhk))
-        .and_then(|listing| parse_listing_pricing(&listing))
-        .or_else(|| {
-            let pricing = latest_text(Some(rows), &format!("pricing_{}bhk", bhk))?;
-            parse_market_pricing(&pricing)
-        })
 }
 
 fn serving_society_bhks(rows: &ServingEntityFactRows) -> Vec<u32> {
@@ -849,10 +763,6 @@ fn latest_tags(rows: Option<&ServingEntityFactRows>, fact_key: &str) -> Option<V
     })
 }
 
-fn latest_confidence(rows: Option<&ServingEntityFactRows>, fact_key: &str) -> Option<f32> {
-    latest_fact(rows, fact_key).map(|fact| fact.confidence)
-}
-
 fn title_case_slug(value: &str) -> String {
     value
         .split('-')
@@ -866,271 +776,6 @@ fn title_case_slug(value: &str) -> String {
         })
         .collect::<Vec<_>>()
         .join(" ")
-}
-
-#[derive(Clone, Copy, Debug)]
-struct MarketPricing {
-    price: u64,
-    price_low: u64,
-    price_high: u64,
-    sqft: u32,
-    sqft_low: u32,
-    sqft_high: u32,
-    basis: PricingBasis,
-    area_basis: AreaBasis,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum AreaBasis {
-    Carpet,
-    BuiltUp,
-    SuperBuiltUp,
-    Mixed,
-    Unspecified,
-}
-
-impl AreaBasis {
-    fn from_source(value: Option<&str>) -> Self {
-        match value.unwrap_or_default().replace(['-', '_'], " ").as_str() {
-            "carpet" | "carpet area" => Self::Carpet,
-            "built up" => Self::BuiltUp,
-            "super built up" => Self::SuperBuiltUp,
-            "mixed listed area" | "mixed" => Self::Mixed,
-            _ => Self::Unspecified,
-        }
-    }
-    fn label(self) -> &'static str {
-        match self {
-            Self::Carpet => "carpet",
-            Self::BuiltUp => "built_up",
-            Self::SuperBuiltUp => "super_builtup",
-            Self::Mixed => "mixed",
-            Self::Unspecified => "unspecified",
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum PricingBasis {
-    DirectAsking,
-    ProjectAggregate,
-}
-
-impl MarketPricing {
-    fn representative_price(&self) -> u64 {
-        self.price
-    }
-
-    fn representative_sqft(&self) -> u32 {
-        self.sqft
-    }
-}
-
-fn listing_band(pricing: MarketPricing) -> (Option<u64>, Option<u64>) {
-    if pricing.basis == PricingBasis::ProjectAggregate
-        && pricing.price_low > 0
-        && pricing.price_high > pricing.price_low
-    {
-        (Some(pricing.price_low), Some(pricing.price_high))
-    } else {
-        (None, None)
-    }
-}
-
-fn resolve_listing_pricing(
-    price: u64,
-    sqft: u32,
-    price_confidence: f32,
-    sqft_confidence: f32,
-    pricing: MarketPricing,
-) -> (u64, u32, Option<u64>, Option<u64>) {
-    let replace_price = pricing.basis == PricingBasis::DirectAsking
-        && should_replace_price(price, price_confidence, pricing);
-    let discard_weak_direct_price = pricing.basis == PricingBasis::ProjectAggregate
-        && should_replace_price(price, price_confidence, pricing);
-    let replace_sqft = pricing.area_basis == AreaBasis::Carpet
-        && should_replace_sqft(sqft, sqft_confidence, pricing);
-    let (price_min, price_max) = if replace_price {
-        listing_band(pricing)
-    } else {
-        // A project/configuration range is not provenance for an exact asking
-        // price. Keep the listing as a point so budget filters cannot admit it
-        // through an unrelated low end of the wider project market.
-        (None, None)
-    };
-
-    (
-        if replace_price {
-            pricing.representative_price()
-        } else if discard_weak_direct_price {
-            0
-        } else {
-            price
-        },
-        if replace_sqft {
-            pricing.representative_sqft()
-        } else {
-            sqft
-        },
-        price_min,
-        price_max,
-    )
-}
-
-fn parse_market_pricing(raw: &str) -> Option<MarketPricing> {
-    if raw.trim().is_empty() {
-        return None;
-    }
-
-    let value: serde_json::Value = match serde_json::from_str(raw) {
-        Ok(value) => value,
-        Err(_) => return parse_text_listing_pricing(raw),
-    };
-    let price_range = value.get("price_range_lakh")?.as_str()?;
-    let sqft_range = value.get("sqft_range")?.as_str()?;
-    let (price_low_lakh, price_high_lakh) = parse_number_range(price_range)?;
-    let (sqft_low, sqft_high) = parse_number_range(sqft_range)?;
-
-    Some(MarketPricing {
-        price: (((price_low_lakh + price_high_lakh) / 2.0) * 100_000.0).round() as u64,
-        price_low: (price_low_lakh * 100_000.0).round() as u64,
-        price_high: (price_high_lakh * 100_000.0).round() as u64,
-        sqft: ((sqft_low + sqft_high) / 2.0).round() as u32,
-        sqft_low: sqft_low.round() as u32,
-        sqft_high: sqft_high.round() as u32,
-        basis: PricingBasis::ProjectAggregate,
-        area_basis: AreaBasis::Unspecified,
-    })
-}
-
-fn parse_listing_pricing(raw: &str) -> Option<MarketPricing> {
-    if raw.trim().is_empty() {
-        return None;
-    }
-
-    let value: serde_json::Value = match serde_json::from_str(raw) {
-        Ok(value) => value,
-        Err(_) => return parse_text_listing_pricing(raw),
-    };
-    let price = value.get("price")?.as_f64()?;
-    let sqft = value.get("area_sqft")?.as_f64()?;
-    if !price.is_finite() || !sqft.is_finite() || price <= 0.0 || sqft <= 0.0 {
-        return None;
-    }
-    let price_low = value
-        .get("price_min")
-        .and_then(|value| value.as_f64())
-        .unwrap_or(price);
-    let price_high = value
-        .get("price_max")
-        .and_then(|value| value.as_f64())
-        .unwrap_or(price);
-    let sqft_low = value
-        .get("area_sqft_min")
-        .and_then(|value| value.as_f64())
-        .unwrap_or(sqft);
-    let sqft_high = value
-        .get("area_sqft_max")
-        .and_then(|value| value.as_f64())
-        .unwrap_or(sqft);
-    if !price_low.is_finite()
-        || !price_high.is_finite()
-        || !sqft_low.is_finite()
-        || !sqft_high.is_finite()
-        || price_low <= 0.0
-        || price_high <= 0.0
-        || sqft_low <= 0.0
-        || sqft_high <= 0.0
-    {
-        return None;
-    }
-
-    Some(MarketPricing {
-        price: price.round() as u64,
-        price_low: price_low.round() as u64,
-        price_high: price_high.round() as u64,
-        sqft: sqft.round() as u32,
-        sqft_low: sqft_low.round() as u32,
-        sqft_high: sqft_high.round() as u32,
-        basis: PricingBasis::ProjectAggregate,
-        area_basis: AreaBasis::from_source(value.get("area_type").and_then(|v| v.as_str())),
-    })
-}
-
-fn parse_text_listing_pricing(raw: &str) -> Option<MarketPricing> {
-    let lowered = raw.to_ascii_lowercase();
-    let price = parse_text_price(&lowered)?;
-    let sqft = parse_text_sqft(&lowered)?;
-    if price == 0 || sqft == 0 {
-        return None;
-    }
-    Some(MarketPricing {
-        price,
-        price_low: price,
-        price_high: price,
-        sqft,
-        sqft_low: sqft,
-        sqft_high: sqft,
-        basis: PricingBasis::ProjectAggregate,
-        area_basis: AreaBasis::Unspecified,
-    })
-}
-
-fn parse_text_price(raw: &str) -> Option<u64> {
-    let marker = raw.find("inr").or_else(|| raw.find('₹'))?;
-    let after_marker = &raw[marker..];
-    let number = parse_number_range(after_marker)?.0;
-    if after_marker.contains(" cr") || after_marker.contains("crore") {
-        return Some((number * 10_000_000.0).round() as u64);
-    }
-    if after_marker.contains(" lakh") || after_marker.contains(" lac") {
-        return Some((number * 100_000.0).round() as u64);
-    }
-    Some(number.round() as u64)
-}
-
-fn parse_text_sqft(raw: &str) -> Option<u32> {
-    let sqft_marker = raw
-        .find("sq ft")
-        .or_else(|| raw.find("sqft"))
-        .or_else(|| raw.find("sq. ft"))?;
-    let before_marker = &raw[..sqft_marker];
-    let number = parse_number_range(before_marker)?.1;
-    Some(number.round() as u32)
-}
-
-fn parse_number_range(raw: &str) -> Option<(f64, f64)> {
-    let numbers: Vec<f64> = raw
-        .split(|c: char| !(c.is_ascii_digit() || c == '.'))
-        .filter(|part| !part.is_empty())
-        .filter_map(|part| part.parse::<f64>().ok())
-        .collect();
-
-    match numbers.as_slice() {
-        [] => None,
-        [single] => Some((*single, *single)),
-        many => Some((many[0], *many.last().unwrap_or(&many[0]))),
-    }
-}
-
-fn should_replace_price(price: u64, price_confidence: f32, pricing: MarketPricing) -> bool {
-    if price_confidence > 0.65 {
-        return false;
-    }
-
-    let price_low_floor = pricing.price_low.saturating_mul(3) / 4;
-    let price_high_ceiling = pricing.price_high.saturating_mul(5) / 4;
-    price == 0 || price < price_low_floor || price > price_high_ceiling
-}
-
-fn should_replace_sqft(sqft: u32, sqft_confidence: f32, pricing: MarketPricing) -> bool {
-    if sqft_confidence > 0.65 {
-        return false;
-    }
-
-    let sqft_low_floor = pricing.sqft_low.saturating_mul(1) / 2;
-    let sqft_high_ceiling = pricing.sqft_high.saturating_mul(3) / 2;
-    sqft == 0 || sqft < sqft_low_floor || sqft > sqft_high_ceiling
 }
 
 #[cfg(test)]
@@ -1275,7 +920,63 @@ mod tests {
     }
 
     #[test]
-    fn representative_property_preserves_aggregate_listing_range() {
+    fn one_selected_listing_owns_display_and_search_measurements() {
+        let subject = "society:record-selection";
+        let entity = ServingEntityRecord {
+            entity_id: subject.into(),
+            entity_type: "society".into(),
+            name: "Record Selection".into(),
+            root_source: None,
+            visibility: Default::default(),
+            searchable_text: String::new(),
+        };
+        let strong = serving_fact_with_source(
+            subject,
+            "listing_3bhk",
+            FactValue::Text(listing_payload(10_000_000.0, 900.0)),
+            0.95,
+            "ExternalListing",
+        );
+        let mut weak = serving_fact_with_source(
+            subject,
+            "listing_3bhk",
+            FactValue::Text(listing_payload(10_000_000.0, 1800.0)),
+            0.65,
+            "ExternalListing",
+        );
+        weak.observation = Some(
+            crate::serving::SourceObservation::new(
+                "ExternalListing",
+                "different-listing",
+                subject,
+                Utc.timestamp_opt(1, 0).unwrap(),
+                None,
+                vec!["fixture/source-v1".into()],
+            )
+            .unwrap(),
+        );
+        for records in [vec![strong.clone(), weak.clone()], vec![weak, strong]] {
+            let facts = ServingFactIndex::from_records(records, Vec::new());
+            let properties =
+                properties_from_serving_records(std::slice::from_ref(&entity), &facts, "snapshot");
+            let property = &properties[0];
+            let selected = crate::search::InventoryOption::from_serving_observation(
+                property, subject, &facts, "snapshot",
+            )
+            .unwrap();
+            assert_eq!(property.area_measurement, selected.area_measurement);
+            assert_eq!(property.area_measurement.as_ref().unwrap().value, 900.0);
+            assert_eq!(property.price, selected.price_min.unwrap());
+            assert_eq!(property.carpet_area_sqft, 0);
+            let wire =
+                serde_json::to_value(crate::public_contract::PropertyAttributes::from(property))
+                    .unwrap();
+            assert!(wire.get("carpet_area_sqft").is_none());
+        }
+    }
+
+    #[test]
+    fn project_summary_keeps_society_browseable_without_inventory_claims() {
         let entities = vec![ServingEntityRecord {
             entity_id: "society:brigade-lakefront-crimson".to_string(),
             entity_type: "society".to_string(),
@@ -1302,63 +1003,10 @@ mod tests {
         let properties = properties_from_serving_records(&entities, &fact_index, "bundle-v1");
         assert_eq!(properties.len(), 1);
         let property = &properties[0];
-        assert_eq!(property.price, 32_250_000);
-        assert_eq!(property.price_min, Some(30_000_000));
-        assert_eq!(property.price_max, Some(48_000_000));
-    }
-
-    #[test]
-    fn exact_asking_price_does_not_inherit_project_market_band() {
-        let market = MarketPricing {
-            price: 30_000_000,
-            price_low: 10_000_000,
-            price_high: 50_000_000,
-            sqft: 1_800,
-            sqft_low: 1_000,
-            sqft_high: 2_500,
-            basis: PricingBasis::ProjectAggregate,
-            area_basis: AreaBasis::Unspecified,
-        };
-
-        let resolved = resolve_listing_pricing(45_000_000, 2_000, 0.9, 0.9, market);
-
-        assert_eq!(resolved, (45_000_000, 2_000, None, None));
-    }
-
-    #[test]
-    fn weak_area_does_not_replace_a_strong_exact_asking_price() {
-        let market = MarketPricing {
-            price: 30_000_000,
-            price_low: 10_000_000,
-            price_high: 50_000_000,
-            sqft: 1_800,
-            sqft_low: 1_000,
-            sqft_high: 2_500,
-            basis: PricingBasis::ProjectAggregate,
-            area_basis: AreaBasis::Unspecified,
-        };
-
-        let resolved = resolve_listing_pricing(45_000_000, 1, 0.9, 0.2, market);
-
-        assert_eq!(resolved, (45_000_000, 1, None, None));
-    }
-
-    #[test]
-    fn missing_direct_asking_price_does_not_inherit_project_aggregate() {
-        let aggregate = MarketPricing {
-            price: 17_200_000,
-            price_low: 14_700_000,
-            price_high: 21_000_000,
-            sqft: 1_500,
-            sqft_low: 1_300,
-            sqft_high: 1_700,
-            basis: PricingBasis::ProjectAggregate,
-            area_basis: AreaBasis::Unspecified,
-        };
-
-        let resolved = resolve_listing_pricing(0, 0, 0.0, 0.0, aggregate);
-
-        assert_eq!(resolved, (0, 0, None, None));
+        assert_eq!(property.price, 0);
+        assert_eq!(property.price_min, None);
+        assert_eq!(property.price_max, None);
+        assert!(property.area_measurement.is_none());
     }
 
     #[test]
@@ -1776,13 +1424,6 @@ mod tests {
         assert_eq!(properties[0].price, 12_500_000);
     }
 
-    #[test]
-    fn test_parse_number_range() {
-        assert_eq!(parse_number_range("259-353"), Some((259.0, 353.0)));
-        assert_eq!(parse_number_range("2004-2482"), Some((2004.0, 2482.0)));
-        assert_eq!(parse_number_range("200"), Some((200.0, 200.0)));
-    }
-
     fn membership(property_id: &str, society_id: &str) -> crate::serving::ServingEdgeRecord {
         crate::serving::ServingEdgeRecord {
             from_entity_id: property_id.into(),
@@ -1800,6 +1441,7 @@ mod tests {
 
     fn listing_payload_range(price: f64, price_min: f64, price_max: f64, sqft: f64) -> String {
         serde_json::json!({
+            "listing_type": "sale",
             "bhk": 3,
             "area_type": "carpet",
             "price": price as u64,

@@ -432,11 +432,6 @@
         "builder_name": {
           "type": "string"
         },
-        "carpet_area_sqft": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
         "data_freshness": {
           "description": "Data freshness — how recent and rich the underlying data is",
           "allOf": [

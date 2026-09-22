@@ -7,7 +7,7 @@ use crate::routes::properties::{
     PropertyEvidenceResponse,
 };
 use crate::scoring::{
-    score_property_for_surface, scoring_policy, signal_score, CandidateScore, FactAvailability,
+    score_recommendation_candidate, scoring_policy, signal_score, CandidateScore, FactAvailability,
     RecommendationBranchPolicy, RecommendationEligibilityPolicy,
     RecommendationFallbackBranchPolicy, RecommendationRecallChannelPolicy,
     RecommendationRecallOperator, RecommendationRecallPolicy, ScoredSignal,
@@ -18,8 +18,6 @@ use super::branch::{
     compass_magnitude, BranchLens, EvidenceDelta, RecallChannelHit, RecommendationBranch,
 };
 use super::snapshot::{summarize_evidence_sections, EvidenceSnapshot};
-
-const RECOMMENDATION_SURFACE: &str = "recommendations";
 
 struct Candidate {
     property: Property,
@@ -65,12 +63,7 @@ pub fn build_recommendation_branches(
     } = inputs;
 
     let current_snapshot = summarize_evidence_sections(&current_evidence.sections);
-    let current_score = score_property_for_surface(
-        current,
-        serving_bundle,
-        area_median_ppsf,
-        RECOMMENDATION_SURFACE,
-    );
+    let current_score = score_recommendation_candidate(current, serving_bundle, area_median_ppsf);
     let policy = scoring_policy();
     let recall_policy = &policy.recommendation_recall;
     let candidates = recall_candidates(
@@ -253,12 +246,7 @@ fn recall_candidates(
                 .map(|panel| evidence_section_from_panel(panel, &card.kg_entity_refs))
                 .collect::<Vec<_>>();
             let snapshot = summarize_evidence_sections(&sections);
-            let score = score_property_for_surface(
-                property,
-                serving_bundle,
-                area_median_ppsf,
-                RECOMMENDATION_SURFACE,
-            );
+            let score = score_recommendation_candidate(property, serving_bundle, area_median_ppsf);
             Some(Candidate {
                 property: property.clone(),
                 card,

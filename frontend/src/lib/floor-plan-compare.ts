@@ -4,7 +4,6 @@ type PlanComparableListing = Pick<
   PropertyCard,
   | "id"
   | "bhk"
-  | "carpet_area_sqft"
   | "floor_plan_preview_url"
   | "plan_carpet_area_sqft"
   | "plan_sale_area_sqft"
@@ -24,13 +23,6 @@ function positiveNumber(value: number | undefined): number | undefined {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
 }
 
-function carpetDistance(listing: PlanComparableListing): number {
-  const listingCarpet = positiveNumber(listing.carpet_area_sqft);
-  const planCarpet = positiveNumber(listing.plan_carpet_area_sqft);
-  if (!listingCarpet || !planCarpet) return Number.MAX_SAFE_INTEGER;
-  return Math.abs(listingCarpet - planCarpet);
-}
-
 export function floorPlanForBhk(
   listings: PlanComparableListing[],
   activeBhk: number,
@@ -38,8 +30,7 @@ export function floorPlanForBhk(
   const matches = listings
     .filter((listing) => listing.bhk === activeBhk && listing.floor_plan_preview_url)
     .sort((left, right) =>
-      carpetDistance(left) - carpetDistance(right)
-      || left.id.localeCompare(right.id)
+      left.id.localeCompare(right.id)
     );
   const selected = matches[0];
   if (!selected?.floor_plan_preview_url) return null;

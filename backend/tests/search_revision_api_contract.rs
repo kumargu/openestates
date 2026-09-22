@@ -132,6 +132,13 @@ async fn pinned_live_bundle_resolves_search_receipts_into_visible_scene_evidence
     let lake =
         LakeStore::local(std::env::var("OPENESTATES_TEST_LAKE_ROOT").expect("test lake root"))
             .unwrap();
+    let promotion = backend::serving::validate_search_serving_candidate(
+        &lake,
+        suite["required_serving_bundle_version"].as_str().unwrap(),
+    )
+    .await
+    .unwrap();
+    assert!(promotion.passed, "pinned bundle is not eligible for promotion; rebuild source inventory before proof handoff: {:?}", promotion.issues.iter().take(5).collect::<Vec<_>>());
     let cache = tempdir().unwrap();
     let bundle = backend::serving::ServingBundleLoader::new(lake, cache.path())
         .load_search_bundle(suite["required_serving_bundle_version"].as_str().unwrap())
@@ -1536,7 +1543,10 @@ fn test_bundle_with_options(
     facts.push(topology_fact(
         "society:fixture-home",
         "controlled_inventory_option",
-        FactValue::Text(json!({"bhk": 3, "price": 23_000_000, "area_sqft": 1_550}).to_string()),
+        FactValue::Text(
+            json!({"listing_type":"sale","bhk": 3, "price": 23_000_000, "area_sqft": 1_550})
+                .to_string(),
+        ),
     ));
     facts.extend([
         topology_fact(
@@ -1552,7 +1562,10 @@ fn test_bundle_with_options(
         topology_fact(
             "society:second-home",
             "controlled_inventory_option",
-            FactValue::Text(json!({"bhk": 3, "price": 24_000_000, "area_sqft": 1_600}).to_string()),
+            FactValue::Text(
+                json!({"listing_type":"sale","bhk": 3, "price": 24_000_000, "area_sqft": 1_600})
+                    .to_string(),
+            ),
         ),
     ]);
     if include_fresh_home {
@@ -1575,7 +1588,7 @@ fn test_bundle_with_options(
                 "society:fresh-home",
                 "controlled_inventory_option",
                 FactValue::Text(
-                    json!({"bhk": 3, "price": 22_000_000, "area_sqft": 1_500}).to_string(),
+                    json!({"listing_type":"sale","bhk": 3, "price": 22_000_000, "area_sqft": 1_500}).to_string(),
                 ),
             ),
         ]);
@@ -1867,7 +1880,10 @@ fn install_collection_inventory(state: &Arc<AppState>, topology: bool) {
             let inventory = topology_fact(
                 &society,
                 "controlled_inventory_option",
-                FactValue::Text(json!({"bhk":bhk,"price":price,"area_sqft":1550}).to_string()),
+                FactValue::Text(
+                    json!({"listing_type":"sale","bhk":bhk,"price":price,"area_sqft":1550})
+                        .to_string(),
+                ),
             );
             bundle.edges.push(topology_edge(
                 &identity,

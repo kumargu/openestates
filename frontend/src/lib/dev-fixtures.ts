@@ -30,7 +30,7 @@ function browseFixture(property: PropertyCard): BrowsePropertyCard {
   };
 }
 
-const fixturePropertyRows: Array<Omit<PropertyCard, "kg_entity_refs" | "carpet_area_sqft" | "super_builtup_sqft" | "availability">> = [
+const fixturePropertyRows: Array<Omit<PropertyCard, "kg_entity_refs" | "super_builtup_sqft" | "availability">> = [
   {
     id: "fixture-prestige-lakeside-3bhk",
     title: "3 BHK at Prestige Lakeside Habitat",
@@ -243,7 +243,6 @@ const fixturePropertyRows: Array<Omit<PropertyCard, "kg_entity_refs" | "carpet_a
 
 export const fixtureProperties: PropertyCard[] = fixturePropertyRows.map((property) => ({
   availability: { bedrooms: "available", price: "available", area: "available" },
-  carpet_area_sqft: 0,
   super_builtup_sqft: property.sqft,
   ...property,
   kg_entity_refs: fixtureKgEntityRefs(property),
@@ -548,7 +547,6 @@ function makeDetail(card: PropertyCard): PropertyDetailResponse {
       bhk: card.bhk,
       price: card.price,
       price_per_sqft: card.price_per_sqft,
-      carpet_area_sqft: card.carpet_area_sqft,
       super_builtup_sqft: card.sqft,
       possession_status: card.possession_status,
       images: [],

@@ -144,7 +144,6 @@ impl Property {
             price_per_sqft: p.price_per_sqft,
             bhk: p.bhk,
             sqft: p.listed_area_sqft(),
-            carpet_area_sqft: p.carpet_area_sqft,
             super_builtup_sqft: p.super_builtup_sqft,
             area_measurement: p.area_measurement.clone(),
             society_name: society_name.to_string(),
@@ -236,8 +235,6 @@ pub struct PropertyCard {
     pub bhk: u32,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub sqft: u32,
-    #[serde(default, skip_serializing_if = "is_zero")]
-    pub carpet_area_sqft: u32,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub super_builtup_sqft: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]

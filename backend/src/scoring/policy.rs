@@ -21,14 +21,6 @@ pub enum FactAvailability {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum MissingDataBehavior {
-    Skip,
-    PenalizeLightly,
-    RequiresObserved,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
 pub enum ScoringMethod {
     LowerIsBetterRelativeToArea,
     EvidenceCoverage,
@@ -48,26 +40,6 @@ pub enum BestEffortRankingTier {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MissingDataPolicy {
-    #[serde(default = "default_missing_behavior")]
-    pub default_behavior: MissingDataBehavior,
-    #[serde(default = "default_true")]
-    pub log_gap: bool,
-    #[serde(default = "default_true")]
-    pub never_zero_fill: bool,
-}
-
-impl Default for MissingDataPolicy {
-    fn default() -> Self {
-        Self {
-            default_behavior: default_missing_behavior(),
-            log_gap: true,
-            never_zero_fill: true,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScoringSignalPolicy {
     pub id: String,
     #[serde(default)]
@@ -77,24 +49,6 @@ pub struct ScoringSignalPolicy {
     pub method: ScoringMethod,
     #[serde(default = "default_signal_weight")]
     pub weight: f64,
-    #[serde(default = "default_missing_behavior")]
-    pub missing: MissingDataBehavior,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct ScoringSurfacePolicy {
-    #[serde(default)]
-    pub enabled_signals: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct ScoringSurfaces {
-    #[serde(default)]
-    pub search: ScoringSurfacePolicy,
-    #[serde(default)]
-    pub detail: ScoringSurfacePolicy,
-    #[serde(default)]
-    pub recommendations: ScoringSurfacePolicy,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -180,9 +134,6 @@ pub struct RecommendationFallbackBranchPolicy {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScoringPolicyFile {
     pub version: u32,
-    pub engine_version: String,
-    #[serde(default)]
-    pub missing_data: MissingDataPolicy,
     #[serde(default)]
     pub search_ranking: SearchRankingPolicy,
     #[serde(default)]
@@ -191,8 +142,6 @@ pub struct ScoringPolicyFile {
     pub runtime_fact_keys: Vec<String>,
     #[serde(default)]
     pub signals: Vec<ScoringSignalPolicy>,
-    #[serde(default)]
-    pub surfaces: ScoringSurfaces,
     pub recommendation_recall: RecommendationRecallPolicy,
     #[serde(default)]
     pub recommendation_branches: Vec<RecommendationBranchPolicy>,
@@ -369,18 +318,15 @@ pub fn search_ranking_policy() -> &'static SearchRankingPolicy {
     &scoring_policy().search_ranking
 }
 
-pub fn score_property_for_surface(
+pub fn score_recommendation_candidate(
     property: &Property,
     bundle: Option<&LoadedServingBundle>,
     area_median_ppsf: Option<u64>,
-    surface: &str,
 ) -> CandidateScore {
     let policy = scoring_policy();
-    let enabled = enabled_signal_ids(policy, surface);
     let signals = policy
         .signals
         .iter()
-        .filter(|signal| enabled.iter().any(|id| id == &signal.id))
         .map(|signal| {
             score_signal(
                 property,
@@ -427,22 +373,6 @@ pub fn signal_score<'a>(
         .signals
         .iter()
         .find(|signal| signal.signal_id == signal_id)
-}
-
-fn enabled_signal_ids(policy: &ScoringPolicyFile, surface: &str) -> Vec<String> {
-    let surface_policy = match surface {
-        "detail" => &policy.surfaces.detail,
-        "recommendations" => &policy.surfaces.recommendations,
-        _ => &policy.surfaces.search,
-    };
-    if surface_policy.enabled_signals.is_empty() {
-        return policy
-            .signals
-            .iter()
-            .map(|signal| signal.id.clone())
-            .collect();
-    }
-    surface_policy.enabled_signals.clone()
 }
 
 fn score_signal(
@@ -894,10 +824,6 @@ fn default_true() -> bool {
     true
 }
 
-fn default_missing_behavior() -> MissingDataBehavior {
-    MissingDataBehavior::Skip
-}
-
 fn default_signal_weight() -> f64 {
     1.0
 }
@@ -1015,7 +941,6 @@ mod tests {
         let policy = load_scoring_policy().expect("scoring policy should load");
         assert!(!policy.signals.is_empty());
         assert!(!policy.recommendation_branches.is_empty());
-        assert!(policy.missing_data.never_zero_fill);
         assert_eq!(policy.search_ranking.ranked_focus_min_match_score, 0.35);
         assert_eq!(policy.search_ranking.result_limit, 32);
         assert!(policy.search_ranking.exact_society_matches_first);

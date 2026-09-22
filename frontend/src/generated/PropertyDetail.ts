@@ -578,7 +578,6 @@ export interface PropertyAttributes {
   area_measurement?: Measurement;
   bhk?: number;
   builder_name: string;
-  carpet_area_sqft?: number;
   city: string;
   description_summary: string;
   hero_image: string;
@@ -646,7 +645,6 @@ export interface PropertyCard {
    */
   builder_delivery_display?: string;
   builder_name: string;
-  carpet_area_sqft?: number;
   /**
    * Data freshness — how recent and rich the underlying data is
    */

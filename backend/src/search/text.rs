@@ -1290,6 +1290,10 @@ fn numeric_constraint_evaluation(
     society_entity_id: &str,
     evaluation: SearchEvaluationContext<'_>,
 ) -> BooleanEvaluation {
+    if schema::numeric_constraint_schema(&constraint.field).is_some_and(|schema| !schema.supported)
+    {
+        return BooleanEvaluation::unsupported();
+    }
     let witness = (|| {
         let schema = schema::numeric_constraint_schema(&constraint.field)?;
         let query_unit = schema
@@ -1300,7 +1304,7 @@ fn numeric_constraint_evaluation(
             if let Some(basis) = &schema.measurement_basis {
                 let option = evaluation.options.get(&property.id)?;
                 let measurement = option.area_measurement.as_ref()?;
-                if !measurement.basis.eq_ignore_ascii_case(basis) {
+                if basis != "*" && !measurement.basis.eq_ignore_ascii_case(basis) {
                     return None;
                 }
                 (

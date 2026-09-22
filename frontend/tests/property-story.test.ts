@@ -121,7 +121,10 @@ test("primary buyer facts belong to one deck", () => {
 test("identity preserves exact crore prices and area measurement type", () => {
   const detail = richDetail();
   detail.property.price = 125_000_000;
-  detail.property.carpet_area_sqft = 1_543;
+  detail.property.area_measurement = {
+    value: 1543, unit: "sqft", basis: "super built-up", entityId: detail.property.id,
+    evidence: { snapshot_identity: "fixture", subject_entity_id: detail.property.society_id, evidence_id: { kind: "observation", id: "fixture-observation" } },
+  };
   const story = projectPropertyStory(detail);
   assert.equal(
     story.identity.facts.find((fact) => fact.key === "price")?.value,
@@ -129,7 +132,7 @@ test("identity preserves exact crore prices and area measurement type", () => {
   );
   assert.equal(
     story.identity.facts.find((fact) => fact.key === "size")?.value,
-    "1,543 sqft carpet",
+    "1,543 sqft listed area",
   );
 });
 

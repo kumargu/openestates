@@ -38,7 +38,6 @@ export interface PropertyCard {
    */
   builder_delivery_display?: string;
   builder_name: string;
-  carpet_area_sqft?: number;
   /**
    * Data freshness — how recent and rich the underlying data is
    */

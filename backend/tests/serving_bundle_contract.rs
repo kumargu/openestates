@@ -39,7 +39,7 @@ async fn serving_bundle_writes_parquet_manifest_and_hydratable_tantivy_index() {
     assert_eq!(manifest.search_metadata_count, 16);
     assert_eq!(manifest.rera_evidence_count, 0);
     assert_eq!(manifest.edge_count, 0);
-    assert_eq!(manifest.eligibility_policy_version, 6);
+    assert_eq!(manifest.eligibility_policy_version, 7);
     assert_eq!(manifest.quarantined_society_count, 0);
     let report: serde_json::Value = serde_json::from_str(
         &lake

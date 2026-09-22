@@ -1,5 +1,6 @@
 {
-  "version": 6,
+  "version": 7,
+  "inventory_listing_types": ["sale"],
   "minimum_projected_properties": 1,
   "missing_projection_reason_code": "missing_property_projection",
   "property_requirements": [

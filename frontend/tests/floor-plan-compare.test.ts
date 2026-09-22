@@ -2,13 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { floorPlanForBhk } from "../src/lib/floor-plan-compare.ts";
 
-test("floor plan compare picks the active BHK plan closest to listing carpet", () => {
+test("floor plan compare picks an active BHK plan without inferring listing carpet", () => {
   const plan = floorPlanForBhk(
     [
       {
         id: "large",
         bhk: 3,
-        carpet_area_sqft: 1210,
         floor_plan_preview_url: "/media/large.png",
         plan_carpet_area_sqft: 1382,
         plan_sale_area_sqft: 2027,
@@ -17,7 +16,6 @@ test("floor plan compare picks the active BHK plan closest to listing carpet", (
       {
         id: "compact",
         bhk: 3,
-        carpet_area_sqft: 1210,
         floor_plan_preview_url: "/media/compact.png",
         plan_carpet_area_sqft: 1197,
         plan_sale_area_sqft: 1775,
@@ -26,7 +24,6 @@ test("floor plan compare picks the active BHK plan closest to listing carpet", (
       {
         id: "two-bed",
         bhk: 2,
-        carpet_area_sqft: 980,
         floor_plan_preview_url: "/media/2bhk.png",
         plan_carpet_area_sqft: 999,
         plan_sale_area_sqft: 1515,
@@ -47,7 +44,6 @@ test("floor plan compare returns null when the active BHK has no preview", () =>
       {
         id: "missing-preview",
         bhk: 4,
-        carpet_area_sqft: 1700,
         plan_carpet_area_sqft: 1740,
         plan_sale_area_sqft: 2525,
         plan_configuration_type: "4BHK",

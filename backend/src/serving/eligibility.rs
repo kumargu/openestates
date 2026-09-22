@@ -596,6 +596,7 @@ mod tests {
 
     fn policy() -> ServingEligibilityFile {
         ServingEligibilityFile {
+            inventory_listing_types: vec!["sale".into()],
             observation_required_fact_keys: Vec::new(),
             observation_required_prefixes: Vec::new(),
             version: 1,

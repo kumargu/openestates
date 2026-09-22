@@ -26,8 +26,6 @@ pub struct PropertyAttributes {
     #[serde(skip_serializing_if = "crate::models::property::is_zero")]
     pub price_per_sqft: u64,
     #[serde(skip_serializing_if = "crate::models::property::is_zero")]
-    pub carpet_area_sqft: u32,
-    #[serde(skip_serializing_if = "crate::models::property::is_zero")]
     pub super_builtup_sqft: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schemars(with = "crate::models::Measurement")]
@@ -55,7 +53,6 @@ impl From<&crate::models::Property> for PropertyAttributes {
             price_min: property.price_min,
             price_max: property.price_max,
             price_per_sqft: property.price_per_sqft,
-            carpet_area_sqft: property.carpet_area_sqft,
             super_builtup_sqft: property.super_builtup_sqft,
             area_measurement: property.area_measurement.clone(),
             possession_status: property.possession_status.clone(),
