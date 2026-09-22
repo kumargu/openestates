@@ -202,8 +202,8 @@ pub struct ScoringPolicyFile {
 pub struct SearchRankingPolicy {
     #[serde(default = "default_min_support_evidence_confidence")]
     pub min_support_evidence_confidence: f32,
-    #[serde(default = "default_min_llm_evidence_confidence")]
-    pub min_llm_evidence_confidence: f32,
+    pub evidence_confidence_by_source: BTreeMap<String, f32>,
+    pub excluded_evidence_scoring_methods: Vec<String>,
     #[serde(default = "default_negative_no_data_penalty_multiplier")]
     pub negative_no_data_penalty_multiplier: f64,
     #[serde(default = "default_broad_local_recall_multiplier")]
@@ -282,7 +282,8 @@ impl Default for SearchRankingPolicy {
     fn default() -> Self {
         Self {
             min_support_evidence_confidence: default_min_support_evidence_confidence(),
-            min_llm_evidence_confidence: default_min_llm_evidence_confidence(),
+            evidence_confidence_by_source: BTreeMap::new(),
+            excluded_evidence_scoring_methods: Vec::new(),
             negative_no_data_penalty_multiplier: default_negative_no_data_penalty_multiplier(),
             broad_local_recall_multiplier: default_broad_local_recall_multiplier(),
             broad_local_recall_min_extra: default_broad_local_recall_min_extra(),
@@ -647,6 +648,19 @@ fn text_safety_score(text: &str) -> f64 {
 
 fn validate_policy(policy: &ScoringPolicyFile) -> Result<(), DagConfigError> {
     validate_recommendation_policy(policy)?;
+    if policy
+        .search_ranking
+        .evidence_confidence_by_source
+        .iter()
+        .any(|(source, threshold)| {
+            source.trim().is_empty() || !threshold.is_finite() || !(0.0..=1.0).contains(threshold)
+        })
+    {
+        return Err(DagConfigError::InvalidConfig(
+            "evidence confidence policy requires named sources and thresholds within 0..1"
+                .to_string(),
+        ));
+    }
     if !policy
         .search_ranking
         .ranked_focus_min_match_score
@@ -890,9 +904,6 @@ fn default_signal_weight() -> f64 {
 
 fn default_min_support_evidence_confidence() -> f32 {
     0.60
-}
-fn default_min_llm_evidence_confidence() -> f32 {
-    0.75
 }
 fn default_negative_no_data_penalty_multiplier() -> f64 {
     1.2

@@ -991,6 +991,9 @@ fn serving_named_place_evidence_for_entity(
     for clause in geo_query.resolved_clauses() {
         let mut best: Option<NamedPlaceEvidence> = None;
         for fact in &rows.facts {
+            if match_evidence_identity(fact).is_none() {
+                continue;
+            }
             if !evidence_is_confident_enough(
                 &fact.source_type,
                 fact.confidence,
@@ -1655,7 +1658,7 @@ pub(super) fn required_preference_has_evidence(
     query_lower: &str,
 ) -> bool {
     let Some(serving_facts) = serving_facts else {
-        return preference.polarity == crate::search::intent::Polarity::Negative;
+        return false;
     };
     let builder_entity_id =
         search_index.and_then(|index| index.builder_entity_id_for_property(&property.id));
@@ -1700,6 +1703,9 @@ fn required_negative_preference_is_satisfied(
                 continue;
             };
             for fact in &rows.facts {
+                if match_evidence_identity(fact).is_none() {
+                    continue;
+                }
                 if fact.confidence < schema::ranking_policy().min_support_evidence_confidence
                     || !preference
                         .expanded_keys
@@ -1733,6 +1739,21 @@ fn required_negative_preference_is_satisfied(
     .is_some_and(|evidence| evidence.score_delta >= 0.0)
 }
 
+/// Admission calls the same configured evaluators as ranking; no second scoring registry.
+pub(super) fn preference_capability_supported(
+    facts: &ServingFactIndex,
+    entity_id: &str,
+    fact_key: &str,
+    preference: &str,
+) -> bool {
+    let keys = [fact_key.to_string()];
+    serving_entity_preference_evidence(facts, entity_id, preference, &keys, "")
+        .or_else(|| {
+            serving_entity_negative_preference_evidence(facts, entity_id, preference, &keys)
+        })
+        .is_some_and(|evidence| evidence.evidence_identity.is_some())
+}
+
 fn serving_entity_preference_evidence(
     serving_facts: &ServingFactIndex,
     entity_id: &str,
@@ -1745,6 +1766,9 @@ fn serving_entity_preference_evidence(
 
     let mut best_structured: Option<RankedEvidence> = None;
     for fact in &rows.facts {
+        if match_evidence_identity(fact).is_none() {
+            continue;
+        }
         if schema::search_excludes_fact_key(&fact.fact_key) {
             continue;
         }
@@ -1826,6 +1850,9 @@ fn serving_entity_preference_evidence(
     let schema = schema::text_evidence_schema(preference)?;
     let mut best_text: Option<RankedEvidence> = None;
     for fact in &rows.facts {
+        if match_evidence_identity(fact).is_none() {
+            continue;
+        }
         if schema::search_excludes_fact_key(&fact.fact_key) {
             continue;
         }
@@ -1945,6 +1972,9 @@ fn serving_entity_negative_preference_evidence(
     let mut best: Option<RankedEvidence> = None;
 
     for fact in &rows.facts {
+        if match_evidence_identity(fact).is_none() {
+            continue;
+        }
         if schema::search_excludes_fact_key(&fact.fact_key) {
             continue;
         }
@@ -2084,6 +2114,7 @@ fn negative_evidence_from_fact(
 
 fn match_evidence_identity(fact: &ServingFactRecord) -> Option<MatchEvidenceIdentity> {
     let observation = fact.observation.as_ref()?;
+    fact.validate_observation().ok()?;
     Some(MatchEvidenceIdentity {
         subject_entity_id: observation.subject_entity_id.clone(),
         evidence_id: EvidenceId::Observation(observation.observation_id.clone()),
@@ -2212,17 +2243,19 @@ fn negative_coverage_status(evidence: &EvidenceMatch) -> &'static str {
 }
 
 fn evidence_is_confident_enough(source_type: &str, confidence: f32, scoring_method: &str) -> bool {
-    let source = source_type.to_lowercase();
-    if source == "rera" || source == "computed" {
-        return confidence >= 0.50;
-    }
-    if source == "llm" {
-        return confidence >= schema::ranking_policy().min_llm_evidence_confidence;
-    }
-    if scoring_method == "local" || scoring_method == "local-risk" {
-        return false;
-    }
-    confidence >= schema::ranking_policy().min_support_evidence_confidence
+    let policy = schema::ranking_policy();
+    !policy
+        .excluded_evidence_scoring_methods
+        .iter()
+        .any(|method| method.eq_ignore_ascii_case(scoring_method))
+        && confidence.is_finite()
+        && confidence <= 1.0
+        && confidence
+            >= policy
+                .evidence_confidence_by_source
+                .get(&source_type.to_ascii_lowercase())
+                .copied()
+                .unwrap_or(policy.min_support_evidence_confidence)
 }
 
 fn negative_no_data_penalty(intent: &SearchIntent, preference: &str) -> f64 {

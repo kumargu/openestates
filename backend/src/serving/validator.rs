@@ -46,6 +46,7 @@ pub struct ServingBundleValidationReport {
     pub media_references_checked: usize,
     pub passed: bool,
     pub issues: Vec<ServingBundleValidationIssue>,
+    pub excluded_search_capabilities: Vec<crate::search::capabilities::CapabilityExclusion>,
 }
 
 #[derive(Debug)]
@@ -337,6 +338,7 @@ pub async fn validate_search_serving_candidate(
         );
     }
     let fact_index = ServingFactIndex::from_records(facts.clone(), metadata.clone());
+    let capabilities = crate::search::SearchCapabilityIndex::from_bundle(&entities, &fact_index);
     let properties = crate::data_loader::properties_from_serving_records_with_edges(
         &entities,
         &edges,
@@ -373,6 +375,7 @@ pub async fn validate_search_serving_candidate(
         rera_evidence_count: rera_evidence.len(),
         edge_count: edges.len(),
         media_references_checked,
+        excluded_search_capabilities: capabilities.excluded_bindings().to_vec(),
         passed: issues.is_empty(),
         issues,
     })

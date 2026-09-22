@@ -116,3 +116,11 @@ Named geography can intentionally broaden browsing. Exact matches now retain the
 Interaction note: identity receipts use the existing native disclosure and one configured relation label. The catalog target is shown only inside the opened receipt. Existing rest, hover, keyboard focus, touch and reduced-motion behavior is preserved. No additional layout, heading or motion is borrowed from ThreeUI.
 
 Verification: 667 library tests pass. The source-materialized vertical contract, 15 frozen semantic contracts and 24 journey contracts pass (`/tmp/openestates-contracts-identity-witness-api-final.log`). The live promotion case remains a separate gate. Clippy, generated schemas, frontend type checking and lint pass; production-search hardcoding gate reports zero findings. Full UI/browser verification follows the remaining cutover work.
+
+## Checkpoint 8: evaluator-backed capability admission
+
+The existing capability test reproduced low-confidence and nonnumeric rows advertising a numeric preference (`/tmp/openestates-contracts-capability-baseline.log`, `architecture_gap`). Admission now calls the same positive/negative evaluators used by ranking and requires a valid subject-bound observation. Required negative preferences fail closed when their evidence index is absent. Source confidence thresholds moved from Rust source-name branches into the existing scoring policy without changing their values.
+
+Producers: promoted fact/metadata pairs and scoring config. Consumers: capability checks, required-preference evaluation and serving validation. Deleted the parallel observation-only admission path and source-specific threshold branches. Promotion reports unavailable entity/fact/preference bindings separately; raw society facts remain usable even when a claimed search capability is unavailable. UI destinations are not admission requirements.
+
+Verification: 667 library tests, 15 frozen semantic contracts, 24 journey contracts and the two-snapshot materialized vertical contract pass (`/tmp/openestates-contracts-capability-check.log`). Clippy passes for all targets. Frozen expectations remain unchanged.

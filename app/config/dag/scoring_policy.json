@@ -8,7 +8,6 @@
   },
   "search_ranking": {
     "min_support_evidence_confidence": 0.6,
-    "min_llm_evidence_confidence": 0.75,
     "negative_no_data_penalty_multiplier": 1.2,
     "broad_local_recall_multiplier": 4,
     "broad_local_recall_min_extra": 64,
@@ -112,7 +111,16 @@
     "max_score_with_positive_evidence": 0.45,
     "min_score_with_risk_only_evidence": 0.1,
     "min_score_with_constraint_only": 0.01,
-    "fact_coverage_threshold": 25.0
+    "fact_coverage_threshold": 25.0,
+    "evidence_confidence_by_source": {
+      "rera": 0.5,
+      "computed": 0.5,
+      "llm": 0.75
+    },
+    "excluded_evidence_scoring_methods": [
+      "local",
+      "local-risk"
+    ]
   },
   "fact_groups": {
     "rera": ["rera_*"],
