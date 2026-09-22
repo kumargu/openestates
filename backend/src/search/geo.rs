@@ -1050,7 +1050,7 @@ impl<'a> GeoSearchQuery<'a> {
                     fact_key: Some(fact.fact_key.clone()),
                     derived_evidence: None,
                     algorithm_version: "spatial-evaluator-v2".to_string(),
-                    confidence: fact.confidence,
+                    confidence: Some(fact.confidence),
                     snapshot_identity: snapshot_identity.to_string(),
                 })
             }) {
@@ -1410,7 +1410,7 @@ fn verified_spatial_match(
         fact_key: None,
         derived_evidence: Some(derivation),
         algorithm_version: "spatial-evaluator-v2".to_string(),
-        confidence,
+        confidence: Some(confidence),
         snapshot_identity: snapshot_identity.to_string(),
     })
 }
@@ -1443,7 +1443,7 @@ fn verified_spatial_derivation_match(
         fact_key: None,
         derived_evidence: Some(derivation.clone()),
         algorithm_version: derivation.algorithm_version.clone(),
-        confidence: derivation.confidence,
+        confidence: Some(derivation.confidence),
         snapshot_identity: snapshot_identity.to_string(),
     })
 }

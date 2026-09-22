@@ -32,6 +32,8 @@ impl DerivationId {
 pub enum EvidenceId {
     Observation(ObservationId),
     Derivation(DerivationId),
+    Entity(String),
+    Relationship(String),
 }
 
 /// Immutable, request-path lookup for the evidence identities hydrated with a
@@ -41,6 +43,7 @@ pub enum EvidenceId {
 #[derive(Debug, Clone, Default)]
 pub struct ServingEvidenceIndex {
     facts: Vec<IndexedEvidenceFact>,
+    relationships: HashMap<String, ServingEdgeRecord>,
     facts_by_observation_and_key: HashMap<(ObservationId, String), usize>,
     observations: HashMap<ObservationId, SourceObservation>,
     derivations: HashMap<DerivationId, DerivedEvidence>,
@@ -114,6 +117,11 @@ impl ServingEvidenceIndex {
             });
             index.facts_by_observation_and_key.insert(key, fact_index);
         }
+        for edge in edges {
+            index
+                .relationships
+                .insert(relationship_id(edge), edge.clone());
+        }
         for derivation in edges.iter().filter_map(|edge| edge.derivation.as_ref()) {
             derivation
                 .validate()
@@ -131,6 +139,10 @@ impl ServingEvidenceIndex {
             }
         }
         Ok(index)
+    }
+
+    pub fn relationship(&self, id: &str) -> Option<&ServingEdgeRecord> {
+        self.relationships.get(id)
     }
 
     pub(crate) fn fact(
@@ -198,6 +210,8 @@ impl EvidenceRef {
         let valid_id = match &self.evidence_id {
             EvidenceId::Observation(id) => valid_content_id(id.as_str(), "obs"),
             EvidenceId::Derivation(id) => valid_content_id(id.as_str(), "drv"),
+            EvidenceId::Entity(id) => !id.trim().is_empty(),
+            EvidenceId::Relationship(id) => valid_content_id(id, "edge"),
         };
         if !valid_id {
             return Err(EvidenceIdentityError::InvalidId);
@@ -459,6 +473,10 @@ fn require_non_empty(field: &'static str, value: &str) -> Result<(), EvidenceIde
     } else {
         Ok(())
     }
+}
+
+pub(crate) fn relationship_id(edge: &ServingEdgeRecord) -> String {
+    content_id("edge", edge)
 }
 
 fn content_id(prefix: &str, payload: &impl Serialize) -> String {

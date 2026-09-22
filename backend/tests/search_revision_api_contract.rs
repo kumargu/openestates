@@ -33,6 +33,92 @@ use tokio::sync::{mpsc, RwLock};
 use tower::ServiceExt;
 
 #[tokio::test]
+async fn named_identity_retains_a_durable_witness_after_recall() {
+    let app = test_app().await;
+    let search = get_search(&app, "3BHK in Fixture Home", 221).await;
+    assert_eq!(search.0, StatusCode::OK);
+    let results = search.1["active"]["results"]["resultSets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|set| set["results"].as_array().unwrap())
+        .collect::<Vec<_>>();
+    assert!(!results.is_empty());
+    let mut identity_receipts = 0;
+    for result in results {
+        for reason in result["reasons"].as_array().unwrap() {
+            let resolved = post_proof(
+                &app,
+                json!({"proofToken": reason["proofToken"], "propertyId": result["id"]}),
+                222,
+            )
+            .await;
+            assert_eq!(resolved.0, StatusCode::OK);
+            if resolved.1["factKey"] == "entity_identity" {
+                assert!(!resolved.1["catalogEvidence"].as_array().unwrap().is_empty());
+                identity_receipts += 1;
+            }
+        }
+    }
+    assert!(
+        identity_receipts > 0,
+        "named identity was admitted without a durable witness"
+    );
+}
+
+#[test]
+fn catalog_membership_preserves_missing_negative_and_row_order_semantics() {
+    use backend::search::{identity::IdentityEvaluationIndex, EvaluationState};
+    let root = tempdir().unwrap();
+    let bundle = test_bundle_with_options(root.path(), true, "identity-states", false, true);
+    let snapshot = bundle.manifest.proof_snapshot_identity();
+    let index = IdentityEvaluationIndex::from_bundle(&bundle);
+    let positive = index.evaluate("society:second-home", "area:hoodi", snapshot);
+    assert_eq!(positive.state, EvaluationState::Satisfied);
+    assert!(!positive.verified_matches[0].evidence_refs.is_empty());
+    let negative = index
+        .evaluate("society:second-home", "area:sarjapur", snapshot)
+        .negated();
+    assert_eq!(negative.state, EvaluationState::Satisfied);
+    assert!(!negative.verified_matches[0].evidence_refs.is_empty());
+    let missing = IdentityEvaluationIndex::from_records(&bundle.entities, &[], snapshot);
+    assert_eq!(
+        missing
+            .evaluate("society:second-home", "area:sarjapur", snapshot)
+            .negated()
+            .state,
+        EvaluationState::Unknown
+    );
+    let mut edges = bundle.edges.clone();
+    edges.reverse();
+    let reordered = IdentityEvaluationIndex::from_records(&bundle.entities, &edges, snapshot);
+    assert_eq!(
+        positive.verified_matches,
+        reordered
+            .evaluate("society:second-home", "area:hoodi", snapshot)
+            .verified_matches
+    );
+    let mut conflicting = edges
+        .iter()
+        .find(|edge| {
+            edge.from_entity_id == "society:second-home" && edge.edge_type == "in_market_locality"
+        })
+        .unwrap()
+        .clone();
+    conflicting.to_entity_id = "area:sarjapur".to_string();
+    conflicting.derivation = None;
+    edges.push(conflicting);
+    let ambiguous = IdentityEvaluationIndex::from_records(&bundle.entities, &edges, snapshot);
+    assert_eq!(
+        ambiguous
+            .evaluate("society:second-home", "area:cell:hoodi", snapshot)
+            .negated()
+            .state,
+        EvaluationState::Unknown
+    );
+}
+
+#[tokio::test]
 #[ignore = "requires OPENESTATES_TEST_LAKE_ROOT and the pinned proof_handoff_live bundle"]
 async fn pinned_live_bundle_resolves_search_receipts_into_visible_scene_evidence() {
     let bank: Value =

@@ -8,6 +8,7 @@ pub mod evaluation;
 pub mod geo;
 pub mod guard;
 pub mod index;
+pub mod identity;
 pub mod intent;
 pub mod journey;
 pub(crate) mod parser;

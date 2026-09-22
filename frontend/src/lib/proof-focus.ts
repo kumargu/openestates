@@ -74,3 +74,9 @@ export function initialPropertySurfaceId(focus?: ProofFocus): string {
 export function propertySceneProofFocus(focus?: ProofFocus): ProofFocus | undefined {
   return focus?.destinationKind === "section" ? undefined : focus;
 }
+
+export function identityReceiptLabel(proof: SearchProofResolution): string | undefined {
+  const labels: Record<string, string> = contextPresentation.receiptRelationLabels;
+  const template = labels[proof.relation];
+  return template && proof.targetLabel ? template.replace("{target}", proof.targetLabel) : undefined;
+}

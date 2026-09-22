@@ -1084,7 +1084,7 @@ fn compile_constraints(
     let mut clauses = Vec::new();
 
     let include_bhks = bhk_terms(plan, SlotPolarity::Include);
-    let mut include_areas = area_terms(plan, MentionPolarity::Positive);
+    let mut include_areas = area_terms(plan, MentionPolarity::Positive, entities);
     include_areas.extend(resolved_area_terms(
         entities
             .iter()
@@ -1104,7 +1104,7 @@ fn compile_constraints(
     let exclude_budgets = budget_terms(plan, SlotPolarity::Exclude);
     let include_evidence = evidence_terms(query, &plan.evidence);
     let exclude_bhks = bhk_terms(plan, SlotPolarity::Exclude);
-    let mut exclude_areas = area_terms(plan, MentionPolarity::Exclusion);
+    let mut exclude_areas = area_terms(plan, MentionPolarity::Exclusion, entities);
     exclude_areas.extend(resolved_area_terms(
         entities
             .iter()
@@ -1247,10 +1247,21 @@ fn spanned_bhk_term(slot: &BhkConstraint) -> SpannedTerm {
     }
 }
 
-fn area_terms(plan: &QueryPlan, polarity: MentionPolarity) -> Vec<SpannedTerm> {
+fn area_terms(
+    plan: &QueryPlan,
+    polarity: MentionPolarity,
+    entities: &[ResolvedEntityConstraint],
+) -> Vec<SpannedTerm> {
     plan.areas
         .iter()
         .filter(|area| area.polarity == polarity)
+        .filter(|area| {
+            !entities.iter().any(|entity| {
+                is_entity_type(entity, "area")
+                    && entity.span.start == area.span.start
+                    && entity.span.end == area.span.end
+            })
+        })
         .map(|area| {
             let span = SourceSpan {
                 source_turn_id: String::new(),

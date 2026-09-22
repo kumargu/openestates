@@ -8,6 +8,14 @@ export type EvidenceId =
   | {
       id: string;
       kind: "derivation";
+    }
+  | {
+      id: string;
+      kind: "entity";
+    }
+  | {
+      id: string;
+      kind: "relationship";
     };
 export type Availability = "available" | "unavailable";
 

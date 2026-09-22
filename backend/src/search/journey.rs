@@ -891,6 +891,15 @@ fn binding_for_verified<'a>(
             return false;
         };
         match term {
+            ConstraintTerm::Area {
+                entity_id: Some(entity_id),
+                ..
+            }
+            | ConstraintTerm::Society { entity_id, .. }
+            | ConstraintTerm::Builder { entity_id, .. } => {
+                verified.metric == "entity_identity"
+                    && verified.target_entity_id.as_deref() == Some(entity_id)
+            }
             ConstraintTerm::Bhk { value, .. } => {
                 verified.metric.contains("bhk") && verified.predicate == format!("{value} BHK")
             }
@@ -924,6 +933,12 @@ fn resolvable_evidence(
     let mut fact_key = verified.fact_key.clone();
     for reference in &verified.evidence_refs {
         match &reference.evidence_id {
+            EvidenceId::Entity(id) => {
+                snapshot.entity_by_id.get(id)?;
+            }
+            EvidenceId::Relationship(id) => {
+                snapshot.bundle.evidence_index.relationship(id)?;
+            }
             EvidenceId::Observation(id) => {
                 let exact_fact_key = verified.fact_key.as_deref()?;
                 let fact = snapshot.bundle.evidence_index.fact(id, exact_fact_key)?;

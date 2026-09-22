@@ -423,6 +423,7 @@ impl<'a> SearchEngine<'a> {
                 HashMap::from([(property_id.to_string(), spatial_matches)])
             };
             let evaluation = SearchEvaluationContext {
+                identities: Some(&self.snapshot.identity_evaluation),
                 options: &self.snapshot.inventory_options,
                 spatial_matches: &spatial_by_property,
                 snapshot_identity,
@@ -924,6 +925,7 @@ impl<'a> SearchEngine<'a> {
                         intent: &branch.ranking_intent,
                         constraints: &branch.eligibility_predicates,
                         evaluation: SearchEvaluationContext {
+                            identities: Some(&self.snapshot.identity_evaluation),
                             options: &self.snapshot.inventory_options,
                             spatial_matches: &verified_spatial_matches,
                             snapshot_identity,
@@ -933,6 +935,36 @@ impl<'a> SearchEngine<'a> {
             };
             for result in &mut results {
                 result.geography_match = geography_matches.get(&result.card.id).cloned();
+                // Geography may broaden recall to neighboring homes. Only an exact
+                // evaluation of the original branch may issue its identity receipt.
+                let property =
+                    &self.snapshot.properties[self.snapshot.property_by_id[&result.card.id]];
+                let subject = self
+                    .snapshot
+                    .search_index
+                    .society_entity_id_for_property(&property.id);
+                if let Some(subject) = subject {
+                    let evaluation = super::text::property_constraint_evaluation(
+                        property,
+                        &branch.predicates,
+                        Some(&self.snapshot.search_index),
+                        serving_facts,
+                        subject,
+                        SearchEvaluationContext {
+                            identities: Some(&self.snapshot.identity_evaluation),
+                            options: &self.snapshot.inventory_options,
+                            spatial_matches: &verified_spatial_matches,
+                            snapshot_identity,
+                        },
+                    );
+                    if evaluation.is_satisfied() {
+                        for verified in evaluation.verified_matches {
+                            if !result.verified_matches.contains(&verified) {
+                                result.verified_matches.push(verified);
+                            }
+                        }
+                    }
+                }
             }
             sort_geography_cohorts(&mut results);
 
@@ -1855,6 +1887,45 @@ fn resolve_serving_query_entities_from_records_with_alias_index(
         }
     }
 
+    // Configured broad-region vocabulary resolves to the catalog before evaluation.
+    // The catalog relationship, never the matched label, establishes membership.
+    for area in &plan.areas {
+        for entity in entities_source.iter().filter(|entity| {
+            entity.visibility.is_searchable()
+                && entity.entity_type == "area"
+                && entity.name.eq_ignore_ascii_case(&area.canonical)
+        }) {
+            if entities.iter().any(|resolved| {
+                resolved.entity_id == entity.entity_id
+                    && resolved.source_span.as_ref().is_some_and(|span| {
+                        span.start == area.span.start && span.end == area.span.end
+                    })
+            }) {
+                continue;
+            }
+            entities.push(ResolvedSearchEntity {
+                entity_id: entity.entity_id.clone(),
+                entity_type: entity.entity_type.clone(),
+                name: entity.name.clone(),
+                match_kind: "configured_region".to_string(),
+                match_source: "serving_entity".to_string(),
+                matched_text: area.matched_text.clone(),
+                polarity: if area.polarity == super::query_plan::MentionPolarity::Exclusion {
+                    "exclusion"
+                } else {
+                    "positive"
+                }
+                .to_string(),
+                source_span: Some(SourceSpan {
+                    source_turn_id: String::new(),
+                    start: area.span.start,
+                    end: area.span.end,
+                    raw_text: area.matched_text.clone(),
+                }),
+            });
+        }
+    }
+
     let exact_spans = entities
         .iter()
         .flat_map(|entity| exact_entity_match_ranges(&query_lower, &entity.matched_text))
@@ -2520,7 +2591,7 @@ mod tests {
     }
 
     fn test_runtime_snapshot(properties: &[Property]) -> SearchRuntimeSnapshot {
-        let entities = properties
+        let mut entities = properties
             .iter()
             .map(|property| ServingEntityRecord {
                 entity_id: format!("society:{}", property.society_id),
@@ -2531,17 +2602,121 @@ mod tests {
                 searchable_text: property.society_id.clone(),
             })
             .collect::<Vec<_>>();
-        let facts = Vec::new();
+        let mut edges = Vec::new();
+        let mut facts = Vec::new();
+        for property in properties {
+            entities.push(serving_entity(
+                &format!("area:{}", property.area_id),
+                "area",
+                &property.area,
+            ));
+            let subject = format!("society:{}", property.society_id);
+            let property_entity_id = format!("property:{}", property.id);
+            entities.push(serving_entity(
+                &property_entity_id,
+                "property",
+                &property.title,
+            ));
+            edges.push(ServingEdgeRecord {
+                from_entity_id: property_entity_id,
+                to_entity_id: subject.clone(),
+                edge_type: "in_society".to_string(),
+                confidence: 1.0,
+                source_type: "engine_test".to_string(),
+                derivation: None,
+            });
+            let target = format!("area:{}", property.area_id);
+            let observation = SourceObservation::new(
+                "engine_test",
+                format!("membership:{}", property.id),
+                &subject,
+                Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
+                None,
+                vec!["fixture/membership".to_string()],
+            )
+            .unwrap();
+            facts.push(ServingFactRecord {
+                entity_id: subject.clone(),
+                fact_key: "area_membership".to_string(),
+                value_type: "text".to_string(),
+                value_text: Some(target.clone()),
+                value: FactValue::Text(target.clone()),
+                confidence: 1.0,
+                source_type: "engine_test".to_string(),
+                source_url: None,
+                model: None,
+                skill_id: None,
+                learned_at: observation.observed_at,
+                observation: Some(observation.clone()),
+            });
+            let derivation = crate::serving::DerivedEvidence::new(
+                "engine-unit-test",
+                &subject,
+                Some(target.clone()),
+                "in_market_locality",
+                "membership",
+                None,
+                None,
+                "fixture-membership-v1",
+                1.0,
+                vec![EvidenceRef::for_observation(
+                    "engine-unit-test",
+                    &observation,
+                )],
+            )
+            .unwrap();
+            let cell = format!("cell:{}", property.area_id);
+            let mut cell_entity = serving_entity(&cell, "area", "Fixture cell");
+            cell_entity.visibility = crate::serving::ServingEntityVisibility::Internal;
+            entities.push(cell_entity);
+            for (from, relation) in [
+                (&subject, "occupies_geo_cell"),
+                (&target, "covers_geo_cell"),
+            ] {
+                let derived = crate::serving::DerivedEvidence::new(
+                    "engine-unit-test",
+                    from,
+                    Some(cell.clone()),
+                    relation,
+                    "membership",
+                    None,
+                    None,
+                    "fixture-membership-v1",
+                    1.0,
+                    vec![EvidenceRef::for_observation(
+                        "engine-unit-test",
+                        &observation,
+                    )],
+                )
+                .unwrap();
+                edges.push(ServingEdgeRecord {
+                    from_entity_id: from.clone(),
+                    to_entity_id: cell.clone(),
+                    edge_type: relation.to_string(),
+                    confidence: 1.0,
+                    source_type: "engine_test".to_string(),
+                    derivation: Some(derived),
+                });
+            }
+            edges.push(ServingEdgeRecord {
+                from_entity_id: subject,
+                to_entity_id: target,
+                edge_type: "in_market_locality".to_string(),
+                confidence: 1.0,
+                source_type: "engine_test".to_string(),
+                derivation: Some(derivation),
+            });
+        }
         let fact_index = ServingFactIndex::from_records(facts.clone(), Vec::new());
         let evidence_index =
-            crate::serving::ServingEvidenceIndex::from_records(fact_index.all_facts(), &[])
+            crate::serving::ServingEvidenceIndex::from_records(fact_index.all_facts(), &edges)
                 .expect("engine test evidence index");
         let cache_dir = tempdir().expect("temporary engine test bundle").keep();
         let recall_index = TantivyRecallIndex::build_in_dir(&cache_dir, &entities, &facts, &[])
             .expect("engine test recall index");
         let entity_index = SpatialEntityIndex::from_serving_bundle(&entities, &fact_index);
         let spatial_index = SpatialServingIndex::from_serving_bundle(&entities, &fact_index);
-        let search_index = SearchIndex::build_with_serving_entities(properties, &entities);
+        let search_index = SearchIndex::build_with_serving_graph(properties, &entities, &edges);
         let bundle = LoadedServingBundle {
             manifest: ServingBundleManifest {
                 bundle_version: "engine-unit-test".to_string(),
@@ -2569,10 +2744,10 @@ mod tests {
                 tantivy_index_prefix: "tantivy".to_string(),
                 artifacts: Vec::new(),
             },
-            entities,
+            entities: entities.clone(),
             entity_alias_index: ServingEntityAliasIndex::default(),
-            edges: Vec::new(),
-            graph_index: GraphIndex::default(),
+            graph_index: GraphIndex::from_serving_bundle(&entities, &edges, "engine-unit-test"),
+            edges,
             recall_index,
             fact_index,
             evidence_index,

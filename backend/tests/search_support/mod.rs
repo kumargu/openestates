@@ -54,6 +54,7 @@ pub fn inventory_context(
     static SPATIAL_MATCHES: std::sync::OnceLock<HashMap<String, Vec<VerifiedMatch>>> =
         std::sync::OnceLock::new();
     SearchEvaluationContext {
+        identities: None,
         options,
         spatial_matches: SPATIAL_MATCHES.get_or_init(HashMap::new),
         snapshot_identity: SNAPSHOT_IDENTITY,

@@ -1,3 +1,4 @@
+import { identityReceiptLabel } from "../lib/proof-focus.ts";
 import { projectPropertyContext } from "../lib/property-context.ts";
 import measurementPresentation from "../../../app/config/ui/measurements.json";
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
@@ -113,6 +114,7 @@ function GenericSearchReceipt({ receipt }: { receipt: SearchProofResolution }) {
   const sources = receipt.sourceObservations.filter((source) => source.sourceUrl);
   return <details className="property-search-match property-search-receipt">
     <summary>Matched your search</summary>
+    {identityReceiptLabel(receipt) && <p>{identityReceiptLabel(receipt)}</p>}
     {receipt.claim && <p>{receipt.claim.value.toLocaleString("en-IN")} {receipt.claim.unit}</p>}
     {receipt.constraint && <p>{receipt.constraint.raw_text}</p>}
     {sources.map((source) => <a key={source.observationId} href={source.sourceUrl} target="_blank" rel="noreferrer">{sources.length === 1 ? "Source" : source.provider}</a>)}

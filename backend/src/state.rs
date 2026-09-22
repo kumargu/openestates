@@ -34,6 +34,7 @@ pub struct SearchRuntimeSnapshot {
     pub browse_cards: HashMap<String, BrowsePropertyCard>,
     pub discovery_shelves: Vec<crate::discovery::RankedDiscoveryShelf>,
     pub entity_by_id: HashMap<String, usize>,
+    pub identity_evaluation: crate::search::identity::IdentityEvaluationIndex,
     pub inventory_options: HashMap<String, InventoryOption>,
     pub search_index: SearchIndex,
     pub societies: Arc<[Society]>,
@@ -161,6 +162,9 @@ impl SearchRuntimeSnapshot {
             })
             .collect();
         Self {
+            identity_evaluation: crate::search::identity::IdentityEvaluationIndex::from_bundle(
+                &bundle,
+            ),
             context_lookup: crate::property_context::ContextLookup::from_bundle(&bundle),
             bundle,
             properties: Arc::from(properties),

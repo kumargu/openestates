@@ -333,6 +333,72 @@
         "current"
       ]
     },
+    "CatalogEvidence": {
+      "description": "Promoted catalog records support identity claims without fabricated observations.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "entityId": {
+              "type": "string"
+            },
+            "entityType": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "entity"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "entityId",
+            "entityType",
+            "name"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "confidence": {
+              "type": "number",
+              "format": "float"
+            },
+            "fromEntityId": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "relationship"
+            },
+            "relation": {
+              "type": "string"
+            },
+            "relationshipId": {
+              "type": "string"
+            },
+            "sourceType": {
+              "type": "string"
+            },
+            "toEntityId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "relationshipId",
+            "fromEntityId",
+            "toEntityId",
+            "relation",
+            "sourceType",
+            "confidence"
+          ]
+        }
+      ]
+    },
     "CommunityPulse": {
       "type": "object",
       "properties": {
@@ -1028,6 +1094,38 @@
             "kind": {
               "type": "string",
               "const": "derivation"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "entity"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "relationship"
             }
           },
           "required": [
@@ -1746,6 +1844,12 @@
       "properties": {
         "branchId": {
           "type": "string"
+        },
+        "catalogEvidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CatalogEvidence"
+          }
         },
         "claim": {
           "$ref": "#/definitions/EvaluatedClaim"

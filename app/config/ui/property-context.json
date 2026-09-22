@@ -927,5 +927,9 @@
       }
     }
   ],
-  "surface_count": 9
+  "surface_count": 9,
+  "receiptRelationLabels": {
+    "identity": "{target}",
+    "distinct_identity": "Not {target}"
+  }
 }

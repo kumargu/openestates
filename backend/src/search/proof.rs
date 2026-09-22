@@ -88,11 +88,34 @@ pub struct ProofResolution {
     #[schemars(with = "String")]
     pub unit: Option<String>,
     pub source_observations: Vec<ResolvedSourceObservation>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub catalog_evidence: Vec<CatalogEvidence>,
     pub derivation_chain: Vec<DerivedEvidence>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schemars(with = "Value")]
     pub geometry: Option<Value>,
     pub resolution_status: ProofResolutionStatus,
+}
+
+/// Promoted catalog records support identity claims without fabricated observations.
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum CatalogEvidence {
+    #[serde(rename_all = "camelCase")]
+    Entity {
+        entity_id: String,
+        entity_type: String,
+        name: String,
+    },
+    #[serde(rename_all = "camelCase")]
+    Relationship {
+        relationship_id: String,
+        from_entity_id: String,
+        to_entity_id: String,
+        relation: String,
+        source_type: String,
+        confidence: f32,
+    },
 }
 
 #[derive(schemars::JsonSchema, Debug, Clone, PartialEq, Serialize)]
@@ -257,11 +280,63 @@ fn resolve_identity(
     let mut unit = None;
     let mut observations = Vec::<SourceObservation>::new();
     let mut derivations = Vec::<DerivedEvidence>::new();
+    let mut catalog_evidence = Vec::new();
+    if identity.evidence_refs.iter().any(|reference| {
+        matches!(
+            reference.evidence_id,
+            EvidenceId::Entity(_) | EvidenceId::Relationship(_)
+        )
+    }) {
+        let target = identity
+            .target_entity_id
+            .as_deref()
+            .ok_or(ProofResolutionError::InvalidToken)?;
+        let evaluated = snapshot.identity_evaluation.evaluate(
+            &identity.subject_entity_id,
+            target,
+            &identity.snapshot_identity,
+        );
+        if identity.fact_key != "entity_identity"
+            || !evaluated.verified_matches.iter().any(|verified| {
+                verified.relation == identity.relation
+                    && verified.evidence_refs == identity.evidence_refs
+            })
+        {
+            return Err(ProofResolutionError::InvalidToken);
+        }
+    }
     for evidence in &identity.evidence_refs {
         evidence
             .validate_for(&identity.subject_entity_id, &identity.snapshot_identity)
             .map_err(|_| ProofResolutionError::WrongSubject)?;
         match &evidence.evidence_id {
+            EvidenceId::Entity(id) => {
+                let entity = snapshot
+                    .entity_by_id
+                    .get(id)
+                    .and_then(|index| snapshot.bundle.entities.get(*index))
+                    .ok_or(ProofResolutionError::MissingEvidence)?;
+                catalog_evidence.push(CatalogEvidence::Entity {
+                    entity_id: entity.entity_id.clone(),
+                    entity_type: entity.entity_type.clone(),
+                    name: entity.name.clone(),
+                });
+            }
+            EvidenceId::Relationship(id) => {
+                let edge = snapshot
+                    .bundle
+                    .evidence_index
+                    .relationship(id)
+                    .ok_or(ProofResolutionError::MissingEvidence)?;
+                catalog_evidence.push(CatalogEvidence::Relationship {
+                    relationship_id: id.clone(),
+                    from_entity_id: edge.from_entity_id.clone(),
+                    to_entity_id: edge.to_entity_id.clone(),
+                    relation: edge.edge_type.clone(),
+                    source_type: edge.source_type.clone(),
+                    confidence: edge.confidence,
+                });
+            }
             EvidenceId::Observation(observation_id) => {
                 let fact = snapshot
                     .bundle
@@ -305,7 +380,7 @@ fn resolve_identity(
             }
         }
     }
-    if observations.is_empty() {
+    if observations.is_empty() && catalog_evidence.is_empty() {
         return Err(ProofResolutionError::MissingEvidence);
     }
     let geometry = proof_geometry(snapshot, &identity);
@@ -336,6 +411,7 @@ fn resolve_identity(
             .iter()
             .map(ResolvedSourceObservation::from)
             .collect(),
+        catalog_evidence,
         derivation_chain: derivations,
         geometry,
         resolution_status: ProofResolutionStatus::Resolved,
@@ -412,6 +488,9 @@ fn collect_derivation_sources(
 ) -> Result<(), ProofResolutionError> {
     for input in &derivation.input_evidence {
         match &input.evidence_id {
+            EvidenceId::Entity(_) | EvidenceId::Relationship(_) => {
+                return Err(ProofResolutionError::InvalidToken)
+            }
             EvidenceId::Observation(id) => {
                 let observation = snapshot
                     .bundle

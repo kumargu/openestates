@@ -204,7 +204,7 @@ impl InventoryOption {
             fact_key: self.evidence_fact_key.clone(),
             derived_evidence: None,
             algorithm_version: "inventory-option-evaluator-v2".to_string(),
-            confidence: self.confidence,
+            confidence: Some(self.confidence),
             snapshot_identity: snapshot_identity.to_string(),
         })
     }
@@ -295,7 +295,7 @@ pub struct VerifiedMatch {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub derived_evidence: Option<DerivedEvidence>,
     pub algorithm_version: String,
-    pub confidence: f32,
+    pub confidence: Option<f32>,
     pub snapshot_identity: String,
 }
 

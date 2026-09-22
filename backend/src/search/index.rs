@@ -370,16 +370,6 @@ impl SearchIndex {
             .unwrap_or_default()
     }
 
-    pub(crate) fn entity_has_property(&self, entity_id: &str, property_id: &str) -> bool {
-        self.by_property_node
-            .get(entity_id)
-            .is_some_and(|id| id == property_id)
-            || self
-                .by_entity_node
-                .get(entity_id)
-                .is_some_and(|ids| ids.iter().any(|id| id == property_id))
-    }
-
     pub(crate) fn builder_entity_id_for_property(&self, property_id: &str) -> Option<&str> {
         self.builder_entity_by_property
             .get(property_id)
@@ -758,18 +748,6 @@ fn query_contains_phrase(query: &str, phrase: &str) -> bool {
         .collect::<Vec<_>>()
         .windows(phrase.split_whitespace().count())
         .any(|window| window.join(" ") == phrase)
-}
-
-pub(crate) fn property_matches_excluded_society(property: &Property, name: &str) -> bool {
-    entity_keys_match(&property.society_id, name)
-        || query_contains_phrase(
-            &normalize_entity_key(&property.title),
-            &normalize_entity_key(name),
-        )
-}
-
-pub(crate) fn property_matches_excluded_builder(property: &Property, name: &str) -> bool {
-    entity_keys_match(&property.builder_name, name)
 }
 
 fn entity_keys_match(left: &str, right: &str) -> bool {
@@ -1272,7 +1250,6 @@ mod tests {
         );
 
         assert_eq!(index.recall_ids(&query), vec!["edge-linked-home"]);
-        assert!(index.entity_has_property(canonical_id, "edge-linked-home"));
     }
 
     #[test]

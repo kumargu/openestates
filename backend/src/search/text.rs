@@ -22,9 +22,7 @@ use super::ast::ConstraintTerm;
 use super::ast::IntentAst;
 use super::evaluation::{BooleanEvaluation, InventoryOption, VerifiedMatch};
 use super::geo;
-use super::index::{
-    property_matches_excluded_builder, property_matches_excluded_society, SearchIndex,
-};
+use super::index::SearchIndex;
 use super::intent::{ConstraintOperator, HardConstraint, SearchIntent};
 use super::resolver::{is_resolvable_entity_name, query_contains_lower_text};
 use super::schema::{
@@ -44,6 +42,7 @@ pub struct CandidateEvaluator;
 
 #[derive(Clone, Copy)]
 pub struct SearchEvaluationContext<'a> {
+    pub identities: Option<&'a super::identity::IdentityEvaluationIndex>,
     pub options: &'a HashMap<String, InventoryOption>,
     pub spatial_matches: &'a HashMap<String, Vec<VerifiedMatch>>,
     pub snapshot_identity: &'a str,
@@ -1425,7 +1424,7 @@ fn match_hard_constraints(
                 normalized_score: 1.0,
                 ranking_score: 1.0,
                 score_delta: 2.0,
-                confidence: verified.confidence,
+                confidence: verified.confidence?,
                 source_type: "ServingBundle".to_string(),
                 scoring_method: schema.scoring_method.clone(),
                 reason: format!("proved constraint: {}", constraint.raw_text),
@@ -1505,7 +1504,7 @@ fn numeric_constraint_evaluation(
             fact_key: Some(fact_key),
             derived_evidence: None,
             algorithm_version: "numeric-evaluator-v1".to_string(),
-            confidence,
+            confidence: Some(confidence),
             snapshot_identity: evaluation.snapshot_identity.to_string(),
         };
         Some(if satisfied {
@@ -2787,20 +2786,13 @@ pub(super) fn property_constraint_evaluation(
 pub(super) fn constraint_term_evaluation_for_society(
     property: &Property,
     term: &ConstraintTerm,
-    search_index: Option<&SearchIndex>,
+    _search_index: Option<&SearchIndex>,
     serving_facts: Option<&ServingFactIndex>,
     society_entity_id: &str,
     evaluation: SearchEvaluationContext<'_>,
 ) -> super::evaluation::BooleanEvaluation {
     use super::evaluation::BooleanEvaluation;
 
-    let known_match = |matches| {
-        if matches {
-            BooleanEvaluation::satisfied(Vec::new())
-        } else {
-            BooleanEvaluation::unsatisfied()
-        }
-    };
     match term {
         ConstraintTerm::Bhk { value, .. } => evaluation
             .options
@@ -2830,42 +2822,15 @@ pub(super) fn constraint_term_evaluation_for_society(
         ConstraintTerm::Area {
             entity_id: Some(entity_id),
             ..
-        } => search_index
-            .map(|index| known_match(index.entity_has_property(entity_id, &property.id)))
+        }
+        | ConstraintTerm::Society { entity_id, .. }
+        | ConstraintTerm::Builder { entity_id, .. } => evaluation
+            .identities
+            .map(|index| index.evaluate(society_entity_id, entity_id, evaluation.snapshot_identity))
             .unwrap_or_else(BooleanEvaluation::unknown),
-        ConstraintTerm::Area { value, .. } => {
-            if property.area.trim().is_empty() {
-                BooleanEvaluation::unknown()
-            } else {
-                known_match(property.area.eq_ignore_ascii_case(value))
-            }
-        }
-        ConstraintTerm::Society {
-            entity_id,
-            display_name,
-            ..
-        } => {
-            if let Some(index) = search_index {
-                known_match(index.entity_has_property(entity_id, &property.id))
-            } else if property.society_id.trim().is_empty() {
-                BooleanEvaluation::unknown()
-            } else {
-                known_match(property_matches_excluded_society(property, display_name))
-            }
-        }
-        ConstraintTerm::Builder {
-            entity_id,
-            display_name,
-            ..
-        } => {
-            if let Some(index) = search_index {
-                known_match(index.entity_has_property(entity_id, &property.id))
-            } else if property.builder_name.trim().is_empty() {
-                BooleanEvaluation::unknown()
-            } else {
-                known_match(property_matches_excluded_builder(property, display_name))
-            }
-        }
+        ConstraintTerm::Area {
+            entity_id: None, ..
+        } => BooleanEvaluation::unknown(),
         ConstraintTerm::Evidence { constraint, .. } => numeric_constraint_evaluation(
             constraint,
             property,
@@ -3394,7 +3359,34 @@ mod tests {
         intent: &SearchIntent,
         _graph: Option<&KnowledgeGraph>,
     ) -> Vec<SearchResultCard> {
-        let compiled_query = IntentAst::from_text_with_intent(query, intent.clone());
+        let mut compiled_query = IntentAst::from_text_with_intent(query, intent.clone());
+        fn bind_fixture_areas(
+            expr: &mut crate::search::ast::ConstraintExpr,
+            properties: &[Property],
+        ) {
+            use crate::search::ast::ConstraintExpr;
+            match expr {
+                ConstraintExpr::Term {
+                    term:
+                        ConstraintTerm::Area {
+                            entity_id, value, ..
+                        },
+                } => {
+                    *entity_id = properties
+                        .iter()
+                        .find(|property| property.area == *value)
+                        .map(|property| format!("area:{}", property.area_id));
+                }
+                ConstraintExpr::And { clauses } | ConstraintExpr::AnyOf { clauses } => {
+                    for child in clauses {
+                        bind_fixture_areas(child, properties);
+                    }
+                }
+                ConstraintExpr::Not { clause } => bind_fixture_areas(clause, properties),
+                _ => {}
+            }
+        }
+        bind_fixture_areas(&mut compiled_query.constraints, properties);
         let merged_ids = merged_candidate_ids(
             search_index.map(|index| index.recall_ids(&compiled_query)),
             extra_candidate_ids,
@@ -3585,11 +3577,15 @@ mod tests {
 
     const FIXTURE_SNAPSHOT_IDENTITY: &str = "text-search-fixture";
 
+    struct FixtureInventory {
+        options: HashMap<String, InventoryOption>,
+        identities: super::super::identity::IdentityEvaluationIndex,
+    }
     fn fixture_inventory_options(
         properties: &[Property],
         search_index: Option<&SearchIndex>,
-    ) -> HashMap<String, InventoryOption> {
-        properties
+    ) -> FixtureInventory {
+        let options = properties
             .iter()
             .filter(|property| property.bhk > 0)
             .map(|property| {
@@ -3624,23 +3620,48 @@ mod tests {
                     },
                 )
             })
-            .collect()
+            .collect();
+        let mut entities = Vec::new();
+        let mut edges = Vec::new();
+        for property in properties {
+            let subject = canonical_society_entity_id(property, search_index).into_owned();
+            let area = search_index
+                .and_then(|index| index.area_entity_id_for_property(&property.id))
+                .map(str::to_string)
+                .unwrap_or_else(|| format!("area:{}", property.area_id));
+            entities.push(serving_entity(&subject, "society", &property.society_id));
+            entities.push(serving_entity(&area, "area", &property.area));
+            edges.push(ServingEdgeRecord {
+                from_entity_id: subject,
+                to_entity_id: area,
+                edge_type: "in_area".to_string(),
+                confidence: 1.0,
+                source_type: "unit-test".to_string(),
+                derivation: None,
+            });
+        }
+        FixtureInventory {
+            options,
+            identities: super::super::identity::IdentityEvaluationIndex::from_records(
+                &entities,
+                &edges,
+                FIXTURE_SNAPSHOT_IDENTITY,
+            ),
+        }
     }
 
-    fn fixture_inventory_context(
-        options: &HashMap<String, InventoryOption>,
-    ) -> SearchEvaluationContext<'_> {
+    fn fixture_inventory_context(options: &FixtureInventory) -> SearchEvaluationContext<'_> {
         SearchEvaluationContext {
-            options,
+            identities: Some(&options.identities),
+            options: &options.options,
             spatial_matches: empty_spatial_matches(),
             snapshot_identity: FIXTURE_SNAPSHOT_IDENTITY,
         }
     }
 
     fn empty_inventory_context() -> SearchEvaluationContext<'static> {
-        static OPTIONS: std::sync::OnceLock<HashMap<String, InventoryOption>> =
-            std::sync::OnceLock::new();
-        fixture_inventory_context(OPTIONS.get_or_init(HashMap::new))
+        static OPTIONS: std::sync::OnceLock<FixtureInventory> = std::sync::OnceLock::new();
+        fixture_inventory_context(OPTIONS.get_or_init(|| fixture_inventory_options(&[], None)))
     }
 
     fn empty_spatial_matches() -> &'static HashMap<String, Vec<VerifiedMatch>> {
@@ -3901,7 +3922,7 @@ mod tests {
             crate::search::ast::ConstraintExpr::any_of(vec![
                 crate::search::ast::ConstraintExpr::and(vec![
                     crate::search::ast::ConstraintExpr::term(ConstraintTerm::Area {
-                        entity_id: None,
+                        entity_id: Some("area:whitefield".to_string()),
                         value: "Whitefield".to_string(),
                         span: None,
                     }),
@@ -8064,7 +8085,7 @@ mod tests {
             compiled.constraints,
             crate::search::ast::ConstraintExpr::negated(crate::search::ast::ConstraintExpr::term(
                 ConstraintTerm::Area {
-                    entity_id: None,
+                    entity_id: Some("area:electronic-city".to_string()),
                     value: "Electronic City".to_string(),
                     span: None,
                 },

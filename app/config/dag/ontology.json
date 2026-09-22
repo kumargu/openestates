@@ -25,5 +25,9 @@
     { "from": "society", "edge": "maps_to_place", "to": "place" },
     { "from": "society", "edge": "near_place", "to": "place" },
     { "from": "transaction", "edge": "for_property", "to": "property" }
+  ],
+  "identity_bindings": [
+    { "entity_type": "area", "edge_types": ["in_area", "in_market_locality"], "exclusive": true },
+    { "entity_type": "builder", "edge_types": ["built_by"], "exclusive": true }
   ]
 }

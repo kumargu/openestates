@@ -476,6 +476,7 @@ async fn materialized_contract(carpet: bool) -> (tempfile::TempDir, Arc<AppState
     let ids = body["active"]["results"]["orderedResultIds"]
         .as_array()
         .unwrap();
+    let mut context_receipt_count = 0;
     for id in ids {
         let response = app
             .clone()
@@ -518,6 +519,10 @@ async fn materialized_contract(carpet: bool) -> (tempfile::TempDir, Arc<AppState
                     backend::serving::EvidenceId::Derivation(ref id) => {
                         assert!(loaded.evidence_index.derivation(id).is_some())
                     }
+                    backend::serving::EvidenceId::Entity(_)
+                    | backend::serving::EvidenceId::Relationship(_) => {
+                        panic!("source panels require observed facts")
+                    }
                 }
             }
         }
@@ -525,6 +530,7 @@ async fn materialized_contract(carpet: bool) -> (tempfile::TempDir, Arc<AppState
         assert_eq!(context["snapshotIdentity"], snapshot_identity);
         assert!(context.get("surfaceId").is_none());
         assert!(context.get("layers").is_none());
+        context_receipt_count += context["features"].as_array().unwrap().len();
         for feature in context["features"].as_array().unwrap() {
             let reference: backend::serving::EvidenceRef =
                 serde_json::from_value(feature["fact"]["evidence"].clone()).unwrap();
@@ -544,6 +550,10 @@ async fn materialized_contract(carpet: bool) -> (tempfile::TempDir, Arc<AppState
             assert!(detail["property"].get("carpet_area_sqft").is_none());
         }
     }
+    assert!(
+        context_receipt_count > 0,
+        "materialized context must contain receipts"
+    );
     for (snapshot, expected) in [
         (&snapshot_identity, StatusCode::OK),
         (&"retired".to_string(), StatusCode::CONFLICT),

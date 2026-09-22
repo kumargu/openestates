@@ -1,5 +1,24 @@
 /* Generated from Rust public DTOs. Run npm run contracts:generate. */
 
+/**
+ * Promoted catalog records support identity claims without fabricated observations.
+ */
+export type CatalogEvidence =
+  | {
+      entityId: string;
+      entityType: string;
+      kind: "entity";
+      name: string;
+    }
+  | {
+      confidence: number;
+      fromEntityId: string;
+      kind: "relationship";
+      relation: string;
+      relationshipId: string;
+      sourceType: string;
+      toEntityId: string;
+    };
 export type ConstraintOperator = "min" | "max";
 export type EvidenceId =
   | {
@@ -9,6 +28,14 @@ export type EvidenceId =
   | {
       id: string;
       kind: "derivation";
+    }
+  | {
+      id: string;
+      kind: "entity";
+    }
+  | {
+      id: string;
+      kind: "relationship";
     };
 export type ProofResolutionStatus = "resolved";
 /**
@@ -41,6 +68,7 @@ export type FactValue =
 
 export interface ProofResolution {
   branchId: string;
+  catalogEvidence?: CatalogEvidence[];
   claim?: EvaluatedClaim;
   constraint?: HardConstraint;
   contractVersion: number;

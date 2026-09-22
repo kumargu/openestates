@@ -861,6 +861,7 @@ mod tests {
             intent: &compiled_query.intent,
             constraints: &compiled_query.constraints,
             evaluation: SearchEvaluationContext {
+                identities: None,
                 options: &inventory_options,
                 spatial_matches: &std::collections::HashMap::new(),
                 snapshot_identity,
