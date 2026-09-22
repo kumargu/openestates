@@ -12,6 +12,7 @@ mod eligibility;
 pub mod evidence;
 pub mod loader;
 pub mod market_topology;
+pub mod measurements;
 pub mod parquet;
 pub mod projection;
 pub mod proximity;

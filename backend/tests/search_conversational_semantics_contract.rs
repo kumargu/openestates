@@ -4017,7 +4017,7 @@ fn serving_fact(entity_id: &str, fact_key: &str, value: FactValue) -> ServingFac
         vec!["asset:controlled-search-fixture/v1".to_string()],
     )
     .unwrap();
-    ServingFactRecord {
+    backend::serving::measurements::normalize_distance_fact(ServingFactRecord {
         entity_id: entity_id.to_string(),
         fact_key: fact_key.to_string(),
         value_type: match &value {
@@ -4036,7 +4036,7 @@ fn serving_fact(entity_id: &str, fact_key: &str, value: FactValue) -> ServingFac
         skill_id: Some("search_conversational_semantics_contract".to_string()),
         learned_at: observed_at,
         observation: Some(observation),
-    }
+    })
 }
 
 fn inventory_receipt_fact(entity_id: &str, spec: &HomeSpec) -> ServingFactRecord {

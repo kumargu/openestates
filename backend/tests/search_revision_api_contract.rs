@@ -1980,7 +1980,7 @@ fn topology_fact(entity_id: &str, fact_key: &str, value: FactValue) -> ServingFa
     } else {
         "OpenStreetMap"
     };
-    ServingFactRecord {
+    backend::serving::measurements::normalize_distance_fact(ServingFactRecord {
         entity_id: entity_id.to_string(),
         fact_key: fact_key.to_string(),
         value_type: match &value {
@@ -2013,7 +2013,7 @@ fn topology_fact(entity_id: &str, fact_key: &str, value: FactValue) -> ServingFa
             )
             .expect("revision topology observation"),
         ),
-    }
+    })
 }
 
 fn topology_edge(

@@ -48,12 +48,12 @@ pub struct SearchEvaluationContext<'a> {
     pub snapshot_identity: &'a str,
 }
 
-pub struct CandidateEvaluationRequest<'a, 'geo> {
+pub struct CandidateEvaluationRequest<'a> {
     pub properties: &'a [Property],
     pub search_index: Option<&'a SearchIndex>,
     pub extra_candidate_ids: Option<&'a [String]>,
     pub candidate_property_indexes: Option<Vec<usize>>,
-    pub geo_query: Option<&'a geo::GeoSearchQuery<'geo>>,
+    pub geo_query: Option<&'a geo::GeoSearchQuery>,
     pub serving_facts: Option<&'a ServingFactIndex>,
     pub society_names: &'a std::collections::HashMap<String, String>,
     pub query: &'a str,
@@ -63,10 +63,9 @@ pub struct CandidateEvaluationRequest<'a, 'geo> {
 }
 
 const COORDINATE_NAMED_PLACE_PROOF_RANK: u8 = 1;
-const SERVING_NAMED_PLACE_PROOF_RANK: u8 = 2;
 
 impl CandidateEvaluator {
-    pub fn search(request: CandidateEvaluationRequest<'_, '_>) -> Vec<SearchResultCard> {
+    pub fn search(request: CandidateEvaluationRequest<'_>) -> Vec<SearchResultCard> {
         Self::search_compiled_with_candidate_property_indexes(
             request.properties,
             request.search_index,
@@ -88,7 +87,7 @@ impl CandidateEvaluator {
         search_index: Option<&SearchIndex>,
         extra_candidate_ids: Option<&[String]>,
         candidate_property_indexes: Option<Vec<usize>>,
-        geo_query: Option<&geo::GeoSearchQuery<'_>>,
+        geo_query: Option<&geo::GeoSearchQuery>,
         serving_facts: Option<&ServingFactIndex>,
         society_names: &std::collections::HashMap<String, String>,
         query: &str,
@@ -179,31 +178,7 @@ impl CandidateEvaluator {
                 }
 
                 let named_place_evidence = geo_query
-                    .map(|query| {
-                        let mut evidence = serving_facts
-                            .map(|facts| {
-                                serving_named_place_evidence_for_entity(
-                                    facts,
-                                    &p.society_id,
-                                    society_entity_id.as_ref(),
-                                    query,
-                                )
-                            })
-                            .unwrap_or_default();
-                        for fallback in query.evidence_for_society(society_entity_id.as_ref()) {
-                            if !evidence.iter().any(|existing| {
-                                existing.place_entity_id == fallback.place_entity_id
-                                    || (existing
-                                        .place_name
-                                        .eq_ignore_ascii_case(&fallback.place_name)
-                                        && (existing.distance_km - fallback.distance_km).abs()
-                                            < 0.05)
-                            }) {
-                                evidence.push(fallback.into());
-                            }
-                        }
-                        evidence
-                    })
+                    .map(|query| project_named_place_evidence(&verified_matches, query))
                     .unwrap_or_default();
 
                 // Soft constraint: area — exact match keeps full score,
@@ -319,17 +294,11 @@ impl CandidateEvaluator {
                     .map(|evidence| evidence.distance_km)
                     .min_by(f64::total_cmp);
                 primary_intent_score += named_place_intent_score(&named_place_evidence);
-                let named_place_proof_rank = named_place_evidence
-                    .iter()
-                    .map(|evidence| {
-                        if evidence.scoring_method == geo::NAMED_PLACE_FACT_SCORING_METHOD {
-                            SERVING_NAMED_PLACE_PROOF_RANK
-                        } else {
-                            COORDINATE_NAMED_PLACE_PROOF_RANK
-                        }
-                    })
-                    .max()
-                    .unwrap_or(0);
+                let named_place_proof_rank = if named_place_evidence.is_empty() {
+                    0
+                } else {
+                    COORDINATE_NAMED_PLACE_PROOF_RANK
+                };
                 for evidence in named_place_evidence {
                     total_facts_consulted += 1;
                     graph_count += 1;
@@ -749,7 +718,8 @@ fn diversify_ranked_results(
                         || !candidate
                             .result
                             .card
-                            .society_name
+                            .kg_entity_refs
+                            .society_entity_id
                             .eq_ignore_ascii_case(&last_society)
                 })
             })
@@ -761,12 +731,18 @@ fn diversify_ranked_results(
         if candidate
             .result
             .card
-            .society_name
+            .kg_entity_refs
+            .society_entity_id
             .eq_ignore_ascii_case(&last_society)
         {
             consecutive += 1;
         } else {
-            last_society = candidate.result.card.society_name.clone();
+            last_society = candidate
+                .result
+                .card
+                .kg_entity_refs
+                .society_entity_id
+                .clone();
             consecutive = 1;
         }
         diversified.push(candidate);
@@ -774,33 +750,6 @@ fn diversify_ranked_results(
 
     diversified.extend(pending.into_iter().flatten());
     *results = diversified;
-}
-
-#[cfg(test)]
-fn distance_m(distance_km: f64) -> Option<u32> {
-    distance_km
-        .is_finite()
-        .then(|| (distance_km * 1000.0).round())
-        .filter(|meters| *meters >= 0.0 && *meters <= u32::MAX as f64)
-        .map(|meters| meters as u32)
-}
-
-impl From<geo::HaversineEvidence> for NamedPlaceEvidence {
-    fn from(evidence: geo::HaversineEvidence) -> Self {
-        Self {
-            place_entity_id: evidence.place_entity_id,
-            place_name: evidence.place_name,
-            distance_km: evidence.distance_km,
-            fact_key: geo::DISTANCE_TO_PLACE_FACT_KEY.to_string(),
-            display: evidence.display,
-            normalized_score: evidence.normalized_score,
-            score_delta: evidence.score_delta,
-            confidence: evidence.confidence,
-            source_type: "Computed".to_string(),
-            scoring_method: geo::HAVERSINE_SCORING_METHOD.to_string(),
-            evidence_identity: None,
-        }
-    }
 }
 
 pub(crate) fn enrich_card_from_serving_facts(
@@ -974,152 +923,46 @@ struct NamedPlaceEvidence {
     evidence_identity: Option<MatchEvidenceIdentity>,
 }
 
-fn serving_named_place_evidence_for_entity(
-    serving_facts: &ServingFactIndex,
-    society_id: &str,
-    society_entity_id: &str,
-    geo_query: &geo::GeoSearchQuery<'_>,
+fn project_named_place_evidence(
+    matches: &[VerifiedMatch],
+    query: &geo::GeoSearchQuery,
 ) -> Vec<NamedPlaceEvidence> {
-    if !geo_query.allows_society_evidence(society_id) {
-        return Vec::new();
-    }
-    let Some(rows) = serving_facts.entity(society_entity_id) else {
-        return Vec::new();
-    };
-    let mut matches = Vec::new();
-
-    for clause in geo_query.resolved_clauses() {
-        let mut best: Option<NamedPlaceEvidence> = None;
-        for fact in &rows.facts {
-            if match_evidence_identity(fact).is_none() {
-                continue;
-            }
-            if !evidence_is_confident_enough(
-                &fact.source_type,
-                fact.confidence,
-                geo::NAMED_PLACE_FACT_SCORING_METHOD,
-            ) {
-                continue;
-            }
-            let metadata = rows.search_metadata_for_fact_key(&fact.fact_key).next();
-            for snippet in serving_fact_text_snippets(fact) {
-                for place in geo_query.places_for_clause(clause) {
-                    if !geo_query.fact_key_matches_resolved_place(&fact.fact_key, place)
-                        || !geo::nearby_fact_mentions_place(&snippet, &place.name)
-                    {
-                        continue;
-                    }
-                    let Some(distance_km) =
-                        distance_for_nearby_place_snippet(&snippet, &place.name)
-                    else {
-                        continue;
-                    };
-                    if geo_query
-                        .clause_distance_limit_km(clause)
-                        .is_some_and(|max_distance| distance_km > max_distance)
-                    {
-                        continue;
-                    }
-                    let Some(evidence) =
-                        named_place_serving_fact_evidence(fact, metadata, place, distance_km)
-                    else {
-                        continue;
-                    };
-                    if best.as_ref().is_none_or(|current| {
-                        evidence.score_delta > current.score_delta
-                            || ((evidence.score_delta - current.score_delta).abs() < f64::EPSILON
-                                && evidence.confidence > current.confidence)
-                    }) {
-                        best = Some(evidence);
-                    }
-                }
-            }
-        }
-        if let Some(best) = best {
-            matches.push(best);
-        }
-    }
-
-    matches
-}
-
-#[cfg(test)]
-fn serving_named_place_evidence(
-    serving_facts: &ServingFactIndex,
-    society_id: &str,
-    geo_query: &geo::GeoSearchQuery<'_>,
-) -> Vec<NamedPlaceEvidence> {
-    serving_named_place_evidence_for_entity(
-        serving_facts,
-        society_id,
-        &society_node_id(society_id),
-        geo_query,
-    )
-}
-
-fn named_place_serving_fact_evidence(
-    fact: &ServingFactRecord,
-    metadata: Option<&ServingSearchMetadataRecord>,
-    place: &geo::ResolvedGeoPlace,
-    distance_km: f64,
-) -> Option<NamedPlaceEvidence> {
-    if !distance_km.is_finite() || distance_km < 0.0 {
-        return None;
-    }
     let policy = schema::ranking_policy();
-    let normalized_score = geo::normalized_distance_score(
-        distance_km,
-        policy.nearby_distance_full_score_km,
-        policy.nearby_distance_zero_score_km,
-    )?;
-
-    let weight = metadata
-        .and_then(|metadata| metadata.scoring_weight)
-        .map(f64::from)
-        .unwrap_or(1.0)
-        .clamp(0.0, 2.0);
-    let score_delta = (weight
-        + normalized_score * policy.nearby_distance_bonus_cap.max(0.0)
-        + normalized_score * policy.named_place_score_weight.max(0.0))
-    .clamp(0.0, 3.0);
-    if score_delta <= 0.0 {
-        return None;
-    }
-
-    Some(NamedPlaceEvidence {
-        place_entity_id: place.entity_id.clone(),
-        place_name: place.name.clone(),
-        distance_km,
-        fact_key: fact.fact_key.clone(),
-        display: format!("{distance_km:.1} km from {}", place.name),
-        normalized_score,
-        score_delta,
-        confidence: fact.confidence.min(place.confidence),
-        source_type: fact.source_type.clone(),
-        scoring_method: geo::NAMED_PLACE_FACT_SCORING_METHOD.to_string(),
-        evidence_identity: match_evidence_identity(fact),
-    })
-}
-
-fn serving_fact_text_snippets(fact: &ServingFactRecord) -> Vec<String> {
-    let mut snippets = fact_text_snippets(&fact.value);
-    if let Some(value_text) = fact.value_text.as_deref() {
-        if !snippets.iter().any(|snippet| snippet == value_text) {
-            snippets.push(value_text.to_string());
-        }
-    }
-    snippets
-}
-
-fn distance_for_nearby_place_snippet(snippet: &str, place_name: &str) -> Option<f64> {
-    snippet
-        .split(['\n', ';', '|'])
-        .find_map(|segment| {
-            geo::nearby_fact_mentions_place(segment, place_name)
-                .then(|| geo::extract_first_distance_km(segment))
-                .flatten()
+    matches
+        .iter()
+        .filter_map(|matched| {
+            if matched.unit.as_deref() != Some("km") || matched.evidence_refs.is_empty() {
+                return None;
+            }
+            let target = matched.target_entity_id.as_deref()?;
+            let place = query
+                .resolved_places()
+                .iter()
+                .find(|place| place.entity_id == target)?;
+            let distance_km = matched.value?;
+            let normalized_score = geo::normalized_distance_score(
+                distance_km,
+                policy.named_place_full_score_km,
+                policy.named_place_zero_score_km,
+            )?;
+            Some(NamedPlaceEvidence {
+                place_entity_id: target.to_string(),
+                place_name: place.name.clone(),
+                distance_km,
+                fact_key: matched
+                    .fact_key
+                    .clone()
+                    .unwrap_or_else(|| query.evidence_fact_key_for_place(place).to_string()),
+                display: format!("{distance_km:.1} km from {}", place.name),
+                normalized_score,
+                score_delta: normalized_score * policy.named_place_score_weight.max(0.0),
+                confidence: matched.confidence?,
+                source_type: "Computed".to_string(),
+                scoring_method: geo::HAVERSINE_SCORING_METHOD.to_string(),
+                evidence_identity: None,
+            })
         })
-        .or_else(|| geo::extract_first_distance_km(snippet))
+        .collect()
 }
 
 fn minimum_evidence_floor(positive_evidence_score: f64, evidence_count: usize) -> f64 {
@@ -1185,7 +1028,7 @@ fn named_place_intent_score(evidence: &[NamedPlaceEvidence]) -> f64 {
 }
 
 fn named_place_query_answers_preference(
-    geo_query: Option<&geo::GeoSearchQuery<'_>>,
+    geo_query: Option<&geo::GeoSearchQuery>,
     candidate_fact_keys: &[String],
 ) -> bool {
     let Some(query) = geo_query else {
@@ -1579,7 +1422,6 @@ fn numeric_constraint_fact_value(
             FactValue::Numeric(value) => value,
             _ => return None,
         },
-        NumericFactValueKind::DistanceKmInText => geo::serving_fact_distance_km(fact)?,
     };
     (value.is_finite() && value >= 0.0).then_some(value)
 }
@@ -3373,7 +3215,7 @@ mod tests {
         properties: &[Property],
         search_index: Option<&SearchIndex>,
         extra_candidate_ids: Option<&[String]>,
-        geo_query: Option<&geo::GeoSearchQuery<'_>>,
+        geo_query: Option<&geo::GeoSearchQuery>,
         serving_facts: Option<&ServingFactIndex>,
         society_names: &std::collections::HashMap<String, String>,
         _societies: &[Society],
@@ -3423,6 +3265,33 @@ mod tests {
                 .filter(|indexes| !indexes.is_empty())
         });
         let inventory_options = fixture_inventory_options(properties, search_index);
+        let spatial_matches = geo_query
+            .zip(serving_facts)
+            .map(|(query, facts)| {
+                let entities = facts
+                    .rows()
+                    .map(|(id, _)| serving_entity(id, id.split(':').next().unwrap(), id))
+                    .collect::<Vec<_>>();
+                let spatial =
+                    crate::serving::SpatialServingIndex::from_serving_bundle(&entities, facts);
+                let fixture_index = SearchIndex::build_with_serving_entities(properties, &entities);
+                properties
+                    .iter()
+                    .map(|property| {
+                        (
+                            property.id.clone(),
+                            query.verified_matches_for_property(
+                                property,
+                                &fixture_index,
+                                &spatial,
+                                facts,
+                                FIXTURE_SNAPSHOT_IDENTITY,
+                            ),
+                        )
+                    })
+                    .collect::<HashMap<_, _>>()
+            })
+            .unwrap_or_default();
         CandidateEvaluator::search(CandidateEvaluationRequest {
             properties,
             search_index,
@@ -3434,7 +3303,10 @@ mod tests {
             query: &compiled_query.raw,
             intent: &compiled_query.intent,
             constraints: &compiled_query.constraints,
-            evaluation: fixture_inventory_context(&inventory_options),
+            evaluation: SearchEvaluationContext {
+                spatial_matches: &spatial_matches,
+                ..fixture_inventory_context(&inventory_options)
+            },
         })
     }
 
@@ -3720,7 +3592,7 @@ mod tests {
             FactValue::Tags(_) => "tags",
             FactValue::Score { .. } => "score",
         };
-        ServingFactRecord {
+        crate::serving::measurements::normalize_distance_fact(ServingFactRecord {
             entity_id: format!("society:{society_id}"),
             fact_key: fact_key.to_string(),
             value_type: value_type.to_string(),
@@ -3747,7 +3619,7 @@ mod tests {
                 )
                 .unwrap(),
             ),
-        }
+        })
     }
 
     fn serving_metadata(
@@ -3819,7 +3691,7 @@ mod tests {
             FactValue::Tags(_) => "tags",
             FactValue::Score { .. } => "score",
         };
-        ServingFactRecord {
+        crate::serving::measurements::normalize_distance_fact(ServingFactRecord {
             entity_id: entity_id.to_string(),
             fact_key: fact_key.to_string(),
             value_type: value_type.to_string(),
@@ -3846,7 +3718,7 @@ mod tests {
                 )
                 .unwrap(),
             ),
-        }
+        })
     }
 
     #[test]
@@ -5561,246 +5433,6 @@ mod tests {
     }
 
     #[test]
-    fn named_place_distance_limit_filters_serving_nearby_fact() {
-        let entities = vec![serving_entity(
-            "place:google:deens-academy",
-            "place",
-            "The Deens Academy",
-        )];
-        let serving_facts = ServingFactIndex::from_records(
-            vec![
-                serving_fact(
-                    "outside-limit",
-                    "nearby_schools",
-                    FactValue::Text("Nearby schools: The Deens Academy (0.7 km)".to_string()),
-                    "Google",
-                    0.9,
-                ),
-                serving_entity_fact(
-                    "place:google:deens-academy",
-                    "geo.latitude",
-                    FactValue::Numeric(12.9857),
-                    "Google",
-                    0.9,
-                ),
-                serving_entity_fact(
-                    "place:google:deens-academy",
-                    "geo.longitude",
-                    FactValue::Numeric(77.7468),
-                    "Google",
-                    0.9,
-                ),
-            ],
-            vec![serving_metadata(
-                "outside-limit",
-                "nearby_schools",
-                vec!["schools", "school access", "social infrastructure"],
-                "TextMatch",
-                1.2,
-                Vec::new(),
-            )],
-        );
-        let entity_index = geo::SpatialEntityIndex::from_serving_bundle(&entities, &serving_facts);
-        let tight_query = entity_index
-            .query("homes within 500m of deens academy")
-            .expect("query should resolve Deens Academy");
-        let loose_query = entity_index
-            .query("homes within 1 km of deens academy")
-            .expect("query should resolve Deens Academy");
-        let postposed_tight_query = entity_index
-            .query("homes near deens academy within 500m")
-            .expect("postposed distance should stay attached to Deens Academy");
-
-        assert!(
-            serving_named_place_evidence(&serving_facts, "outside-limit", &tight_query).is_empty(),
-            "0.7 km serving fact should not satisfy a 500m query"
-        );
-        assert!(
-            !serving_named_place_evidence(&serving_facts, "outside-limit", &loose_query).is_empty(),
-            "0.7 km serving fact should satisfy a 1 km query"
-        );
-        assert!(
-            serving_named_place_evidence(&serving_facts, "outside-limit", &postposed_tight_query,)
-                .is_empty(),
-            "0.7 km serving fact should not satisfy a postposed 500m query"
-        );
-    }
-
-    #[test]
-    fn named_lake_uses_lake_fact_instead_of_same_name_park_fact() {
-        let place_id = "place:osm:begur-lake";
-        let entities = vec![serving_entity(place_id, "place", "Begur Lake")];
-        let serving_facts = ServingFactIndex::from_records(
-            vec![
-                serving_entity_fact(
-                    place_id,
-                    "place.category",
-                    FactValue::Text("lake".to_string()),
-                    "OpenStreetMap",
-                    1.0,
-                ),
-                serving_entity_fact(
-                    place_id,
-                    "geo.latitude",
-                    FactValue::Numeric(12.88),
-                    "OpenStreetMap",
-                    1.0,
-                ),
-                serving_entity_fact(
-                    place_id,
-                    "geo.longitude",
-                    FactValue::Numeric(77.62),
-                    "OpenStreetMap",
-                    1.0,
-                ),
-                serving_fact(
-                    "lake-home",
-                    "nearby_public_parks",
-                    FactValue::Text("Nearby parks: Begur Lake (0.1 km)".to_string()),
-                    "Google",
-                    0.99,
-                ),
-                serving_fact(
-                    "lake-home",
-                    "nearby_lakes",
-                    FactValue::Text("Nearby lakes: Begur Lake (0.8 km)".to_string()),
-                    "OpenStreetMap",
-                    0.9,
-                ),
-            ],
-            Vec::new(),
-        );
-        let entity_index = geo::SpatialEntityIndex::from_serving_bundle(&entities, &serving_facts);
-        let geo_query = entity_index
-            .query("homes near Begur Lake")
-            .expect("named lake should resolve");
-
-        let evidence = serving_named_place_evidence(&serving_facts, "lake-home", &geo_query)
-            .into_iter()
-            .next()
-            .expect("direct lake fact should provide proof");
-
-        assert_eq!(evidence.fact_key, "nearby_lakes");
-        assert_eq!(evidence.place_entity_id, place_id);
-    }
-
-    #[test]
-    fn named_stormwater_drain_uses_direct_risk_fact() {
-        let place_id = "place:stormwater-drain:way-1";
-        let entities = vec![serving_entity(place_id, "place", "drain")];
-        let serving_facts = ServingFactIndex::from_records(
-            vec![
-                serving_entity_fact(
-                    place_id,
-                    "place.category",
-                    FactValue::Text("stormwater_drain".to_string()),
-                    "OpenStreetMap",
-                    0.74,
-                ),
-                serving_entity_fact(
-                    place_id,
-                    "geo.latitude",
-                    FactValue::Numeric(12.87),
-                    "OpenStreetMap",
-                    0.74,
-                ),
-                serving_entity_fact(
-                    place_id,
-                    "geo.longitude",
-                    FactValue::Numeric(77.62),
-                    "OpenStreetMap",
-                    0.74,
-                ),
-                serving_fact(
-                    "southern-star",
-                    "stormwater_drain_nearby",
-                    FactValue::Text("drain (237 m, stormwater_drain, severity: info)".to_string()),
-                    "OpenStreetMap",
-                    0.74,
-                ),
-            ],
-            Vec::new(),
-        );
-        let entity_index = geo::SpatialEntityIndex::from_serving_bundle(&entities, &serving_facts);
-        let geo_query = entity_index
-            .query("Prestige Southern Star near stormwater drain")
-            .expect("named stormwater drain should resolve");
-
-        let evidence = serving_named_place_evidence(&serving_facts, "southern-star", &geo_query)
-            .into_iter()
-            .next()
-            .expect("direct stormwater fact should provide proof");
-
-        assert_eq!(evidence.fact_key, "stormwater_drain_nearby");
-        assert_eq!(evidence.place_entity_id, place_id);
-        assert_eq!(distance_m(evidence.distance_km), Some(237));
-    }
-
-    #[test]
-    fn named_metro_ignores_hospital_fact_with_same_locality_token() {
-        let place_id = "place:google:bommanahalli-metro";
-        let entities = vec![serving_entity(
-            place_id,
-            "place",
-            "Bommanahalli Metro Station",
-        )];
-        let serving_facts = ServingFactIndex::from_records(
-            vec![
-                serving_entity_fact(
-                    place_id,
-                    "place.category",
-                    FactValue::Text("metro_station".to_string()),
-                    "Google",
-                    1.0,
-                ),
-                serving_entity_fact(
-                    place_id,
-                    "geo.latitude",
-                    FactValue::Numeric(12.9),
-                    "Google",
-                    1.0,
-                ),
-                serving_entity_fact(
-                    place_id,
-                    "geo.longitude",
-                    FactValue::Numeric(77.61),
-                    "Google",
-                    1.0,
-                ),
-                serving_fact(
-                    "metro-home",
-                    "nearby_hospitals",
-                    FactValue::Text("Nearby hospital: Bommanahalli Hospital (0.1 km)".to_string()),
-                    "Google",
-                    0.99,
-                ),
-                serving_fact(
-                    "metro-home",
-                    "nearby_metro_stations",
-                    FactValue::Text(
-                        "Nearby metro: Bommanahalli Metro Station (1.0 km)".to_string(),
-                    ),
-                    "Google",
-                    0.9,
-                ),
-            ],
-            Vec::new(),
-        );
-        let entity_index = geo::SpatialEntityIndex::from_serving_bundle(&entities, &serving_facts);
-        let geo_query = entity_index
-            .query("homes near Bommanahalli Metro Station")
-            .expect("named metro should resolve");
-
-        let evidence = serving_named_place_evidence(&serving_facts, "metro-home", &geo_query)
-            .into_iter()
-            .next()
-            .expect("direct metro fact should provide proof");
-
-        assert_eq!(evidence.fact_key, "nearby_metro_stations");
-        assert_eq!(evidence.place_entity_id, place_id);
-    }
-
-    #[test]
     fn specific_school_fact_beats_context_locality_distance_for_multi_place_query() {
         let properties = vec![
             local_property("school-fit", "Hoodi", "school-fit", 3, 20_000_000, 0, 0.2),
@@ -5817,6 +5449,13 @@ mod tests {
         ];
         let serving_facts = ServingFactIndex::from_records(
             vec![
+                serving_entity_fact(
+                    "place:google:gopalan-national-school",
+                    "place.category",
+                    FactValue::Text("school".to_string()),
+                    "Google",
+                    1.0,
+                ),
                 serving_entity_fact(
                     "society:school-fit",
                     "geo.latitude",
@@ -5912,6 +5551,17 @@ mod tests {
         );
 
         assert_eq!(results[0].card.id, "school-fit");
+        let witness = results[0]
+            .verified_matches
+            .iter()
+            .find(|matched| {
+                matched.target_entity_id.as_deref() == Some("place:google:gopalan-national-school")
+            })
+            .unwrap();
+        assert!(
+            witness.value.is_some_and(|distance| distance < 0.02),
+            "observed coordinates, not the 0.5 km display text, own the distance"
+        );
         let reasons = &results[0]
             .match_explanation
             .as_ref()
@@ -5920,7 +5570,7 @@ mod tests {
         assert!(
             reasons.iter().any(|reason| {
                 reason.fact_key == "nearby_schools"
-                    && reason.scoring_method == geo::NAMED_PLACE_FACT_SCORING_METHOD
+                    && reason.scoring_method == geo::HAVERSINE_SCORING_METHOD
                     && reason.display.contains("Gopalan National School")
             }),
             "specific school fact should be used ahead of locality distance: {:?}",
@@ -6125,6 +5775,20 @@ mod tests {
         )];
         let serving_facts = ServingFactIndex::from_records(
             vec![
+                serving_entity_fact(
+                    "society:near-office-park",
+                    "geo.latitude",
+                    FactValue::Numeric(12.9954),
+                    "Google",
+                    0.9,
+                ),
+                serving_entity_fact(
+                    "society:near-office-park",
+                    "geo.longitude",
+                    FactValue::Numeric(77.71),
+                    "Google",
+                    0.9,
+                ),
                 serving_entity_fact(
                     "place:google:example-office-park",
                     "place.category",
@@ -6398,6 +6062,20 @@ mod tests {
         let entities = vec![serving_entity(place_id, "place", "Bagmane Tech Park")];
         let serving_facts = ServingFactIndex::from_records(
             vec![
+                serving_entity_fact(
+                    "society:far-proven",
+                    "geo.latitude",
+                    FactValue::Numeric(13.0358),
+                    "Google",
+                    0.9,
+                ),
+                serving_entity_fact(
+                    "society:far-proven",
+                    "geo.longitude",
+                    FactValue::Numeric(77.65),
+                    "Google",
+                    0.9,
+                ),
                 serving_entity_fact(
                     place_id,
                     "place.category",

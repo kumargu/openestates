@@ -837,11 +837,6 @@ impl<'a> SearchEngine<'a> {
                 }
             }
             if let Some(query) = geo_query.as_mut() {
-                query.restrict_evidence_to_properties(
-                    &self.snapshot.properties,
-                    &self.snapshot.search_index,
-                    &spatial,
-                );
                 evidence_gaps.extend(unresolved_proximity_gaps(Some(query)));
                 geo_hit_samples.extend(sample_geo_hits(Some(query)));
             }
@@ -1694,7 +1689,7 @@ fn area_range_is_explicit_context(
 fn retain_relation_compatible_entities(
     query: &str,
     plan: &QueryPlan,
-    geo_query: Option<&geo::GeoSearchQuery<'_>>,
+    geo_query: Option<&geo::GeoSearchQuery>,
     entities: &mut Vec<ResolvedSearchEntity>,
 ) {
     let query_lower = query.to_ascii_lowercase();
@@ -1731,7 +1726,7 @@ fn unresolved_named_entity_clause(
     query: &str,
     plan: &QueryPlan,
     resolved_entities: &[ResolvedSearchEntity],
-    geo_query: Option<&geo::GeoSearchQuery<'_>>,
+    geo_query: Option<&geo::GeoSearchQuery>,
 ) -> Option<String> {
     for clause in &plan.clauses {
         if clause.requirement != query_plan::RelationRequirement::Hard {
@@ -1818,9 +1813,7 @@ fn entity_scope_is_fully_resolved(
         })
 }
 
-fn unresolved_proximity_gaps(
-    geo_query: Option<&geo::GeoSearchQuery<'_>>,
-) -> Vec<SearchEvidenceGap> {
+fn unresolved_proximity_gaps(geo_query: Option<&geo::GeoSearchQuery>) -> Vec<SearchEvidenceGap> {
     let Some(geo_query) = geo_query else {
         return Vec::new();
     };
@@ -2354,7 +2347,7 @@ fn sample_tantivy_hits(hits: &[TantivyRecallHit]) -> Vec<TantivyHitDiagnostic> {
         .collect()
 }
 
-fn sample_geo_hits(geo_query: Option<&geo::GeoSearchQuery<'_>>) -> Vec<TantivyHitDiagnostic> {
+fn sample_geo_hits(geo_query: Option<&geo::GeoSearchQuery>) -> Vec<TantivyHitDiagnostic> {
     geo_query.map_or_else(Vec::new, |query| {
         query
             .resolved_places()
@@ -3742,7 +3735,7 @@ mod tests {
     fn test_unresolved_named_entity_clause(
         query: &str,
         resolved_entities: &[ResolvedSearchEntity],
-        geo_query: Option<&geo::GeoSearchQuery<'_>>,
+        geo_query: Option<&geo::GeoSearchQuery>,
     ) -> Option<String> {
         let plan = query_plan::compile_query_plan(query);
         unresolved_named_entity_clause(query, &plan, resolved_entities, geo_query)

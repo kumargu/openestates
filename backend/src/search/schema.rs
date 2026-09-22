@@ -240,7 +240,6 @@ pub struct QualitativeNumericBound {
 pub enum NumericFactValueKind {
     #[default]
     Numeric,
-    DistanceKmInText,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]

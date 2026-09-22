@@ -285,7 +285,7 @@ async fn materialized_contract(carpet: bool) -> (tempfile::TempDir, Arc<AppState
     )
     .unwrap();
     assert_eq!(topology["geo_cell_count"], 1);
-    assert_eq!(topology["point_assignment_count"], 4);
+    assert_eq!(topology["point_assignment_count"], 5);
     assert_eq!(topology["market_coverage_count"], 1);
     assert_eq!(
         topology["ambiguous_point_cell_entity_ids"],
@@ -539,6 +539,10 @@ async fn materialized_contract(carpet: bool) -> (tempfile::TempDir, Arc<AppState
             };
             assert!(loaded.evidence_index.observation(&id).is_some());
             if feature["fact"]["factKey"] == "nearby_schools" {
+                assert_eq!(
+                    feature["fact"]["value"]["type"], "Numeric",
+                    "distance must be typed before serving"
+                );
                 let target = &feature["target"];
                 assert!(
                     target["entityId"]
@@ -921,8 +925,8 @@ fn source_inputs(
                 place_id: Some("greenwood-high".to_string()),
                 place_url: "https://maps.example/greenwood-high".to_string(),
                 distance_km: Some(1.2),
-                latitude: Some(12.9720),
-                longitude: Some(77.5960),
+                latitude: Some(first_project.latitude + 0.0108),
+                longitude: Some(first_project.longitude),
                 rating: Some(4.3),
                 review_count: Some(420),
                 primary_type: Some("school".to_string()),

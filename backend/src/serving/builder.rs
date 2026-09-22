@@ -84,6 +84,10 @@ impl ServingBundleBuilder {
         rera_evidence: Vec<ServingReraEvidenceRecord>,
         bundle_version: impl Into<String>,
     ) -> Result<ServingBundleManifest, ServingBundleError> {
+        facts = facts
+            .into_iter()
+            .map(super::measurements::normalize_distance_fact)
+            .collect();
         edges.retain(|edge| edge.edge_type != super::context_binding::CONTEXT_TARGET_EDGE);
         let bundle_version = bundle_version.into();
         let proof_snapshot_identity =

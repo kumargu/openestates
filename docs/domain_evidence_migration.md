@@ -23,7 +23,7 @@ Producers: sourced listing aggregates and serving facts. Consumers: property pro
 
 Validation: `/tmp/openestates-contracts-tests.log`: materializer vertical contract, 15 controlled semantic contracts and 22 journey API contracts pass. The pinned live promotion gate remains separate. `/tmp/openestates-contracts-check.log`: `cargo check` passes. The vertical contract opens all emitted references for BHK, numeric and spatial queries and asserts super built-up cannot establish carpet eligibility.
 
-## Remaining checkpoints
+## Checkpoint sequence (completed below)
 
 Inventory admission/reporting; public DTO schema generation and boundary validation; proof outcomes independent of UI destinations; snapshot-pinned context reads; bounded selected-home hydration; migrate the benchmark; real API browser journeys; consolidate obsolete tests and documentation; full lint/build/integration/hardcoding gates and screenshots.
 
@@ -148,3 +148,27 @@ The efficiency fixture now supplies explicit society/area records and membership
 Source-panel text is no longer parsed to infer distances for ordering. Observed collections sort by evidence confidence and text; typed context owns spatial distance. The existing nearby test preserves both values and their source attribution with the new deterministic order. Structured livability signals now require subject-bound observations, matching community evidence admission. Archived Waterford source-panel rows without receipts remain withheld; the renderer fallback test checks official-record navigation, reviews and photos. Actual fact/receipt completeness is covered by the required materialized API journey.
 
 Engineering guidance now separates domain/presentation ownership, disallows embedded fallbacks, retains the source-research gate, and treats observation timestamps only as provenance. Area Tracker restoration remains separate product work.
+
+## Checkpoint 11: typed spatial measurements and one evaluator
+
+A final chain audit found distance parsing and named-place matching from display text still active in scoring. The vertical contract reproduced an untyped nearby measurement (`/tmp/openestates-contracts-typed-distance-baseline.log`). The existing nearby-category config now drives offline normalization to numeric kilometres, preserving original text for display and the original observation identity. Ambiguous, negative or unitless measurements remain unadmitted. Computed proximity rows carry typed distances too.
+
+Deleted runtime distance-text parsing, display-name receipt matching, the separate Haversine reason constructor and the recall-owned evidence mask. Named-place scores and reasons project from the predicate evaluator's witnessed distance. Four tests solely exercising the retired name/text receipt generator were removed; category separation, named distance bounds and multi-anchor behavior remain covered by the frozen semantics and materialized/router contracts. Source-unit parsing coverage moved to the offline normalizer and adds negative/ambiguous-input rejection. Existing ranking fixtures now supply actual coordinate observations; result and ordering assertions remain. The source-specific proof-precedence assertion now expects the shared spatial evaluator.
+
+The 16-query pre-cutover audit replay resolved all 398 emitted receipts (`/tmp/openestates-contracts-live-probe.log`). The isolated candidate passed validation with 149 properties, 28,422 facts and zero issues. Rebuild and the same replay are repeated after typed spatial cutover; the original workspace and lake pointers remain untouched.
+
+The agreed single-evaluator correction changes one controlled ordering expectation (`MULTI-OR-008`, “Near Hoodi Metro, 2BHK or 3BHK”): Dual Place precedes Balanced Commute. Inspection of retained witnesses found distances of 1.552560 km and 2.328852 km respectively, both at confidence 1.0, derived from the same observed metro coordinates and each society’s observed coordinates. Ranking now consumes those witnesses rather than the retired independent display-text path. Membership, branch membership, constraints and every other expected position remain unchanged. The diagnostic artifact is `/tmp/openestates-contracts-order-witness.log`; this is an explicit correction to evidence-authoritative ranking, not a relaxed ordering assertion.
+
+The materialized school fixture also had contradictory coordinates: its declared 1.2 km school was approximately 16 km away. Its source coordinates now place it approximately 1.2 km from the society; the additional sourced area containment increases the topology point-assignment assertion from four to five. The contract requires the promoted nearby value to be numeric.
+
+## Final verification and rollout boundary
+
+Final Rust gate: 660 library tests, 15 frozen semantic contracts (67 buyer scenarios), 24 journey API contracts, 12 efficiency contracts, three serving-bundle contracts, two recommendation contracts and the real source-materialized vertical contract all pass. The ordinary run explicitly excludes the pinned live test; its separate invocation also passed. Both pinned-live desktop/mobile browser journeys pass. Both source-materialized desktop/mobile journeys pass with refreshed screenshots, including selected-home reads, official documents, comparison, return ordering and a real snapshot transition.
+
+Frontend validation: 306 tests, lint, type checking and production build pass; 36 search-browser journeys and the captured-facts renderer case pass. Generated schema/type drift, all-target Clippy, 22 Python audit/benchmark tests and `git diff --check` pass. The production-search hardcoding gate reports zero findings; this is not a claim that the broader review-aid scan is empty. Existing Vite map-chunk and macOS linker-size warnings remain nonblocking.
+
+The rebuilt isolated candidate `domain-evidence-contract-20260922-typed` validates with 149 properties, 2,292 entities, 28,422 facts, 27,067 search-metadata rows, 12,323 edges and 558 media records. All 398 emitted references from the same 16-query audit replay resolve; the durable report is [live-receipt-replay.json](verification/domain-evidence/live-receipt-replay.json). Unsupported capability bindings remain explicit exclusions in the internal validation report. No observations were invented to admit them.
+
+UI critic review of the refreshed desktop/mobile captures found no new blocker: measurement bases remain visible in comparison; generic receipt disclosure remains usable with external map rendering unavailable; snapshot recovery offers one next action. Existing native links, controls and disclosure preserve hover/focus/touch/reduced-motion behavior. Screenshots are in `docs/verification/domain-evidence/`.
+
+This is a coordinated pre-production breaking contract/artifact change. Deploy API and frontend together and rebuild serving artifacts before switching their catalog pointer. The isolated candidates and pinned promotion checks validate that cutover; this work does not deploy services or change the original lake pointer. The original checkout and unrelated work are untouched. Area Tracker restoration remains separately deferred. Temporary rematerialization/probe executables were removed from the branch after verification.

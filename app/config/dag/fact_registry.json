@@ -3067,7 +3067,7 @@
           "unit": "km"
         }
       ],
-      "value_kind": "distance_km_in_text",
+      "value_kind": "numeric",
       "aggregation": "minimum",
       "proof_sources": ["Google"],
       "scoring_method": "serving-nearby-distance"
