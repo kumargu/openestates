@@ -132,3 +132,19 @@ Producers: admitted property attributes and contextual facts. Consumers: catalog
 Replaced the retired smoke script with real HTTP journey, bounded detail/context/batch, receipt, resume, revision and stale-snapshot assertions. Restored configured geographical spreading in the frontend context projector while preserving additive exact-proof focus. The existing presenter contract now covers that behavior.
 
 Verification: 667 library, 15 frozen semantic, 24 journey, two recommendation and the two-snapshot materializer contract pass. Frontend 306 tests, type checking, lint and build pass. Real API smoke passes with bounded hydration and resolved identity receipts (`/tmp/openestates-contracts-api-smoke.log`). Generated schemas are refreshed.
+
+## Checkpoint 10: materialized context targets
+
+The existing source-to-Parquet-to-router contract now asserts a canonical school target, coordinates and geometry receipts. It reproduced the observed null target (`/tmp/openestates-contracts-context-binding-baseline.log`). Direct Parquet inspection found the subject relation, place URL identity and observed coordinates; this was an architecture/proof-binding gap, not missing source data. Runtime alias hydration made one provider identity appear ambiguous.
+
+The serving builder now materializes content-addressed context-target edges from the existing fact-registry bindings, actual observations and canonical provider relationships. Ambiguous canonical targets remain unbound. Rebuilds replace these derivations. The runtime consumes those edges; the request-time source-URL and linked-fact joins are deleted. The same materializer prepares journey fixtures. Both materialized snapshots and all 24 journey API contracts pass (`/tmp/openestates-contracts-context-binding-check.log`).
+
+## Final contract and fixture reconciliation
+
+The agreed removal of name-derived identity requires two identifier-only changes in the pinned live scenario: Godrej Air remains first (`discovered-rera-c1af3dd6c1581e3e-3bhk`), Brigade Lakefront Crimson remains second (`discovered-rera-ccfa353d22484c7b-3bhk`). These canonical society IDs were read directly from the immutable pinned entities Parquet. Query, BHK, ordering, school and proof expectations are unchanged; no alias lookup or name recovery was added to runtime. The original pinned bundle remains immutable. The separately invoked live contract passes with no ignored cases.
+
+The efficiency fixture now supplies explicit society/area records and membership edges and compiles the same query before evaluating candidates. It preserves its 12-result, pruning and latency assertions. This replaces its retired assumption that recall alone proves area membership. All 12 efficiency contracts and all three serving-bundle contracts pass.
+
+Source-panel text is no longer parsed to infer distances for ordering. Observed collections sort by evidence confidence and text; typed context owns spatial distance. The existing nearby test preserves both values and their source attribution with the new deterministic order. Structured livability signals now require subject-bound observations, matching community evidence admission. Archived Waterford source-panel rows without receipts remain withheld; the renderer fallback test checks official-record navigation, reviews and photos. Actual fact/receipt completeness is covered by the required materialized API journey.
+
+Engineering guidance now separates domain/presentation ownership, disallows embedded fallbacks, retains the source-research gate, and treats observation timestamps only as provenance. Area Tracker restoration remains separate product work.

@@ -22,6 +22,10 @@ OpenEstates is not trying to win by having the biggest pile of listings. The wed
 
 ## 0. Before Writing Any Code
 
+### Data-first source research gate
+
+Before adding crawler filters, identity rules, source-specific fallbacks or DAG branches, compare raw records for 20–30 representative societies across the relevant sources. Preserve source IDs, raw names, coordinates, polygons, project/phase relationships, missing fields and ambiguous candidates in a research artifact. Classify the patterns before designing the smallest generic rule. Do not infer identity from exact names, one-record assumptions or a preferred OSM tag. Keep project-specific exceptions out of production logic.
+
 **Before shipping buyer-facing UI**, also run `.claude/skills/ui-critic.md` — a human product-design pass for sticky-note cards, heading clutter, duplicate facts, agent-jargon copy, and fake page jumps.
 
 ### Buyer-facing UI / ThreeUI research gate
@@ -69,18 +73,18 @@ The product should make choosing easier, not make browsing endless. Design every
 - which tradeoffs still matter
 
 ### Intent search is the moat
-Search should understand soft intent such as "quiet 3BHK near schools under 2.5Cr" and map it to structured dimensions: price, BHK, society, area, commute, school access, noise, traffic, builder quality, RERA, freshness, and source confidence.
+Search should understand soft intent such as "quiet 3BHK near schools under 2.5Cr" and map it to structured dimensions: price, BHK, society, area, commute, school access, noise, traffic, builder quality, RERA, and source confidence.
 
 Domain vocabulary is expected, but it belongs in the ontology/config layer. Terms such as `near`, `acres`, `open space`, `hostel`, `tech park`, `graveyard`, or `lake buffer` should map to structured dimensions, fact keys, units, scoring hints, and source priorities through `app/config/dag/`. The search engine should rank generic evidence coverage and scores for those dimensions; it should not grow one-off branches for every new buyer phrase.
 
 ### Receipts beat claims
-Never show confident product language unless it is backed by DAG facts or a clearly marked derived computation from DAG facts. A good result explains itself with source lineage, freshness, and confidence.
+Never show confident product language unless it is backed by DAG facts or a clearly marked derived computation from DAG facts. A good result explains itself with source lineage, observation metadata, and confidence.
 
 ### One signal, one primary surface
 Do not show the same buyer signal repeatedly in different words. A fact should have a clear surface hierarchy:
 - property/result tiles show the shortest useful distinction, such as `Google 4.1`, `Delivered`, `Est. 7 yrs old`, `Price proof`
 - detail pages explain what the signal means for the decision
-- evidence/source panels show the receipt, lineage, freshness, and confidence
+- evidence/source panels show the receipt, lineage, observation metadata, and confidence
 
 Before adding a new chip, card, shelf, or detail block, check whether the same idea is already represented elsewhere. Merge, replace, or drill down instead of duplicating. The product should feel layered, not repetitive.
 
@@ -170,7 +174,7 @@ Do not treat cache output as source truth.
 Backend endpoints should serve structured views: ranked results, property details, proof summaries, collections, and plan inputs. Handlers should assemble and map data, not perform crawling, enrichment, or ad hoc business logic.
 
 ### Search quality must be measurable
-Every new discovery behavior should be testable with fuzzy/user-like queries and expected evidence. Track recall, ranking reasons, source freshness, and whether useless or stale facts leak into responses.
+Every new discovery behavior should be testable with fuzzy/user-like queries and expected evidence. Track recall, ranking reasons, evidence eligibility, and whether unsupported facts leak into responses. Observation times are provenance, not eligibility rules.
 
 ### Executable product scenarios are the product model
 
@@ -467,7 +471,7 @@ Rules:
   flows without an explicit product/security decision.
 - Search should never invent or live-discover facts.
 - User-facing UI should not show raw missing/gap sentences. Use confidence,
-  proof strength, and source freshness instead.
+  proof strength and source attribution instead.
 - Confidence follows explicit source and evidence policy. Observation and ingestion timestamps never determine confidence, age, eligibility, ranking or current state. They remain provenance/display metadata.
 
 Every search either returns good local data or records the evidence needed to
@@ -491,7 +495,8 @@ POST /api/search/resume
 POST /api/search/proofs/resolve
 POST /api/properties/batch
 GET  /api/properties/{id}
-GET  /api/societies
+GET  /api/properties/{id}/context
+POST /api/properties/context/batch
 GET  /api/admin/data-health
 ```
 

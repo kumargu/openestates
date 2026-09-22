@@ -84,6 +84,7 @@ impl ServingBundleBuilder {
         rera_evidence: Vec<ServingReraEvidenceRecord>,
         bundle_version: impl Into<String>,
     ) -> Result<ServingBundleManifest, ServingBundleError> {
+        edges.retain(|edge| edge.edge_type != super::context_binding::CONTEXT_TARGET_EDGE);
         let bundle_version = bundle_version.into();
         let proof_snapshot_identity =
             serving_snapshot_identity(&entities, &facts, &search_metadata, &edges, &rera_evidence)?;
@@ -243,6 +244,13 @@ impl ServingBundleBuilder {
         facts.extend(derived.facts);
         search_metadata.extend(derived.search_metadata);
         edges.extend(derived.edges);
+        super::context_binding::materialize_context_bindings(
+            &entities,
+            &facts,
+            &mut edges,
+            &proof_snapshot_identity,
+        )
+        .map_err(ServingBundleError::InvalidRecords)?;
         let eligibility = load_serving_eligibility()?;
         let super::eligibility::EligibleServingRecords {
             entities,

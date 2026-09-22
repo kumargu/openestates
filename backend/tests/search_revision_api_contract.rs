@@ -1726,6 +1726,13 @@ fn test_bundle_with_options(
             ));
         }
     }
+    backend::serving::context_binding::materialize_context_bindings(
+        &entities,
+        &facts,
+        &mut edges,
+        bundle_version,
+    )
+    .unwrap();
     let fact_index = ServingFactIndex::from_records(facts.clone(), Vec::new());
     let evidence_index =
         backend::serving::ServingEvidenceIndex::from_records(fact_index.all_facts(), &edges)

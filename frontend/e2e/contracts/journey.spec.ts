@@ -1,4 +1,13 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page, type TestInfo } from "@playwright/test";
+
+async function capture(page: Page, info: TestInfo, name: string) {
+  await page.evaluate(async () => {
+    const animations = document.getAnimations().filter(animation =>
+      animation.effect?.getComputedTiming().iterations !== Infinity);
+    await Promise.all(animations.map(animation => animation.finished.catch(() => undefined)));
+  });
+  await page.screenshot({ path: info.outputPath(name) });
+}
 
 const api = "http://127.0.0.1:4016";
 
@@ -15,17 +24,17 @@ test("materialized evidence survives search, detail, selected-home reads and ret
   const cards = page.locator(".landing-featured__results .catalog-card__link");
   await expect(cards.first()).toBeVisible();
   const links = await cards.evaluateAll((elements) => elements.map((element) => new URL((element as HTMLAnchorElement).href).pathname));
-  await page.screenshot({ path: info.outputPath("search-resting.png") });
+  await capture(page, info, "search-resting.png");
   const selected = await (await request.get(`${api}/api/properties/${links[0].split("/").pop()}`)).json();
   const selectedPrice = `₹${(selected.property.price / 10_000_000).toFixed(2)}Cr`;
   const detailHref = await cards.first().getAttribute("href");
   await cards.first().click();
   await expect(page.locator("details.property-search-match")).toBeVisible();
   await expect(page.getByText(/receipt.*expired/i)).toHaveCount(0);
-  await page.screenshot({ path: info.outputPath("receipt-resting.png") });
+  await capture(page, info, "receipt-resting.png");
   await page.locator("details.property-search-match summary").click();
   await expect(page.locator("details.property-search-match a").first()).toHaveAttribute("href", /^https:\/\/listings\.example\//);
-  await page.screenshot({ path: info.outputPath("receipt-open.png") });
+  await capture(page, info, "receipt-open.png");
   await page.getByRole("link", { name: "EMI Plan", exact: true }).click();
   await expect(page.getByRole("region", { name: "Loan repayment assumptions" })).toBeVisible();
   await expect(page.getByRole("heading", { level: 1 })).toContainText(selectedPrice);
@@ -54,7 +63,7 @@ test("materialized evidence survives search, detail, selected-home reads and ret
   await expect(comparedHomes.first()).toContainText("super built-up");
   const comparedLinks = await comparedHomes.locator("a").evaluateAll((elements) => elements.map((element) => new URL((element as HTMLAnchorElement).href).pathname));
   expect(new Set(comparedLinks)).toEqual(new Set(links.slice(0, 2)));
-  await page.screenshot({ path: info.outputPath("compare-resting.png") });
+  await capture(page, info, "compare-resting.png");
   await page.getByRole("link", { name: /Back to results/i }).click();
   await expect.poll(() => cards.evaluateAll((elements) => elements.map((element) => new URL((element as HTMLAnchorElement).href).pathname))).toEqual(links);
   expect(reads.filter((path) => path === "/api/properties")).toEqual([]);
@@ -76,7 +85,7 @@ test("materialized evidence survives search, detail, selected-home reads and ret
   await page.goto(detailHref!);
   await expect(page.getByRole("heading", { name: "This evidence changed since your search." })).toBeVisible();
   await expect(page.locator("details.property-search-match")).toHaveCount(0);
-  await page.screenshot({ path: info.outputPath("snapshot-changed.png") });
+  await capture(page, info, "snapshot-changed.png");
   await page.getByRole("link", { name: "Search again", exact: true }).click();
   await expect(cards.first()).toBeVisible();
   const updatedSearch = await (await request.get(`${api}/api/search?q=3BHK`)).json();

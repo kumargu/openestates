@@ -538,7 +538,20 @@ async fn materialized_contract(carpet: bool) -> (tempfile::TempDir, Arc<AppState
                 panic!("context fact must retain its observation");
             };
             assert!(loaded.evidence_index.observation(&id).is_some());
-
+            if feature["fact"]["factKey"] == "nearby_schools" {
+                let target = &feature["target"];
+                assert!(
+                    target["entityId"]
+                        .as_str()
+                        .is_some_and(|id| id.starts_with("place:canonical:")),
+                    "source identity must bind the canonical school: {target}"
+                );
+                assert!(
+                    target["point"].is_array(),
+                    "sourced school coordinates must survive"
+                );
+                assert!(!target["geometryEvidence"].as_array().unwrap().is_empty());
+            }
         }
         let measurement = &detail["property"]["area_measurement"];
         assert_eq!(

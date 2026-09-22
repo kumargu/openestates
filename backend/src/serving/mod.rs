@@ -6,6 +6,7 @@
 
 pub mod aliases;
 pub mod builder;
+pub mod context_binding;
 pub mod coordinates;
 mod eligibility;
 pub mod evidence;

@@ -274,7 +274,7 @@ Each phase has **deliverables**, **acceptance criteria**, and **storage checks**
 
 1. Export `registry.rs` → `app/config/dag/asset_registry.json` ✅
 2. Add `backend/src/dag_config/` module ✅
-3. `openestates_registry()` with embedded fallback ✅
+3. `openestates_registry()` loads validated versioned config; embedded fallback copies are retired.
 4. Reddit skip → `crawl_policies/reddit_threads_daily.json` ✅
 5. Wire `discovery_home.json` + `evidence_sections.json` in routes ✅
 
@@ -541,10 +541,10 @@ match preference {
 
 **Work:**
 
-1. Rust `EntityContextComposer`: walk from anchor (`society:*` or `property:*`) using `app/config/ui/property-context.json` traversal hops (baked into bundle manifest or startup config snapshot)
-2. Emit `clauses[]` then `summary_paragraph` via deterministic `display_template` + hop templates (no LLM on hot path)
-3. `GET /api/entities/{entity_id}/context` and `GET /api/properties/{id}/context`
-4. React: generic renderers by `presentation.variant`; property page consumes `summary` + `surfaces[]`
+1. Materialize typed context bindings offline using the domain fact registry. Rust projects bounded facts, canonical targets and durable evidence from the pinned snapshot.
+2. Return domain facts and relationships. Presentation config controls section labels and navigation; no layout identity enters evidence.
+3. `GET /api/properties/{id}/context` and bounded `POST /api/properties/context/batch`
+4. React projects domain context through `app/config/ui/property-context.json`; exact proof focus adds to the normal detail payload.
 5. Enrichment flywheel: traversal exposes missing facts on shared nodes (road, area) → `enrichment_targets.json`
 
 **Acceptance:**

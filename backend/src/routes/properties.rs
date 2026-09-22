@@ -992,10 +992,9 @@ fn serving_multi_source_item(
         }
     }
     values.sort_by(|left, right| {
-        nearby_distance_key(&left.value)
-            .partial_cmp(&nearby_distance_key(&right.value))
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then_with(|| right.confidence_pct.cmp(&left.confidence_pct))
+        right
+            .confidence_pct
+            .cmp(&left.confidence_pct)
             .then_with(|| left.value.cmp(&right.value))
     });
     values.dedup_by(|left, right| left.value == right.value && left.source_url == right.source_url);
@@ -1057,20 +1056,6 @@ fn serving_multi_source_item(
     })
 }
 
-fn nearby_distance_key(value: &str) -> f64 {
-    let Some(open_index) = value.find('(') else {
-        return f64::INFINITY;
-    };
-    let tail = &value[open_index + 1..];
-    let Some(km_index) = tail.find(" km") else {
-        return f64::INFINITY;
-    };
-    tail[..km_index]
-        .trim()
-        .parse::<f64>()
-        .unwrap_or(f64::INFINITY)
-}
-
 fn collect_community_evidence_records(
     projection: Option<&SocietyFactProjection<'_>>,
 ) -> Vec<crate::community::CommunityEvidenceRecord> {
@@ -1114,19 +1099,25 @@ fn collect_structured_livability_facts(
                     .iter()
                     .any(|entity_id| {
                         facts.entity(entity_id).is_some_and(|rows| {
-                            rows.facts
-                                .iter()
-                                .any(|serving_fact| serving_fact.fact_key == fact.key)
+                            rows.facts.iter().any(|serving_fact| {
+                                serving_fact.fact_key == fact.key
+                                    && eligible_source_observation(serving_fact).is_some()
+                            })
                         })
                     })
             })
         } else {
             projection
                 .and_then(|projection| projection.latest_record(&fact.key))
+                .and_then(eligible_source_observation)
                 .is_some()
                 || serving_facts
                     .and_then(|facts| facts.entity(entity_id))
-                    .is_some_and(|rows| rows.facts.iter().any(|row| row.fact_key == fact.key))
+                    .is_some_and(|rows| {
+                        rows.facts.iter().any(|row| {
+                            row.fact_key == fact.key && eligible_source_observation(row).is_some()
+                        })
+                    })
         };
         if has_fact {
             signals.push(StructuredFactSignal {
@@ -4243,12 +4234,12 @@ mod serving_state_tests {
         assert_eq!(
             nearby.items[0].values,
             vec![
-                "Greenwood High (1.2 km, 4.3 rating)".to_string(),
                 "Far School (4.0 km, 4.5 rating)".to_string(),
+                "Greenwood High (1.2 km, 4.3 rating)".to_string(),
             ]
         );
         assert_eq!(
-            nearby.items[0].attributions[0].source_url.as_deref(),
+            nearby.items[0].attributions[1].source_url.as_deref(),
             Some("https://maps.google.com/greenwood")
         );
         assert!(nearby.missing.is_empty());

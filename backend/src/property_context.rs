@@ -2,39 +2,11 @@
 use crate::knowledge::FactValue;
 use crate::models::{KgEntityRefs, Property};
 use crate::search::proof::ProofResolution;
+use crate::serving::context_binding::{config, CONTEXT_TARGET_EDGE};
 use crate::serving::{EvidenceRef, LoadedServingBundle, ServingFactRecord};
 use geojson::{GeoJson, Value as GeoJsonValue};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::OnceLock;
-
-#[derive(Debug, Deserialize)]
-struct ContextConfig {
-    maximum_features: usize,
-    geometry_fact_key: String,
-    place_url_fact_key: String,
-    attribute_fact_keys: Vec<String>,
-    bindings: BTreeMap<String, ContextBinding>,
-}
-#[derive(Debug, Deserialize)]
-struct ContextBinding {
-    linked_entity_fact_keys: Vec<String>,
-    attribute_fact_keys: Vec<String>,
-}
-fn config() -> &'static ContextConfig {
-    static CONFIG: OnceLock<ContextConfig> = OnceLock::new();
-    CONFIG.get_or_init(|| {
-        #[derive(Deserialize)]
-        struct Registry {
-            property_context: ContextConfig,
-        }
-        let registry: Registry =
-            crate::dag_config::load_json(&crate::dag_config::dag_root().join("fact_registry.json"))
-                .expect("fact registry must bind property context");
-        assert!(registry.property_context.maximum_features > 0);
-        registry.property_context
-    })
-}
 
 #[derive(schemars::JsonSchema, Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -148,24 +120,36 @@ fn entity_view(bundle: &LoadedServingBundle, entity_id: &str) -> Option<ContextE
 /// Rebuildable lookup over promoted provider identities; created once per snapshot.
 #[derive(Debug, Clone)]
 pub struct ContextLookup {
-    url_entities: BTreeMap<String, BTreeSet<String>>,
+    targets: BTreeMap<(String, String, String), BTreeSet<String>>,
 }
 impl ContextLookup {
     pub fn from_bundle(bundle: &LoadedServingBundle) -> Self {
-        let mut url_entities = BTreeMap::<String, BTreeSet<String>>::new();
-        for (id, rows) in bundle.fact_index.rows() {
-            for fact in &rows.facts {
-                if fact.fact_key == config().place_url_fact_key {
-                    if let FactValue::Text(url) = &fact.value {
-                        url_entities
-                            .entry(url.clone())
-                            .or_default()
-                            .insert(id.to_string());
-                    }
+        let mut targets = BTreeMap::<_, BTreeSet<String>>::new();
+        for edge in &bundle.edges {
+            if edge.edge_type != CONTEXT_TARGET_EDGE {
+                continue;
+            }
+            let Some(derivation) = &edge.derivation else {
+                continue;
+            };
+            for input in &derivation.input_evidence {
+                if input.subject_entity_id != edge.from_entity_id {
+                    continue;
                 }
+                let crate::serving::EvidenceId::Observation(id) = &input.evidence_id else {
+                    continue;
+                };
+                targets
+                    .entry((
+                        edge.from_entity_id.clone(),
+                        derivation.metric.clone(),
+                        id.as_str().to_string(),
+                    ))
+                    .or_default()
+                    .insert(edge.to_entity_id.clone());
             }
         }
-        Self { url_entities }
+        Self { targets }
     }
 }
 
@@ -194,42 +178,18 @@ pub fn build_property_context(
         let Some(view) = fact_view(bundle, fact) else {
             continue;
         };
-        let linked = rows
-            .into_iter()
-            .flat_map(|rows| &rows.facts)
-            .filter(|candidate| {
-                binding
-                    .linked_entity_fact_keys
-                    .contains(&candidate.fact_key)
+        let target_id = fact
+            .observation
+            .as_ref()
+            .and_then(|observation| {
+                lookup.targets.get(&(
+                    fact.entity_id.clone(),
+                    fact.fact_key.clone(),
+                    observation.observation_id.as_str().to_string(),
+                ))
             })
-            .filter(|candidate| {
-                candidate
-                    .observation
-                    .as_ref()
-                    .zip(fact.observation.as_ref())
-                    .is_some_and(|(left, right)| left.observation_id == right.observation_id)
-                    || fact
-                        .source_url
-                        .as_ref()
-                        .is_some_and(|url| candidate.source_url.as_ref() == Some(url))
-            })
-            .filter_map(|candidate| match &candidate.value {
-                FactValue::Text(id) => Some(id.as_str()),
-                _ => None,
-            })
-            .collect::<BTreeSet<_>>();
-        let target_id = if linked.len() == 1 {
-            linked.first().copied()
-        } else {
-            None
-        }
-        .or_else(|| {
-            fact.source_url
-                .as_deref()
-                .and_then(|url| lookup.url_entities.get(url))
-                .filter(|ids| ids.len() == 1)
-                .and_then(|ids| ids.first().map(String::as_str))
-        });
+            .filter(|ids| ids.len() == 1)
+            .and_then(|ids| ids.first().map(String::as_str));
         let target = target_id.and_then(|id| entity_view(bundle, id));
         let attribute_keys = binding
             .attribute_fact_keys
@@ -300,7 +260,7 @@ pub fn build_property_context(
     PropertyContext {
         contract_version: 1,
         snapshot_identity: bundle.manifest.proof_snapshot_identity().to_string(),
-        property_id: property.id.clone(),
+        property_id: property.id.as_str().to_string(),
         entity_refs: refs,
         anchor,
         features,

@@ -295,15 +295,11 @@ Per fact:
     "strategy": "prefer_highest_confidence",
     "source_priority": ["google", "reddit", "area_plan"],
     "never_default": true
-  },
-  "ui_surfaces": {
-    "search": true,
-    "tile_chip": true,
-    "livability_brief_lens": "risk",
-    "community_pulse": false
   }
 }
 ```
+
+Presentation policy belongs in `app/config/ui/`: section placement, tile visibility, evidence destinations and map layers consume these domain facts. Presentation changes do not change proof identity or domain eligibility.
 
 **Critical rule:** `never_default: true` means missing stays missing. No `0.5` placeholders in `data_loader.rs`.
 
