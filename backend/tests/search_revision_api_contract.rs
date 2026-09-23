@@ -33,6 +33,65 @@ use tokio::sync::{mpsc, RwLock};
 use tower::ServiceExt;
 
 #[tokio::test]
+async fn discovery_router_has_no_retired_feature_endpoints() {
+    let app = test_app().await;
+    for (method, path) in [
+        (Method::POST, "/api/interests"),
+        (Method::GET, "/api/shortlist"),
+        (
+            Method::GET,
+            "/api/properties/fixture-home-3bhk/interests/count",
+        ),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(method)
+                    .uri(path)
+                    .extension(ConnectInfo(SocketAddr::from(([192, 0, 2, 230], 41000))))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+}
+
+#[tokio::test]
+async fn sitemap_uses_the_current_serving_snapshot() {
+    let (app, state) = test_app_with_state().await;
+    for replaced in [false, true] {
+        if replaced {
+            install_runtime_without_second_home(&state, "sitemap-next-snapshot");
+        }
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/sitemap.xml")
+                    .extension(ConnectInfo(SocketAddr::from(([192, 0, 2, 231], 41000))))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let xml = String::from_utf8(
+            to_bytes(response.into_body(), 1024 * 1024)
+                .await
+                .unwrap()
+                .to_vec(),
+        )
+        .unwrap();
+        assert!(xml.contains("/property/fixture-home-3bhk"));
+        assert_eq!(xml.contains("/property/second-home-3bhk"), !replaced);
+        assert_eq!(xml.contains("/property/fresh-home-3bhk"), replaced);
+    }
+}
+
+#[tokio::test]
 async fn named_identity_retains_a_durable_witness_after_recall() {
     let app = test_app().await;
     let search = get_search(&app, "3BHK in Fixture Home", 221).await;
@@ -64,6 +123,48 @@ async fn named_identity_retains_a_durable_witness_after_recall() {
         identity_receipts > 0,
         "named identity was admitted without a durable witness"
     );
+}
+
+#[test]
+fn inventory_admission_requires_listing_evidence() {
+    let subject = "society:fixture-home";
+    let property = test_property(
+        "fixture-home-3bhk",
+        "Fixture Home",
+        "fixture-home",
+        10_000_000,
+    );
+    let mut valid = topology_fact(subject, "listing_3bhk", FactValue::Text(
+        json!({"listing_type":"sale","bhk":3,"price":10_000_000,"area_sqft":1000,"area_type":"built-up"}).to_string(),
+    ));
+    valid.source_type = "ExternalListing".into();
+    let selected = |fact: ServingFactRecord| {
+        backend::search::InventoryOption::from_serving_observation(
+            &property,
+            subject,
+            &ServingFactIndex::from_records(vec![fact], vec![]),
+            "admission",
+        )
+    };
+    assert!(selected(valid.clone()).is_some());
+    for (key, source, confidence) in [
+        ("unrelated_payload", "ExternalListing", 0.9),
+        ("listing_source_url_3bhk", "ExternalListing", 0.9),
+        ("listing_3bhk", "UnverifiedSource", 0.9),
+        ("listing_3bhk", "ExternalListing", 0.0),
+        ("listing_3bhk", "ExternalListing", -0.1),
+        ("listing_3bhk", "ExternalListing", f32::NAN),
+        ("listing_3bhk", "ExternalListing", 1.1),
+    ] {
+        let mut fact = valid.clone();
+        fact.fact_key = key.into();
+        fact.source_type = source.into();
+        fact.confidence = confidence;
+        assert!(
+            selected(fact).is_none(),
+            "admitted {key}/{source}/{confidence}"
+        );
+    }
 }
 
 #[test]
@@ -109,6 +210,14 @@ fn catalog_membership_preserves_missing_negative_and_row_order_semantics() {
     conflicting.derivation = None;
     edges.push(conflicting);
     let ambiguous = IdentityEvaluationIndex::from_records(&bundle.entities, &edges, snapshot);
+    for target in ["area:hoodi", "area:sarjapur"] {
+        assert_eq!(
+            ambiguous
+                .evaluate("society:second-home", target, snapshot)
+                .state,
+            EvaluationState::Unknown
+        );
+    }
     assert_eq!(
         ambiguous
             .evaluate("society:second-home", "area:cell:hoodi", snapshot)
@@ -116,6 +225,48 @@ fn catalog_membership_preserves_missing_negative_and_row_order_semantics() {
             .state,
         EvaluationState::Unknown
     );
+
+    let membership = bundle
+        .edges
+        .iter()
+        .find(|edge| {
+            edge.from_entity_id == "society:second-home" && edge.edge_type == "in_market_locality"
+        })
+        .unwrap();
+    for (source, confidence) in [
+        ("OpenStreetMap", 0.0),
+        ("OpenStreetMap", -0.1),
+        ("OpenStreetMap", f32::NAN),
+        ("OpenStreetMap", 1.1),
+        ("UnverifiedSource", 1.0),
+    ] {
+        let mut weak = membership.clone();
+        weak.source_type = source.into();
+        weak.confidence = confidence;
+        let weak_index = IdentityEvaluationIndex::from_records(&bundle.entities, &[weak], snapshot);
+        for target in ["area:hoodi", "area:sarjapur"] {
+            let result = weak_index.evaluate("society:second-home", target, snapshot);
+            assert_eq!(result.state, EvaluationState::Unknown);
+            assert_eq!(result.negated().state, EvaluationState::Unknown);
+        }
+    }
+
+    // A sourced boundary and a market locality are independent identity scopes.
+    let mut boundary = membership.clone();
+    boundary.edge_type = "in_area".into();
+    boundary.to_entity_id = "area:sarjapur".into();
+    boundary.derivation = None;
+    let mut scoped_edges = bundle.edges.clone();
+    scoped_edges.push(boundary);
+    let scoped = IdentityEvaluationIndex::from_records(&bundle.entities, &scoped_edges, snapshot);
+    for target in ["area:hoodi", "area:sarjapur"] {
+        assert_eq!(
+            scoped
+                .evaluate("society:second-home", target, snapshot)
+                .state,
+            EvaluationState::Satisfied
+        );
+    }
 }
 
 #[tokio::test]
@@ -1458,12 +1609,7 @@ async fn test_app_fixture_with_identity(
     let properties = test_properties(false);
     let search_index =
         SearchIndex::build_with_serving_graph(&properties, &bundle.entities, &bundle.edges);
-    let runtime = SearchRuntimeSnapshot::new(
-        bundle.clone(),
-        properties.clone(),
-        Vec::new(),
-        search_index.clone(),
-    );
+    let runtime = SearchRuntimeSnapshot::new(bundle, properties, Vec::new(), search_index);
     let (search_event_tx, search_event_rx) = mpsc::channel(8);
     let state = Arc::new(AppState {
         execution: ExecutionLanes::current(),
@@ -1478,17 +1624,11 @@ async fn test_app_fixture_with_identity(
         property_catalog_cache: tokio::sync::Mutex::new(None),
         search_event_tx,
         search_log_dropped_count: AtomicU64::new(0),
-        properties: RwLock::new(properties),
-        search_index: RwLock::new(search_index),
         recommendation_cache: RwLock::new(HashMap::new()),
 
-        societies: RwLock::new(Vec::new()),
-        discovery_config: backend::discovery::load_discovery_config(),
         map_overlays: Arc::new(backend::routes::map_overlays::CityMapOverlays::default()),
         project_root: root,
         process_started_at: Utc::now(),
-        interest_counter: AtomicU64::new(0),
-        interest_write_lock: tokio::sync::Mutex::new(()),
     });
     (
         build_app_router_with_lake(state.clone(), lake),
@@ -1542,7 +1682,7 @@ fn test_bundle_with_options(
     ];
     facts.push(topology_fact(
         "society:fixture-home",
-        "controlled_inventory_option",
+        "listing_3bhk",
         FactValue::Text(
             json!({"listing_type":"sale","bhk": 3, "price": 23_000_000, "area_sqft": 1_550})
                 .to_string(),
@@ -1561,7 +1701,7 @@ fn test_bundle_with_options(
         ),
         topology_fact(
             "society:second-home",
-            "controlled_inventory_option",
+            "listing_3bhk",
             FactValue::Text(
                 json!({"listing_type":"sale","bhk": 3, "price": 24_000_000, "area_sqft": 1_600})
                     .to_string(),
@@ -1586,7 +1726,7 @@ fn test_bundle_with_options(
             ),
             topology_fact(
                 "society:fresh-home",
-                "controlled_inventory_option",
+                "listing_3bhk",
                 FactValue::Text(
                     json!({"listing_type":"sale","bhk": 3, "price": 22_000_000, "area_sqft": 1_500}).to_string(),
                 ),
@@ -1645,12 +1785,8 @@ fn test_bundle_with_options(
         }
     }
 
-    let fixture_inventory = fact(
-        &facts,
-        "society:fixture-home",
-        "controlled_inventory_option",
-    );
-    let second_inventory = fact(&facts, "society:second-home", "controlled_inventory_option");
+    let fixture_inventory = fact(&facts, "society:fixture-home", "listing_3bhk");
+    let second_inventory = fact(&facts, "society:second-home", "listing_3bhk");
     let mut edges = vec![
         topology_edge(
             bundle_version,
@@ -1673,7 +1809,7 @@ fn test_bundle_with_options(
             "property:fresh-home-3bhk",
             "in_society",
             "society:fresh-home",
-            fact(&facts, "society:fresh-home", "controlled_inventory_option"),
+            fact(&facts, "society:fresh-home", "listing_3bhk"),
         ));
     }
     if include_schools {
@@ -1735,7 +1871,7 @@ fn test_bundle_with_options(
                 "society:fresh-home",
                 "in_market_locality",
                 "area:hoodi",
-                fact(&facts, "society:fresh-home", "controlled_inventory_option"),
+                fact(&facts, "society:fresh-home", "listing_3bhk"),
             ));
         }
     }
@@ -1879,7 +2015,7 @@ fn install_collection_inventory(state: &Arc<AppState>, topology: bool) {
             ]);
             let inventory = topology_fact(
                 &society,
-                "controlled_inventory_option",
+                "listing_3bhk",
                 FactValue::Text(
                     json!({"listing_type":"sale","bhk":bhk,"price":price,"area_sqft":1550})
                         .to_string(),
@@ -1977,7 +2113,18 @@ fn serving_entity(entity_id: &str, entity_type: &str, name: &str) -> ServingEnti
         entity_id: entity_id.to_string(),
         entity_type: entity_type.to_string(),
         name: name.to_string(),
-        root_source: Some("revision_api_contract".to_string()),
+        root_source: Some(
+            if entity_type == "area" {
+                if entity_id.contains(":cell:") {
+                    "openstreetmap"
+                } else {
+                    "market_locality"
+                }
+            } else {
+                "rera"
+            }
+            .to_string(),
+        ),
         visibility: Default::default(),
         searchable_text: name.to_string(),
     }
@@ -1993,6 +2140,8 @@ fn topology_fact(entity_id: &str, fact_key: &str, value: FactValue) -> ServingFa
     ) || fact_key.starts_with("nearby_")
     {
         "Google"
+    } else if fact_key.starts_with("listing_") {
+        "ExternalListing"
     } else {
         "OpenStreetMap"
     };

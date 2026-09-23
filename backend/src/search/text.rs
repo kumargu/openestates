@@ -1959,6 +1959,9 @@ fn negative_evidence_from_fact(
 }
 
 fn match_evidence_identity(fact: &ServingFactRecord) -> Option<MatchEvidenceIdentity> {
+    if crate::serving::admission::inventory_fact_key(&fact.fact_key) {
+        super::evaluation::InventoryObservationValue::from_fact(fact).ok()?;
+    }
     let observation = fact.observation.as_ref()?;
     fact.validate_observation().ok()?;
     Some(MatchEvidenceIdentity {
@@ -3534,7 +3537,7 @@ mod tests {
                 to_entity_id: area,
                 edge_type: "in_area".to_string(),
                 confidence: 1.0,
-                source_type: "unit-test".to_string(),
+                source_type: "OpenStreetMap".to_string(),
                 derivation: None,
             });
         }
@@ -3879,7 +3882,7 @@ mod tests {
             to_entity_id: "area:whitefield".to_string(),
             edge_type: "in_area".to_string(),
             confidence: 1.0,
-            source_type: "unit-test".to_string(),
+            source_type: "OpenStreetMap".to_string(),
             derivation: None,
         }];
         let index = SearchIndex::build_with_serving_graph(&properties, &entities, &edges);
@@ -3937,7 +3940,7 @@ mod tests {
             to_entity_id: canonical_society_id.to_string(),
             edge_type: "in_society".to_string(),
             confidence: 1.0,
-            source_type: "unit-test".to_string(),
+            source_type: "OpenStreetMap".to_string(),
             derivation: None,
         }];
         let index = SearchIndex::build_with_serving_graph(&properties, &entities, &edges);
@@ -4054,7 +4057,7 @@ mod tests {
                 to_entity_id: "society:incomplete-supported".to_string(),
                 edge_type: "in_society".to_string(),
                 confidence: 1.0,
-                source_type: "unit-test".to_string(),
+                source_type: "OpenStreetMap".to_string(),
                 derivation: None,
             },
             ServingEdgeRecord {
@@ -4062,7 +4065,7 @@ mod tests {
                 to_entity_id: "society:incomplete-unknown-price".to_string(),
                 edge_type: "in_society".to_string(),
                 confidence: 1.0,
-                source_type: "unit-test".to_string(),
+                source_type: "OpenStreetMap".to_string(),
                 derivation: None,
             },
         ];
@@ -6717,7 +6720,7 @@ mod tests {
             to_entity_id: "area:whitefield".to_string(),
             edge_type: "in_area".to_string(),
             confidence: 1.0,
-            source_type: "unit-test".to_string(),
+            source_type: "OpenStreetMap".to_string(),
             derivation: None,
         }];
         let index = SearchIndex::build_with_serving_graph(&properties, &entities, &edges);
@@ -7970,7 +7973,7 @@ mod tests {
             to_entity_id: to.to_string(),
             edge_type: "built_by".to_string(),
             confidence: 1.0,
-            source_type: "unit-test".to_string(),
+            source_type: "OpenStreetMap".to_string(),
             derivation: None,
         })
         .collect::<Vec<_>>();

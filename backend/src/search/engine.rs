@@ -2615,7 +2615,7 @@ mod tests {
                 to_entity_id: subject.clone(),
                 edge_type: "in_society".to_string(),
                 confidence: 1.0,
-                source_type: "engine_test".to_string(),
+                source_type: "MarketLocality".to_string(),
                 derivation: None,
             });
             let target = format!("area:{}", property.area_id);
@@ -2635,7 +2635,7 @@ mod tests {
                 value_text: Some(target.clone()),
                 value: FactValue::Text(target.clone()),
                 confidence: 1.0,
-                source_type: "engine_test".to_string(),
+                source_type: "MarketLocality".to_string(),
                 source_url: None,
                 model: None,
                 skill_id: None,
@@ -2687,7 +2687,7 @@ mod tests {
                     to_entity_id: cell.clone(),
                     edge_type: relation.to_string(),
                     confidence: 1.0,
-                    source_type: "engine_test".to_string(),
+                    source_type: "MarketLocality".to_string(),
                     derivation: Some(derived),
                 });
             }
@@ -2696,7 +2696,7 @@ mod tests {
                 to_entity_id: target,
                 edge_type: "in_market_locality".to_string(),
                 confidence: 1.0,
-                source_type: "engine_test".to_string(),
+                source_type: "MarketLocality".to_string(),
                 derivation: Some(derivation),
             });
         }

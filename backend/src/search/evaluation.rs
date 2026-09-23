@@ -30,30 +30,16 @@ impl InventoryOption {
         snapshot_identity: &str,
     ) -> Option<Self> {
         let rows = serving_facts.entity(society_entity_id)?;
-        static POLICIES: std::sync::OnceLock<crate::dag_config::ResolutionPoliciesFile> =
-            std::sync::OnceLock::new();
-        let policies = POLICIES.get_or_init(|| {
-            crate::dag_config::load_resolution_policies()
-                .expect("resolution policies must validate before inventory selection")
-        });
+        let policies = crate::serving::admission::policies();
         let mut candidates = rows
             .facts
             .iter()
-            .filter(|fact| {
-                crate::dag_config::buyer_visible_fact(&fact.fact_key, &fact.source_type, policies)
-            })
             .filter_map(|fact| {
+                let value = InventoryObservationValue::from_fact(fact).ok()?;
                 let observation = fact.observation.as_ref()?;
-                observation.validate().ok()?;
-                if fact.entity_id != society_entity_id
-                    || observation.subject_entity_id != society_entity_id
-                {
+                if fact.entity_id != society_entity_id {
                     return None;
                 }
-                let FactValue::Text(encoded) = &fact.value else {
-                    return None;
-                };
-                let value = serde_json::from_str::<InventoryObservationValue>(encoded).ok()?;
                 if value
                     .property_id
                     .as_deref()
@@ -63,10 +49,6 @@ impl InventoryOption {
                         .is_some()
                         && value.property_id.as_deref() != Some(property.id.as_str()))
                 {
-                    return None;
-                }
-                value.validate().ok()?;
-                if !value.is_individual() {
                     return None;
                 }
                 let area = value.area_sqft;
@@ -277,6 +259,20 @@ pub(crate) struct InventoryObservationValue {
 }
 
 impl InventoryObservationValue {
+    pub(crate) fn from_fact(
+        fact: &crate::serving::ServingFactRecord,
+    ) -> Result<Self, &'static str> {
+        crate::serving::admission::admit_inventory_fact(fact)?;
+        let FactValue::Text(encoded) = &fact.value else {
+            return Err("invalid_inventory_record");
+        };
+        let value: Self = serde_json::from_str(encoded).map_err(|_| "invalid_inventory_record")?;
+        value.validate()?;
+        if !value.is_individual() {
+            return Err("requires_consistent_individual_listing");
+        }
+        Ok(value)
+    }
     fn into_option(self, property: &Property, society_entity_id: &str) -> Option<InventoryOption> {
         if !self.bhk.is_finite() || self.bhk.fract().abs() > f64::EPSILON {
             return None;
@@ -331,7 +327,7 @@ impl InventoryObservationValue {
     }
 
     pub(crate) fn is_individual(&self) -> bool {
-        // A project/configuration range cannot bind attributes to the same offer.
+        // A project/configuration range cannot bind attributes to the same listing observation.
         static ELIGIBILITY: std::sync::OnceLock<crate::dag_config::ServingEligibilityFile> =
             std::sync::OnceLock::new();
         let eligibility = ELIGIBILITY.get_or_init(|| {
@@ -639,7 +635,7 @@ mod inventory_tests {
     ) -> ServingFactRecord {
         ServingFactRecord {
             entity_id: entity_id.to_string(),
-            fact_key: "fixture_inventory".to_string(),
+            fact_key: "listing_3bhk".to_string(),
             value_type: "text".to_string(),
             value_text: Some(payload.to_string()),
             value: FactValue::Text(payload.to_string()),
@@ -647,7 +643,7 @@ mod inventory_tests {
             source_type: "ExternalListing".to_string(),
             source_url: Some("https://example.test/listing".to_string()),
             model: None,
-            skill_id: Some("fixture_inventory".to_string()),
+            skill_id: Some("listing_3bhk".to_string()),
             learned_at: Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
             observation,
         }
@@ -674,12 +670,12 @@ mod inventory_tests {
         assert_eq!(forward_option, reverse_option);
         assert_eq!(
             forward_option.evidence_fact_key.as_deref(),
-            Some("fixture_inventory")
+            Some("listing_3bhk")
         );
         let evaluation = forward_option.evaluate_bhk("property:one", subject, 3, "bundle:v9");
         assert_eq!(
             evaluation.verified_matches[0].fact_key.as_deref(),
-            Some("fixture_inventory")
+            Some("listing_3bhk")
         );
         let evidence = forward_option.evidence_reference.unwrap();
         assert!(evidence.validate_for(subject, "bundle:v9").is_ok());

@@ -1,12 +1,10 @@
 pub mod admin;
 pub mod discovery;
 pub mod enrichment;
-pub mod interests;
 pub mod map_overlays;
 pub mod media;
 pub mod properties;
 pub mod property_context;
 pub mod search;
 pub mod search_revisions;
-pub mod shortlist;
 pub mod sitemap;

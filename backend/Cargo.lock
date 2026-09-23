@@ -434,6 +434,7 @@ dependencies = [
  "lru",
  "object_store",
  "parquet",
+ "regex",
  "rstar 0.12.2",
  "schemars",
  "serde",

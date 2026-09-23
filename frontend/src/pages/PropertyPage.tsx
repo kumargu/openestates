@@ -140,7 +140,6 @@ function buildPropertyJsonLd(p: PropertyDetailResponse["property"]) {
       `in ${p.area}, ${p.city}`,
     ].filter(Boolean).join(", "),
     url: publicSiteUrl(`/property/${encodeURIComponent(p.id)}`),
-    ...(hasKnownNumber(p.price) ? { offers: { "@type": "Offer", price: p.price, priceCurrency: "INR" } } : {}),
     address: {
       "@type": "PostalAddress",
       addressLocality: p.area,

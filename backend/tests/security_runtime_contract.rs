@@ -18,54 +18,6 @@ async fn production_router_enforces_public_security_boundaries() {
     let state = Arc::new(load_app_state(&project_root).await);
     let app = build_app_router(state, &project_root);
 
-    for attempt in 0..5 {
-        let response = app
-            .clone()
-            .oneshot(request(
-                Method::POST,
-                "/api/interests",
-                [192, 0, 2, 10],
-                Body::from("{}"),
-            ))
-            .await
-            .expect("interest route responds");
-        assert_ne!(
-            response.status(),
-            StatusCode::TOO_MANY_REQUESTS,
-            "interest attempt {attempt} was limited before the configured burst"
-        );
-    }
-
-    let limited = app
-        .clone()
-        .oneshot(request(
-            Method::POST,
-            "/api/interests",
-            [192, 0, 2, 10],
-            Body::from("{}"),
-        ))
-        .await
-        .expect("interest route responds");
-    assert_eq!(limited.status(), StatusCode::TOO_MANY_REQUESTS);
-    assert!(limited.headers().contains_key(header::RETRY_AFTER));
-
-    let oversized_body = serde_json::json!({
-        "property_id": "missing-property",
-        "buyer_name": "a".repeat(17 * 1024),
-    })
-    .to_string();
-    let oversized = app
-        .clone()
-        .oneshot(request(
-            Method::POST,
-            "/api/interests",
-            [192, 0, 2, 11],
-            Body::from(oversized_body),
-        ))
-        .await
-        .expect("interest route responds");
-    assert_eq!(oversized.status(), StatusCode::PAYLOAD_TOO_LARGE);
-
     let long_query = format!("/api/search?q={}", "a".repeat(2 * 1024 + 1));
     let guarded = app
         .clone()

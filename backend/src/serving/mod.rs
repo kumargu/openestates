@@ -4,6 +4,7 @@
 //! Parquet tables for structured facts/entities, small JSON control files, and
 //! a Tantivy index prefix for fast local recall.
 
+pub(crate) mod admission;
 pub mod aliases;
 pub mod builder;
 pub mod context_binding;

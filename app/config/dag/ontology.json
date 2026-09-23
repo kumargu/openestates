@@ -1,6 +1,6 @@
 {
   "_comment": "NODE TYPES (entity_types) and EDGE TYPES (relations). Schema only — instances live in data/lake/gold/.../entities.parquet and edges.parquet.",
-  "version": 1,
+  "version": 2,
   "entity_types": [
     { "id": "property", "prefix": "property:" },
     { "id": "society", "prefix": "society:" },
@@ -27,7 +27,8 @@
     { "from": "transaction", "edge": "for_property", "to": "property" }
   ],
   "identity_bindings": [
-    { "entity_type": "area", "edge_types": ["in_area", "in_market_locality"], "exclusive": true },
-    { "entity_type": "builder", "edge_types": ["built_by"], "exclusive": true }
+    { "entity_type": "area", "subject_entity_types": ["society", "place"], "target_root_sources": ["openstreetmap"], "edge_types": ["in_area"], "exclusive": true },
+    { "entity_type": "area", "subject_entity_types": ["society", "place"], "target_root_sources": ["market_locality"], "edge_types": ["in_market_locality"], "exclusive": true },
+    { "entity_type": "builder", "subject_entity_types": ["society"], "target_root_sources": ["rera"], "edge_types": ["built_by"], "exclusive": true }
   ]
 }

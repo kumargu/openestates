@@ -93,7 +93,7 @@ fn indexed_search_prunes_large_mock_corpus_before_ranking() {
             to_entity_id: area,
             edge_type: "in_area".to_string(),
             confidence: 1.0,
-            source_type: "controlled-catalog".to_string(),
+            source_type: "OpenStreetMap".to_string(),
             derivation: None,
         });
     }

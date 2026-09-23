@@ -64,13 +64,6 @@ pub async fn reload_serving_bundle(
 
     let snapshot = data_loader::runtime_snapshot_from_serving_bundle(bundle);
     let summary = serving_bundle_summary(&snapshot.bundle);
-    let mut properties = state.properties.write().await;
-    let mut societies = state.societies.write().await;
-    let mut search_index = state.search_index.write().await;
-
-    *properties = snapshot.properties.to_vec();
-    *societies = snapshot.societies.to_vec();
-    *search_index = snapshot.search_index.clone();
     state.recommendation_cache.write().await.clear();
     *state.property_catalog_cache.lock().await = None;
     state.search_cache.clear().await;

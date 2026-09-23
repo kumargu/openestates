@@ -24,4 +24,3 @@ pub mod security;
 pub mod serving;
 pub mod state;
 pub mod street_view;
-pub mod utils;

@@ -10,6 +10,8 @@ use std::sync::OnceLock;
 #[derive(Deserialize)]
 struct IdentityBinding {
     entity_type: String,
+    subject_entity_types: Vec<String>,
+    target_root_sources: Vec<String>,
     edge_types: Vec<String>,
     exclusive: bool,
 }
@@ -23,12 +25,21 @@ fn bindings() -> &'static [IdentityBinding] {
         let ontology: Ontology =
             crate::dag_config::load_json(&crate::dag_config::dag_root().join("ontology.json"))
                 .expect("ontology must define identity bindings");
+        assert!(
+            ontology.identity_bindings.iter().all(|binding| !binding
+                .subject_entity_types
+                .is_empty()
+                && !binding.target_root_sources.is_empty()
+                && !binding.edge_types.is_empty()),
+            "identity bindings must define source, subject and relationship scopes"
+        );
         ontology.identity_bindings
     })
 }
 #[derive(Debug, Clone)]
 struct Membership {
     target: String,
+    scope: String,
     reference: EvidenceRef,
     confidence: f32,
 }
@@ -36,7 +47,8 @@ struct Membership {
 pub struct IdentityEvaluationIndex {
     entity_types: HashMap<String, String>,
     memberships: HashMap<(String, String), Vec<Membership>>,
-    exclusive_types: HashSet<String>,
+    target_scopes: HashMap<String, HashSet<String>>,
+    exclusive_scopes: HashSet<String>,
     snapshot_identity: String,
 }
 impl IdentityEvaluationIndex {
@@ -57,38 +69,63 @@ impl IdentityEvaluationIndex {
                 .iter()
                 .map(|entity| (entity.entity_id.clone(), entity.entity_type.clone()))
                 .collect(),
-            exclusive_types: bindings()
+            exclusive_scopes: bindings()
                 .iter()
                 .filter(|binding| binding.exclusive)
-                .map(|binding| binding.entity_type.clone())
+                .flat_map(|binding| binding.edge_types.clone())
+                .collect(),
+            target_scopes: entities
+                .iter()
+                .filter_map(|entity| {
+                    let source = entity.root_source.as_deref()?;
+                    let scopes = bindings()
+                        .iter()
+                        .filter(|binding| {
+                            binding.entity_type == entity.entity_type
+                                && binding.target_root_sources.iter().any(|allowed| {
+                                    crate::dag_config::normalize_source_type(allowed)
+                                        == crate::dag_config::normalize_source_type(source)
+                                })
+                        })
+                        .flat_map(|binding| binding.edge_types.clone())
+                        .collect::<HashSet<_>>();
+                    (!scopes.is_empty()).then(|| (entity.entity_id.clone(), scopes))
+                })
                 .collect(),
             snapshot_identity: snapshot_identity.to_string(),
             ..Self::default()
         };
         for edge in edges {
-            if edge.source_type.trim().is_empty() || !edge.confidence.is_finite() {
+            if !crate::serving::admission::admit_identity_edge(edge)
+                || !index.entity_types.contains_key(&edge.from_entity_id)
+                || !index.entity_types.contains_key(&edge.to_entity_id)
+            {
                 continue;
             }
             for binding in bindings()
                 .iter()
                 .filter(|binding| binding.edge_types.contains(&edge.edge_type))
             {
-                let (subject, target) = if index.entity_types.get(&edge.to_entity_id)
-                    == Some(&binding.entity_type)
+                if index.entity_types.get(&edge.to_entity_id) != Some(&binding.entity_type)
+                    || !binding
+                        .subject_entity_types
+                        .contains(&index.entity_types[&edge.from_entity_id])
                 {
-                    (&edge.from_entity_id, &edge.to_entity_id)
-                } else if index.entity_types.get(&edge.from_entity_id) == Some(&binding.entity_type)
-                {
-                    (&edge.to_entity_id, &edge.from_entity_id)
-                } else {
                     continue;
-                };
+                }
+                let (subject, target) = (&edge.from_entity_id, &edge.to_entity_id);
+                index
+                    .target_scopes
+                    .entry(target.clone())
+                    .or_default()
+                    .insert(edge.edge_type.clone());
                 index
                     .memberships
                     .entry((subject.clone(), binding.entity_type.clone()))
                     .or_default()
                     .push(Membership {
                         target: target.clone(),
+                        scope: edge.edge_type.clone(),
                         confidence: edge.confidence,
                         reference: EvidenceRef {
                             snapshot_identity: index.snapshot_identity.clone(),
@@ -108,6 +145,35 @@ impl IdentityEvaluationIndex {
             });
         }
         index
+    }
+
+    /// Serving validation uses the same evaluation and exact relationship receipt.
+    pub(crate) fn relationship_admitted(&self, edge: &ServingEdgeRecord) -> Option<bool> {
+        if !bindings()
+            .iter()
+            .any(|binding| binding.edge_types.contains(&edge.edge_type))
+        {
+            return None;
+        }
+        if !crate::serving::admission::admit_identity_edge(edge) {
+            return Some(false);
+        }
+        let id = EvidenceId::Relationship(crate::serving::evidence::relationship_id(edge));
+        Some(
+            self.evaluate(
+                &edge.from_entity_id,
+                &edge.to_entity_id,
+                &self.snapshot_identity,
+            )
+            .verified_matches
+            .iter()
+            .any(|witness| {
+                witness
+                    .evidence_refs
+                    .iter()
+                    .any(|reference| reference.evidence_id == id)
+            }),
+        )
     }
 
     pub fn evaluate(&self, subject: &str, expected: &str, snapshot: &str) -> BooleanEvaluation {
@@ -137,10 +203,43 @@ impl IdentityEvaluationIndex {
             else {
                 return BooleanEvaluation::unknown();
             };
-            let matching = memberships
-                .iter()
-                .filter(|membership| membership.target == expected)
-                .collect::<Vec<_>>();
+            let Some(scopes) = self.target_scopes.get(expected) else {
+                return BooleanEvaluation::unknown();
+            };
+            let mut matching = Vec::new();
+            let mut exclusions = Vec::new();
+            let mut exclusion_proven = true;
+            for scope in scopes {
+                let exclusive = self.exclusive_scopes.contains(scope);
+                let scoped = memberships
+                    .iter()
+                    .filter(|membership| &membership.scope == scope)
+                    .collect::<Vec<_>>();
+                let targets = scoped
+                    .iter()
+                    .map(|membership| &membership.target)
+                    .collect::<HashSet<_>>();
+                if exclusive && targets.len() > 1 {
+                    if scoped
+                        .iter()
+                        .any(|membership| membership.target == expected)
+                    {
+                        return BooleanEvaluation::unknown();
+                    }
+                    exclusion_proven = false;
+                    continue;
+                }
+                matching.extend(
+                    scoped
+                        .iter()
+                        .copied()
+                        .filter(|membership| membership.target == expected),
+                );
+                exclusion_proven &= exclusive && targets.len() == 1;
+                exclusions.extend(scoped);
+            }
+            matching.sort_by_key(|membership| membership.reference.stable_key());
+            exclusions.sort_by_key(|membership| membership.reference.stable_key());
             if !matching.is_empty() {
                 (
                     true,
@@ -154,22 +253,18 @@ impl IdentityEvaluationIndex {
                         .max_by(f32::total_cmp),
                 )
             } else {
-                // A missing edge never proves exclusion. A configured exclusive
-                // assignment can do so only when there is one unambiguous target.
-                let targets = memberships
-                    .iter()
-                    .map(|membership| &membership.target)
-                    .collect::<HashSet<_>>();
-                if !self.exclusive_types.contains(expected_type) || targets.len() != 1 {
+                // Negative identity requires unambiguous evidence in every known
+                // scope of the target. Boundary and market-locality scopes differ.
+                if !exclusion_proven {
                     return BooleanEvaluation::unknown();
                 }
                 (
                     false,
-                    memberships
+                    exclusions
                         .iter()
                         .map(|membership| membership.reference.clone())
                         .collect(),
-                    memberships
+                    exclusions
                         .iter()
                         .map(|membership| membership.confidence)
                         .max_by(f32::total_cmp),
@@ -194,7 +289,7 @@ impl IdentityEvaluationIndex {
             evidence_refs: references,
             fact_key: Some("entity_identity".to_string()),
             derived_evidence: None,
-            algorithm_version: "catalog-identity-v1".to_string(),
+            algorithm_version: "catalog-identity-v2".to_string(),
             confidence,
             snapshot_identity: snapshot.to_string(),
         };

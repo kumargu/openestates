@@ -17,7 +17,6 @@ pub struct SecurityTuning {
     pub rate_limits: RateLimitTuning,
     pub media: MediaTuning,
     pub retention: RetentionTuning,
-    pub interest_storage: InterestStorageTuning,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -80,7 +79,6 @@ pub struct RequestTuning {
     pub max_search_query_bytes: usize,
     pub search_body_bytes: usize,
     pub batch_body_bytes: usize,
-    pub interest_body_bytes: usize,
     pub admin_body_bytes: usize,
 }
 
@@ -90,7 +88,6 @@ pub struct RateLimitTuning {
     pub read: RateLimitRule,
     pub search: RateLimitRule,
     pub batch: RateLimitRule,
-    pub interest: RateLimitRule,
     pub admin: RateLimitRule,
 }
 
@@ -111,16 +108,6 @@ pub struct MediaTuning {
 #[serde(deny_unknown_fields)]
 pub struct RetentionTuning {
     pub serving_cache_versions: usize,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct InterestStorageTuning {
-    pub max_name_chars: usize,
-    pub max_contact_chars: usize,
-    pub max_record_bytes: usize,
-    pub max_property_file_bytes: u64,
-    pub max_total_bytes: u64,
 }
 
 pub fn security_tuning() -> &'static SecurityTuning {
@@ -331,27 +318,11 @@ impl SecurityTuning {
         )?;
         for (name, value) in [
             ("requests.batch_body_bytes", self.requests.batch_body_bytes),
-            (
-                "requests.interest_body_bytes",
-                self.requests.interest_body_bytes,
-            ),
             ("requests.admin_body_bytes", self.requests.admin_body_bytes),
             ("media.stream_concurrency", self.media.stream_concurrency),
             (
                 "retention.serving_cache_versions",
                 self.retention.serving_cache_versions,
-            ),
-            (
-                "interest_storage.max_name_chars",
-                self.interest_storage.max_name_chars,
-            ),
-            (
-                "interest_storage.max_contact_chars",
-                self.interest_storage.max_contact_chars,
-            ),
-            (
-                "interest_storage.max_record_bytes",
-                self.interest_storage.max_record_bytes,
             ),
         ] {
             non_zero(name, value)?;
@@ -360,22 +331,10 @@ impl SecurityTuning {
             ("rate_limits.read", &self.rate_limits.read),
             ("rate_limits.search", &self.rate_limits.search),
             ("rate_limits.batch", &self.rate_limits.batch),
-            ("rate_limits.interest", &self.rate_limits.interest),
             ("rate_limits.admin", &self.rate_limits.admin),
         ] {
             non_zero(&format!("{name}.period_ms"), rule.period_ms)?;
             non_zero(&format!("{name}.burst"), rule.burst)?;
-        }
-        non_zero(
-            "interest_storage.max_property_file_bytes",
-            self.interest_storage.max_property_file_bytes,
-        )?;
-        non_zero(
-            "interest_storage.max_total_bytes",
-            self.interest_storage.max_total_bytes,
-        )?;
-        if self.interest_storage.max_property_file_bytes > self.interest_storage.max_total_bytes {
-            return Err("interest per-property bytes cannot exceed total bytes".to_string());
         }
         Ok(())
     }

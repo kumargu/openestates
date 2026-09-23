@@ -78,12 +78,7 @@ pub fn build_app_router_with_lake(state: Arc<AppState>, lake: LakeStore) -> Rout
                 "/api/properties/{id}/context",
                 get(routes::property_context::get_property_context),
             )
-            .route("/api/shortlist", get(routes::shortlist::get_shortlist))
             .route("/api/discovery", get(routes::discovery::discovery_home))
-            .route(
-                "/api/properties/{id}/interests/count",
-                get(routes::interests::get_interest_count),
-            )
             .route("/api/sitemap.xml", get(routes::sitemap::sitemap_xml)),
     );
 
@@ -121,10 +116,6 @@ pub fn build_app_router_with_lake(state: Arc<AppState>, lake: LakeStore) -> Rout
             ),
     );
 
-    let interest_routes = security.protect_interest_writes(
-        Router::new().route("/api/interests", post(routes::interests::express_interest)),
-    );
-
     let admin_routes = security.protect_admin(
         Router::new()
             .route("/api/admin/data-health", get(routes::admin::data_health))
@@ -141,7 +132,6 @@ pub fn build_app_router_with_lake(state: Arc<AppState>, lake: LakeStore) -> Rout
                 .merge(catalog_routes)
                 .merge(search_routes)
                 .merge(batch_routes)
-                .merge(interest_routes)
                 .merge(admin_routes)
                 .fallback(|| async { axum::http::StatusCode::NOT_FOUND }),
         )

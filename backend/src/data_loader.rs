@@ -11,7 +11,6 @@ use crate::dag_config::{
     better_source_type_for_fact, buyer_visible_fact, load_resolution_policies,
     ResolutionPoliciesFile,
 };
-use crate::discovery::load_discovery_config;
 use crate::knowledge::fact::FactValue;
 use crate::models::{Property, Society};
 use crate::search::SearchIndex;
@@ -45,10 +44,7 @@ pub async fn load_app_state_with_execution(
         .unwrap_or_else(|err| panic!("Serving bundle startup contract failed: {err}"));
 
     let search_runtime = runtime_snapshot_from_serving_bundle(bundle.clone());
-    let properties = search_runtime.properties.to_vec();
-    let societies = search_runtime.societies.to_vec();
-    let search_index = search_runtime.search_index.clone();
-    if properties.is_empty() {
+    if search_runtime.properties.is_empty() {
         panic!(
             "Serving bundle {} has no property entities; refusing to fall back to legacy data",
             bundle.manifest.bundle_version
@@ -56,24 +52,12 @@ pub async fn load_app_state_with_execution(
     }
     println!(
         "Derived {} properties, {} societies from serving bundle {}",
-        properties.len(),
-        societies.len(),
+        search_runtime.properties.len(),
+        search_runtime.societies.len(),
         bundle.manifest.bundle_version
     );
 
-    println!(
-        "Built local search index for {} properties",
-        properties.len()
-    );
-
-    println!(
-        "Loaded {} properties, {} societies",
-        properties.len(),
-        societies.len()
-    );
-
     println!("Request-time network AI disabled: search uses only local artifacts");
-    let discovery_config = load_discovery_config();
     let map_overlays = crate::routes::map_overlays::load_city_map_overlays(project_root);
     let (search_event_tx, search_event_rx) = mpsc::channel(search_log_queue_capacity_from_env());
     let search_event_lake = LakeStoreLocation::from_env(project_root)
@@ -89,17 +73,11 @@ pub async fn load_app_state_with_execution(
         property_catalog_cache: tokio::sync::Mutex::new(None),
         search_event_tx,
         search_log_dropped_count: AtomicU64::new(0),
-        properties: RwLock::new(properties),
-        search_index: RwLock::new(search_index),
         recommendation_cache: RwLock::new(std::collections::HashMap::new()),
 
-        societies: RwLock::new(societies),
-        discovery_config,
         map_overlays,
         project_root: project_root.to_path_buf(),
         process_started_at: chrono::Utc::now(),
-        interest_counter: AtomicU64::new(0),
-        interest_write_lock: tokio::sync::Mutex::new(()),
     }
 }
 
@@ -1460,7 +1438,12 @@ mod tests {
         value: FactValue,
         confidence: f32,
     ) -> crate::serving::ServingFactRecord {
-        serving_fact_with_source(entity_id, fact_key, value, confidence, "Computed")
+        let source = if fact_key.starts_with("listing_") {
+            "ExternalListing"
+        } else {
+            "Computed"
+        };
+        serving_fact_with_source(entity_id, fact_key, value, confidence, source)
     }
 
     fn serving_fact_with_source(

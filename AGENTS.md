@@ -587,6 +587,7 @@ Read the matching skill file **before** starting any task that falls under it:
 
 - Heavy legal/document validation workflows
 - Payment flows
+- Bidding, offer submission, seller posting, sales-lead collection, or transaction execution
 - Full two-sided negotiation system
 - Overbuilt agent orchestration
 - Database migration before product shape is stable

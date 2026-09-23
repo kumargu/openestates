@@ -63,8 +63,6 @@ fn main() {
     println!("  POST /api/properties/context/batch");
     println!("  GET /api/discovery");
     println!("  GET /api/search?q=...");
-    println!("  POST /api/interests");
-    println!("  GET /api/properties/{{id}}/interests/count");
     println!("  GET  /api/sitemap.xml");
     println!("Public site origin: {public_site_origin}");
     if let Some(path) = loaded_env_file {

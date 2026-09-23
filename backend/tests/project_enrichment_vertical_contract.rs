@@ -37,6 +37,115 @@ use tokio::sync::{mpsc, RwLock};
 use tower::ServiceExt;
 
 #[tokio::test]
+async fn materialized_weak_claims_are_excluded_by_validation_and_runtime() {
+    let (root, state, app) = materialized_contract(false).await;
+    let original = state.search_runtime.load_full();
+    let manifest = &original.bundle.manifest;
+    let mut facts = backend::serving::read_facts_parquet(
+        &std::fs::read(root.path().join(&manifest.fact_parquet_key)).unwrap(),
+    )
+    .unwrap();
+    let metadata = backend::serving::read_search_metadata_parquet(
+        &std::fs::read(root.path().join(&manifest.search_metadata_parquet_key)).unwrap(),
+    )
+    .unwrap();
+    let rera = backend::serving::read_rera_evidence_parquet(
+        &std::fs::read(root.path().join(&manifest.rera_evidence_parquet_key)).unwrap(),
+    )
+    .unwrap();
+    let mut weakened = 0;
+    for fact in &mut facts {
+        if fact.fact_key == "listing_3bhk" {
+            fact.confidence = 0.0;
+            weakened += 1;
+        }
+    }
+    assert!(weakened >= 3);
+    let mut edges = original.bundle.edges.clone();
+    for edge in &mut edges {
+        if edge.edge_type == "built_by" {
+            edge.confidence = 0.0;
+        }
+    }
+    let lake = LakeStore::local(root.path()).unwrap();
+    let version = "materialized-admission-rejection";
+    ServingBundleBuilder::new(lake.clone())
+        .build_from_catalog_records(
+            original.bundle.entities.clone(),
+            facts,
+            metadata,
+            edges,
+            rera,
+            version,
+        )
+        .await
+        .unwrap();
+    let report = backend::serving::validate_search_serving_candidate(&lake, version)
+        .await
+        .unwrap();
+    assert!(report
+        .excluded_search_capabilities
+        .iter()
+        .any(|claim| claim.fact_key == "listing_3bhk"
+            && claim.reason == "ineligible_inventory_source_or_confidence"));
+    assert!(report
+        .excluded_search_capabilities
+        .iter()
+        .any(|claim| claim.fact_key == "built_by"
+            && claim.reason == "requires_eligible_unambiguous_identity"));
+    let loaded = ServingBundleLoader::new(lake, root.path().join("admission-cache"))
+        .load_search_bundle(version)
+        .await
+        .unwrap();
+    let runtime = backend::data_loader::runtime_snapshot_from_serving_bundle(Arc::new(loaded));
+    assert!(
+        !runtime.properties.is_empty(),
+        "societies remain browseable"
+    );
+    assert!(runtime
+        .inventory_options
+        .values()
+        .all(|option| option.bhk != Some(3)));
+    for edge in runtime
+        .bundle
+        .edges
+        .iter()
+        .filter(|edge| edge.edge_type == "built_by")
+    {
+        assert_eq!(
+            runtime
+                .identity_evaluation
+                .evaluate(
+                    &edge.from_entity_id,
+                    &edge.to_entity_id,
+                    runtime.bundle.manifest.proof_snapshot_identity()
+                )
+                .state,
+            backend::search::EvaluationState::Unknown
+        );
+    }
+    state.search_runtime.store(Arc::new(runtime));
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/search?q=3BHK")
+                .extension(ConnectInfo(SocketAddr::from(([192, 0, 2, 240], 41000))))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value = serde_json::from_slice(
+        &to_bytes(response.into_body(), 4 * 1024 * 1024)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(body["active"]["results"]["totalMatches"], 0);
+}
+
+#[tokio::test]
 async fn three_societies_reach_serving_with_listing_and_builder_evidence() {
     let (_original_root, state, app) = materialized_contract(false).await;
     let (_updated_root, updated_state, _) = materialized_contract(true).await;
@@ -312,9 +421,6 @@ async fn materialized_contract(carpet: bool) -> (tempfile::TempDir, Arc<AppState
             .len(),
         1
     );
-    let properties = runtime.properties.to_vec();
-    let societies = runtime.societies.to_vec();
-    let search_index = runtime.search_index.clone();
     let (search_event_tx, _search_event_rx) = mpsc::channel(8);
     let state = Arc::new(AppState {
         execution: backend::security::ExecutionLanes::current(),
@@ -329,17 +435,11 @@ async fn materialized_contract(carpet: bool) -> (tempfile::TempDir, Arc<AppState
         property_catalog_cache: tokio::sync::Mutex::new(None),
         search_event_tx,
         search_log_dropped_count: AtomicU64::new(0),
-        properties: RwLock::new(properties),
-        search_index: RwLock::new(search_index),
         recommendation_cache: RwLock::new(std::collections::HashMap::new()),
 
-        societies: RwLock::new(societies),
-        discovery_config: backend::discovery::load_discovery_config(),
         map_overlays: Arc::new(backend::routes::map_overlays::CityMapOverlays::default()),
         project_root: root.path().to_path_buf(),
         process_started_at: Utc::now(),
-        interest_counter: AtomicU64::new(0),
-        interest_write_lock: tokio::sync::Mutex::new(()),
     });
     let snapshot_identity = state
         .search_runtime

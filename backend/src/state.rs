@@ -12,7 +12,7 @@ use sha2::{Digest, Sha256};
 use tokio::sync::mpsc;
 use tokio::sync::RwLock;
 
-use crate::discovery::{BrowsePropertyCard, DiscoveryConfig};
+use crate::discovery::BrowsePropertyCard;
 use crate::knowledge::SearchEvent;
 use crate::lake::{LakeKey, LakeStore};
 use crate::models::{Property, Society};
@@ -782,8 +782,8 @@ pub struct AppState {
     /// Explicit execution lanes keep customer request coordination isolated
     /// from CPU-heavy ranking and internal/background work.
     pub execution: ExecutionLanes,
-    /// Immutable search-serving snapshot. /api/search loads one Arc from here at
-    /// request start and never observes mixed bundle/index/property state.
+    /// Immutable serving snapshot shared by search, property reads and sitemap.
+    /// Each request loads one Arc and observes one bundle/index/property state.
     pub search_runtime: ArcSwap<SearchRuntimeSnapshot>,
     /// Bounded optimization cache for non-debug search responses.
     pub search_cache: SearchResponseCache,
@@ -796,26 +796,14 @@ pub struct AppState {
     pub search_event_tx: mpsc::Sender<SearchLogMessage>,
     /// Best-effort count of search log side effects dropped because the bounded queue was full.
     pub search_log_dropped_count: AtomicU64,
-    /// In-memory hot data loaded at startup. Routes can read directly from here
-    /// for fast access without going through storage/cache on every request.
-    pub properties: RwLock<Vec<Property>>,
-    /// Local recall index rebuilt from app-owned property data.
-    pub search_index: RwLock<SearchIndex>,
     /// In-process cache keyed by property + bundle + scoring policy + engine version.
     pub recommendation_cache: RwLock<std::collections::HashMap<String, RecommendationResponse>>,
-    pub societies: RwLock<Vec<Society>>,
-    /// Product-facing discovery copy and shelf metadata from app/config/product/discovery_home.json.
-    pub discovery_config: DiscoveryConfig,
     /// Offline city map overlays (metro / parks / lakes) clipped per property detail.
     pub map_overlays: Arc<crate::routes::map_overlays::CityMapOverlays>,
     /// Project root path (for persistence operations).
     pub project_root: PathBuf,
     /// Runtime start timestamp, exposed for stale-backend detection in development.
     pub process_started_at: DateTime<Utc>,
-    /// Monotonic counter for generating collision-free interest IDs.
-    pub interest_counter: AtomicU64,
-    /// Serializes bounded interest-file accounting and appends.
-    pub interest_write_lock: tokio::sync::Mutex<()>,
 }
 
 impl AppState {

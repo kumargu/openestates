@@ -31,7 +31,6 @@ pub struct SecurityPolicy {
     read_rate_limit: Arc<RateLimitConfig>,
     search_rate_limit: Arc<RateLimitConfig>,
     batch_rate_limit: Arc<RateLimitConfig>,
-    interest_rate_limit: Arc<RateLimitConfig>,
     admin_rate_limit: Arc<RateLimitConfig>,
     global_admission: RequestAdmission,
     search_admission: RequestAdmission,
@@ -46,14 +45,12 @@ impl SecurityPolicy {
         let read_rate_limit = rate_limit_rule(client_ip.clone(), &tuning.rate_limits.read);
         let search_rate_limit = rate_limit_rule(client_ip.clone(), &tuning.rate_limits.search);
         let batch_rate_limit = rate_limit_rule(client_ip.clone(), &tuning.rate_limits.batch);
-        let interest_rate_limit = rate_limit_rule(client_ip.clone(), &tuning.rate_limits.interest);
         let admin_rate_limit = rate_limit_rule(client_ip, &tuning.rate_limits.admin);
 
         let governor_limiters = [
             read_rate_limit.limiter().clone(),
             search_rate_limit.limiter().clone(),
             batch_rate_limit.limiter().clone(),
-            interest_rate_limit.limiter().clone(),
             admin_rate_limit.limiter().clone(),
         ];
         execution.spawn_internal(async move {
@@ -70,7 +67,6 @@ impl SecurityPolicy {
             read_rate_limit: Arc::new(read_rate_limit),
             search_rate_limit: Arc::new(search_rate_limit),
             batch_rate_limit: Arc::new(batch_rate_limit),
-            interest_rate_limit: Arc::new(interest_rate_limit),
             admin_rate_limit: Arc::new(admin_rate_limit),
             global_admission: RequestAdmission::new(tuning.requests.global_concurrency),
             search_admission: RequestAdmission::new(tuning.requests.search_concurrency),
@@ -134,18 +130,6 @@ impl SecurityPolicy {
             ))
             .layer(public_timeout_layer())
             .layer(GovernorLayer::new(self.batch_rate_limit.clone()))
-    }
-
-    pub fn protect_interest_writes<S>(&self, routes: Router<S>) -> Router<S>
-    where
-        S: Clone + Send + Sync + 'static,
-    {
-        routes
-            .layer(DefaultBodyLimit::max(
-                security_tuning().requests.interest_body_bytes,
-            ))
-            .layer(public_timeout_layer())
-            .layer(GovernorLayer::new(self.interest_rate_limit.clone()))
     }
 
     pub fn protect_admin<S>(&self, routes: Router<S>) -> Router<S>

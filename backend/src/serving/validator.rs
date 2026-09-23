@@ -341,20 +341,30 @@ pub async fn validate_search_serving_candidate(
     let capabilities = crate::search::SearchCapabilityIndex::from_bundle(&entities, &fact_index);
     let mut excluded_search_capabilities = capabilities.excluded_bindings().to_vec();
     for fact in &facts {
-        let FactValue::Text(encoded) = &fact.value else {
+        if !super::admission::inventory_fact_key(&fact.fact_key) {
             continue;
-        };
-        let Ok(value) =
-            serde_json::from_str::<crate::search::evaluation::InventoryObservationValue>(encoded)
-        else {
-            continue;
-        };
-        if value.validate().is_err() || !value.is_individual() {
+        }
+        if let Err(reason) = crate::search::evaluation::InventoryObservationValue::from_fact(fact) {
             excluded_search_capabilities.push(crate::search::capabilities::CapabilityExclusion {
                 entity_id: fact.entity_id.clone(),
                 fact_key: fact.fact_key.clone(),
                 preference: "inventory".into(),
-                reason: "requires_consistent_individual_offer".into(),
+                reason: reason.into(),
+            });
+        }
+    }
+    let identities = crate::search::identity::IdentityEvaluationIndex::from_records(
+        &entities,
+        &edges,
+        manifest.proof_snapshot_identity(),
+    );
+    for edge in &edges {
+        if identities.relationship_admitted(edge) == Some(false) {
+            excluded_search_capabilities.push(crate::search::capabilities::CapabilityExclusion {
+                entity_id: edge.from_entity_id.clone(),
+                fact_key: edge.edge_type.clone(),
+                preference: "entity_identity".into(),
+                reason: "requires_eligible_unambiguous_identity".into(),
             });
         }
     }
@@ -589,7 +599,12 @@ fn validate_record_relations(
 
     let mut fact_pairs = BTreeSet::new();
     for fact in facts {
-        if let FactValue::Text(encoded) = &fact.value {
+        if let Some(encoded) = match &fact.value {
+            FactValue::Text(encoded) if super::admission::inventory_fact_key(&fact.fact_key) => {
+                Some(encoded)
+            }
+            _ => None,
+        } {
             if let Ok(value) = serde_json::from_str::<
                 crate::search::evaluation::InventoryObservationValue,
             >(encoded)
@@ -1034,7 +1049,8 @@ mod tests {
 
         assert!(issues.is_empty(), "unexpected issues: {issues:?}");
 
-        let inconsistent = fact(FactValue::Text(r#"{"bhk":3,"price":10000000,"area_sqft":1112,"area_sqft_min":742,"area_sqft_max":764,"area_type":"carpet"}"#.into()));
+        let mut inconsistent = fact(FactValue::Text(r#"{"bhk":3,"price":10000000,"area_sqft":1112,"area_sqft_min":742,"area_sqft_max":764,"area_type":"carpet"}"#.into()));
+        inconsistent.fact_key = "listing_3bhk".into();
         validate_record_relations(
             &entities,
             &[inconsistent],

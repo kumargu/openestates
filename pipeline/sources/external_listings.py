@@ -820,7 +820,7 @@ def clean_html_text(value: str) -> str:
 
 
 def listing_records(observations: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Keep each observed offer intact; project ranges are not inventory."""
+    """Keep each listing observation intact; project ranges are not inventory."""
     records = []
     for observation in observations:
         price = optional_float(observation.get("price"))
@@ -1023,7 +1023,7 @@ def dedupe_records(records: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
     deduped = []
     seen = set()
     for record in records:
-        # Preserve distinct observed offers (including explicit identity and floor).
+        # Preserve distinct listing observations (including explicit identity and floor).
         key = json.dumps(record, sort_keys=True, separators=(",", ":"))
         if key in seen:
             continue

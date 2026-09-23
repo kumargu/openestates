@@ -26,9 +26,9 @@ async fn promoted_bundle_recommendations_preserve_trust_invariants() {
     let state = Arc::new(load_app_state(&project_root).await);
 
     let properties = state
+        .search_runtime
+        .load()
         .properties
-        .read()
-        .await
         .iter()
         .map(|property| {
             (
@@ -143,8 +143,8 @@ async fn promoted_bundle_recommendations_preserve_trust_invariants() {
 
     let runtime = state.search_runtime.load();
     let bundle = &runtime.bundle;
-    let runtime_properties = state.properties.read().await;
-    let societies = runtime_properties
+    let societies = runtime
+        .properties
         .iter()
         .map(|property| property.society_id.as_str())
         .collect::<BTreeSet<_>>();

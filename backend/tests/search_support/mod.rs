@@ -87,12 +87,12 @@ pub fn inventory_facts(properties: &[Property]) -> Vec<ServingFactRecord> {
             .to_string();
             ServingFactRecord {
                 entity_id,
-                fact_key: "controlled_inventory_option".to_string(),
+                fact_key: format!("listing_{}bhk", property.bhk),
                 value_type: "text".to_string(),
                 value_text: Some(value.clone()),
                 value: FactValue::Text(value),
                 confidence: 1.0,
-                source_type: "ControlledInventoryReceipt".to_string(),
+                source_type: "ExternalListing".to_string(),
                 source_url: observation.source_url.clone(),
                 model: None,
                 skill_id: Some("search_contract_fixture".to_string()),

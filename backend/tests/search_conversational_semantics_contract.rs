@@ -3436,7 +3436,7 @@ impl FixtureBuilder {
         let recall_facts = self
             .facts
             .iter()
-            .filter(|fact| fact.source_type != "ControlledInventoryReceipt")
+            .filter(|fact| fact.source_type != "ExternalListing")
             .cloned()
             .collect::<Vec<_>>();
         let recall_index =
@@ -4050,10 +4050,10 @@ fn inventory_receipt_fact(entity_id: &str, spec: &HomeSpec) -> ServingFactRecord
     .to_string();
     let mut fact = serving_fact(
         entity_id,
-        "controlled_inventory_option",
+        &format!("listing_{}bhk", spec.bhk),
         FactValue::Text(value),
     );
-    fact.source_type = "ControlledInventoryReceipt".to_string();
+    fact.source_type = "ExternalListing".to_string();
     fact.source_url = Some(format!("https://example.test/listings/{}", spec.id));
     fact.observation = Some(
         SourceObservation::new(

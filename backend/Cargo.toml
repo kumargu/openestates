@@ -20,6 +20,7 @@ default = []
 s3 = ["object_store/aws"]
 
 [dependencies]
+regex = "1.12.4"
 arc-swap = "1"
 axum = "0.8"
 bytes = "1"
