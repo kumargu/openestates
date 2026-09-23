@@ -518,13 +518,13 @@ def _entrance_bound_route(
     entrance: Dict[str, Any],
     collector: Dict[str, Any],
 ) -> Optional[Tuple[List[Coordinate], str]]:
-    """Return a legal connected public-road path whose final point is the entrance."""
+    """Return a legal public-road path ending at the sourced point nearest the entrance."""
     entrance_coordinate = entrance["coordinate"]
-    snap_limit = float(collector.get("max_route_entrance_snap_meters") or 1.0)
+    road_limit = float(collector.get("max_entrance_road_distance_meters") or 30.0)
     cap_meters = float(collector.get("max_corridor_meters") or 1_500.0)
     minimum_meters = float(collector.get("min_approach_route_meters") or 25.0)
     snapped = _nearest_segment_projection(frontage["points"], entrance_coordinate)
-    if snapped is None or snapped[0] > snap_limit:
+    if snapped is None or snapped[0] > road_limit:
         return None
     _snap_distance, segment_index, projection, ratio = snapped
     direction = _road_direction(frontage["tags"])
@@ -543,7 +543,10 @@ def _entrance_bound_route(
             if road_direction in {"two_way", "oneway_reverse"}:
                 incoming.setdefault(start, []).append((end, length))
 
-    entrance_tail = [entrance_coordinate]
+    # Keep the flight on OSM road geometry. A nearby gate may be separated
+    # from the mapped carriageway by a short driveway or pavement that OSM
+    # does not contain; never synthesize that connector.
+    entrance_tail = [projection]
     initial: List[Tuple[Coordinate, float]] = []
     if direction in {"two_way", "oneway_forward"} and ratio > 1e-6:
         initial.append((left, _distance_m(left, projection)))
@@ -567,7 +570,7 @@ def _entrance_bound_route(
     suffixes: Dict[Coordinate, List[Coordinate]] = {}
     queue: List[Tuple[float, Coordinate]] = []
     for node, distance in initial:
-        total = distance + _distance_m(projection, entrance_coordinate)
+        total = distance
         if total > cap_meters or total >= distances.get(node, math.inf):
             continue
         distances[node] = total
