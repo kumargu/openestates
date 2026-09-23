@@ -109,9 +109,9 @@ export function useAtlasRoadFlight({
     const reducedMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     ).matches;
+    const resumingFromStreet = handoffHeading.current !== null;
     if (
       reducedMotion ||
-      handoffHeading.current !== null ||
       (!autoPlayRef.current && version === 0)
     ) {
       const camera = pose();
@@ -119,6 +119,14 @@ export function useAtlasRoadFlight({
       onProgress?.(distance.current, route.lengthM, camera.heading);
       onPhase?.("settled");
       run.settle();
+    } else if (resumingFromStreet) {
+      run.activate();
+      const camera = pose();
+      render(camera);
+      onProgress?.(distance.current, route.lengthM, camera.heading);
+      flying = true;
+      onPhase?.("flight");
+      frame = requestAnimationFrame(tick);
     } else {
       run.activate();
       const roadPose = pose();
