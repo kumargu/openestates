@@ -7,6 +7,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import AtlasRoadOverview from "./AtlasRoadOverview.tsx";
 import { useAtlasRoadFlight } from "../../hooks/useAtlasRoadFlight.ts";
 import {
   arrivalAtlasRoute,
@@ -1267,34 +1268,32 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
         );
       }
     }
-    if (!corridorViewActive) {
-      const homeMarker = new library.Marker3DInteractiveElement({
-        altitudeMode: cameraMode === "evidence" ? "RELATIVE_TO_GROUND" : "CLAMP_TO_GROUND",
-        collisionBehavior: "REQUIRED",
-        drawsWhenOccluded: true,
-        extruded: true,
-        sizePreserved: true,
-        position: {
-          lat: home.latitude,
-          lng: home.longitude,
-          ...(cameraMode === "evidence" ? {altitude: policy.nearby.markerLiftM} : {}),
-        },
-        title: home.name,
-      });
-      homeMarker.append(new markerLibrary.PinElement({
-        ...mapMarkerPinOptions("home", cameraMode === "evidence" ? "selected" : "active"),
-        ...(cameraMode === "evidence" ? {
-          scale: policy.nearby.homePinScale,
-          background: policy.nearby.homePinBackground,
-        } : {}),
-        glyphSrc: undefined,
-        glyphText: "H",
-      }));
-      homeMarker.setAttribute("aria-label", "This home");
-      homeMarker.dataset.atlasHome = 'true';
-      map.append(homeMarker);
-      nextChildren.push(homeMarker);
-    }
+    const homeMarker = new library.Marker3DInteractiveElement({
+      altitudeMode: cameraMode === "evidence" ? "RELATIVE_TO_GROUND" : "CLAMP_TO_GROUND",
+      collisionBehavior: "REQUIRED",
+      drawsWhenOccluded: true,
+      extruded: true,
+      sizePreserved: true,
+      position: {
+        lat: home.latitude,
+        lng: home.longitude,
+        ...(cameraMode === "evidence" ? {altitude: policy.nearby.markerLiftM} : {}),
+      },
+      title: home.name,
+    });
+    homeMarker.append(new markerLibrary.PinElement({
+      ...mapMarkerPinOptions("home", cameraMode === "evidence" ? "selected" : "active"),
+      ...(cameraMode === "evidence" ? {
+        scale: policy.nearby.homePinScale,
+        background: policy.nearby.homePinBackground,
+      } : {}),
+      glyphSrc: undefined,
+      glyphText: "H",
+    }));
+    homeMarker.setAttribute("aria-label", "This home");
+    homeMarker.dataset.atlasHome = 'true';
+    map.append(homeMarker);
+    nextChildren.push(homeMarker);
 
     let activePopover: Popover3DElement | null = null;
     if (selected && cameraMode === 'evidence') {
@@ -1669,12 +1668,18 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
         aria-hidden={!streetViewReady}
         inert={!streetViewReady}
       />
-      {approachViewActive && (accessLines[0]?.name || roadTour.status) && (
+      {corridorViewActive && atlasRoute && <AtlasRoadOverview
+        key={`${homeLatitude}:${homeLongitude}:${streetViewReady}`}
+        route={atlasRoute}
+        home={societyInteriorAnchor}
+        streetView={streetViewReady}
+        flightPosition={roadFlight.position}
+        streetPosition={roadTour.position}
+      />}
+      {approachViewActive && (accessLines[0]?.name || (streetRequested && roadTour.status)) && (
         <div className="nearby-map__road-title">
           {accessLines[0]?.name}
-          {showRoutePlaybackControls && roadTour.progress
-            && ` · ${roadTour.progress.current}/${roadTour.progress.total}`}
-          {roadTour.status && <span aria-live="polite">
+          {streetRequested && roadTour.status && <span aria-live="polite">
             {accessLines[0]?.name ? " · " : ""}{roadTour.status}
           </span>}
         </div>

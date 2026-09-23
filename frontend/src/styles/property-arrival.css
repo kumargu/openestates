@@ -243,6 +243,27 @@
   text-shadow: 0 1px 5px rgba(0, 0, 0, 0.78);
 }
 
+.atlas-road-overview {
+  position: absolute;
+  z-index: 3;
+  right: 24px;
+  bottom: 168px;
+  width: 152px;
+  height: 116px;
+  border-radius: 12px;
+  background: rgb(244 246 241 / 92%);
+  color: #243638;
+  pointer-events: none;
+}
+.atlas-road-overview__north { font-size: 9px; text-anchor: middle; }
+.atlas-road-overview__home {
+  font-size: 11px;
+  font-weight: 600;
+  paint-order: stroke;
+  stroke: #f4f6f1;
+  stroke-width: 3px;
+}
+
 .nearby-map__playback-controls {
   position: absolute;
   right: 1rem;
@@ -615,6 +636,7 @@
   .property-atlas__dock button { padding: 0 13px; font-size: 12px; }
   .property-arrival-map--atlas .nearby-map__playback-controls { bottom: 150px; left: 12px; right: 12px; }
   .property-arrival-map--atlas .nearby-map__road-title { bottom: 220px; left: 12px; }
+  .atlas-road-overview { right: 12px; bottom: 256px; width: 128px; height: 98px; }
   .property-atlas-photos__image { height: 170px; }
 }
 @media (max-height: 620px) and (min-width: 700px) {
