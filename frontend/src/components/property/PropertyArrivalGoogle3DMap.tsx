@@ -7,7 +7,6 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import AtlasRoadOverview from "./AtlasRoadOverview.tsx";
 import { useAtlasRoadFlight } from "../../hooks/useAtlasRoadFlight.ts";
 import {
   arrivalAtlasRoute,
@@ -1668,14 +1667,6 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
         aria-hidden={!streetViewReady}
         inert={!streetViewReady}
       />
-      {corridorViewActive && atlasRoute && <AtlasRoadOverview
-        key={`${homeLatitude}:${homeLongitude}:${streetViewReady}`}
-        route={atlasRoute}
-        home={societyInteriorAnchor}
-        streetView={streetViewReady}
-        flightPosition={roadFlight.position}
-        streetPosition={roadTour.position}
-      />}
       {approachViewActive && (accessLines[0]?.name || (streetRequested && roadTour.status)) && (
         <div className="nearby-map__road-title">
           {accessLines[0]?.name}
