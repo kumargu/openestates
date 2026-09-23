@@ -10,13 +10,11 @@ import {
   type AtlasRoute,
 } from "../lib/atlas/journey.ts";
 import policy from "../lib/atlasPolicy.ts";
-import { distanceMetres } from "../lib/atlas/geometry.ts";
 
 /** Renderer driver subordinate to the page's single playback controller. */
 export function useAtlasRoadFlight({
   active,
   route,
-  home,
   entrance,
   controller,
   elevation,
@@ -29,7 +27,6 @@ export function useAtlasRoadFlight({
 }: {
   active: boolean;
   route: AtlasRoute | null;
-  home: AtlasPoint;
   entrance: AtlasPoint | null;
   controller: ArrivalPlaybackController;
   elevation: number;
@@ -67,22 +64,13 @@ export function useAtlasRoadFlight({
     let smoothedHeading: number | null = null;
     const entranceDistance = entrance ? projectPointOntoRoute(route, entrance).distanceAlongM : null;
     if (entranceDistance !== null && distance.current > entranceDistance) entranceVisited.current = true;
-    // One height throughout the pass, referenced to the resolved local terrain.
-    // Increase it for distant home anchors rather than tilting toward the horizon.
-    const farthestM = Math.max(...route.coordinates.map(([lng, lat]) =>
-      distanceMetres({lat, lng}, {lat: home.latitude, lng: home.longitude}))) * policy.road.homeFocusWeight;
-    const heightM = Math.max(
-      width < policy.road.mobileBreakpointPx ? policy.road.mobileFlightHeightM : policy.road.flightHeightM,
-      policy.road.altitudeOffsetM + farthestM / Math.tan(policy.road.maximumTilt * Math.PI / 180),
-    );
     const run = controller.begin("playing");
     const pose = (elapsedSeconds = 0) => {
       const camera = roadFlightCamera(
         route,
         distance.current,
         elevation,
-        home,
-        heightM,
+        width,
         policy.road,
       );
       const targetHeading = camera.heading;
@@ -207,7 +195,7 @@ export function useAtlasRoadFlight({
       resume();
       if (run.isCurrent()) controller.cancel("settled");
     };
-  }, [active, route, home, entrance, controller, elevation, width, render, fly, onPhase, onProgress, version]);
+  }, [active, route, entrance, controller, elevation, width, render, fly, onPhase, onProgress, version]);
   const seek = useCallback((metres: number) => {
     distance.current = metres;
     handoffPending.current = true;

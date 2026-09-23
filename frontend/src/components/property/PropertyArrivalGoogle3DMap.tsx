@@ -17,7 +17,6 @@ import {
   blendCamera,
   projectStreetHandoff,
   pointAlongRoute,
-  roadTourWindow,
   type AtlasPoint,
   type AtlasCameraPose,
 } from "../../lib/atlas/journey.ts";
@@ -610,10 +609,10 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     () => ({ latitude: homeLatitude, longitude: homeLongitude }),
     [homeLatitude, homeLongitude],
   );
-  const atlasRoute = useMemo(() => {
-    const mapped = arrivalAtlasRoute(accessLines, roadExperience?.routeDirection ?? "as-mapped");
-    return mapped ? roadTourWindow(mapped, entranceAnchor ?? societyInteriorAnchor, policy.road.spanEitherSideM) : null;
-  }, [accessLines, roadExperience?.routeDirection, entranceAnchor, societyInteriorAnchor]);
+  const atlasRoute = useMemo(
+    () => arrivalAtlasRoute(accessLines, roadExperience?.routeDirection ?? "as-mapped"),
+    [accessLines, roadExperience?.routeDirection],
+  );
   const corridorViewActive = approachViewActive && Boolean(atlasRoute);
   const tourLines = useMemo(() => atlasRoute && accessLines[0]
     ? [{...accessLines[0], coordinates: atlasRoute.coordinates}]
@@ -718,7 +717,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
   }, []);
   const roadFlight = useAtlasRoadFlight({
     active: Boolean(ready) && approachViewActive && !streetRequested,
-    route: atlasRoute, home: societyInteriorAnchor, entrance: entranceAnchor, controller: playbackController,
+    route: atlasRoute, entrance: entranceAnchor, controller: playbackController,
     elevation: groundElevation,
     width: mapWidth,
     render: renderRoad, fly: flyRoad, autoPlay: autoPlayApproach,

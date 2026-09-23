@@ -25,10 +25,9 @@ export type AtlasRoadFlightTuning = Readonly<{
   lookBehindM: number;
   lookAheadM: number;
   altitudeOffsetM: number;
-  flightHeightM: number;
-  mobileFlightHeightM: number;
-  maximumTilt: number;
-  homeFocusWeight: number;
+  tilt: number;
+  desktopRangeM: number;
+  mobileRangeM: number;
   mobileBreakpointPx: number;
 }>;
 
@@ -86,46 +85,26 @@ export function roadFlightCamera(
   route: AtlasRoute,
   distanceAlongM: number,
   groundElevationM: number,
-  home: AtlasPoint,
-  flightHeightM: number,
+  viewportWidthPx: number,
   tuning: AtlasRoadFlightTuning = policy.road,
 ): AtlasCameraPose {
   const point = pointAlongRoute(route, distanceAlongM);
-  const center = {
-    latitude: mix(point.latitude, home.latitude, tuning.homeFocusWeight),
-    longitude: mix(point.longitude, home.longitude, tuning.homeFocusWeight),
-    altitude: groundElevationM + tuning.altitudeOffsetM,
-  };
-  const eastM = (center.longitude - point.longitude) * 111_320 * Math.cos(point.latitude * Math.PI / 180);
-  const northM = (center.latitude - point.latitude) * 111_320;
-  const horizontalM = Math.hypot(eastM, northM);
-  const heightM = flightHeightM - tuning.altitudeOffsetM;
   return {
-    center,
-    heading: horizontalM > 1
-      ? normalizeHeading(Math.atan2(eastM, northM) * 180 / Math.PI)
-      : headingAlongRoute(route, distanceAlongM, tuning.lookBehindM, tuning.lookAheadM),
-    range: Math.hypot(horizontalM, heightM),
-    tilt: Math.atan2(horizontalM, heightM) * 180 / Math.PI,
+    center: {
+      ...point,
+      altitude: groundElevationM + tuning.altitudeOffsetM,
+    },
+    heading: headingAlongRoute(
+      route,
+      distanceAlongM,
+      tuning.lookBehindM,
+      tuning.lookAheadM,
+    ),
+    range: viewportWidthPx < tuning.mobileBreakpointPx
+      ? tuning.mobileRangeM
+      : tuning.desktopRangeM,
+    tilt: tuning.tilt,
   };
-}
-
-/** Clip a viewing itinerary to one existing line; never extend or connect roads. */
-export function roadTourWindow(route: AtlasRoute, anchor: AtlasPoint, eitherSideM: number): AtlasRoute {
-  const at = projectPointOntoRoute(route, anchor).distanceAlongM;
-  const start = Math.max(0, at - eitherSideM);
-  const end = Math.min(route.lengthM, at + eitherSideM);
-  const first = pointAlongRoute(route, start);
-  const last = pointAlongRoute(route, end);
-  return buildAtlasRoute({
-    type: 'LineString',
-    coordinates: [
-      [first.longitude, first.latitude],
-      ...route.coordinates.filter((_, index) => route.cumulativeDistancesM[index] > start
-        && route.cumulativeDistancesM[index] < end),
-      [last.longitude, last.latitude],
-    ],
-  });
 }
 
 export function projectStreetHandoff(
