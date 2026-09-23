@@ -16,6 +16,9 @@ import {
 import {
   blendCamera,
   projectStreetHandoff,
+  pointAlongRoute,
+  roadTourWindow,
+  type AtlasPoint,
   type AtlasCameraPose,
 } from "../../lib/atlas/journey.ts";
 import { distanceMetres } from "../../lib/atlas/geometry.ts";
@@ -574,6 +577,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
   }, [drawerOpen]);
   const [loadError, setLoadError] = useState<Error | null>(null);
   const [streetRequested, setStreetRequested] = useState(false);
+  const [streetStart, setStreetStart] = useState<AtlasPoint | null>(null);
   const homeLatitude = home.latitude;
   const homeLongitude = home.longitude;
   const roadExperience = layerExperience?.kind === "street_view_tour"
@@ -587,11 +591,6 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       ? "nearby"
       : "society");
   }, [approachViewActive, cameraMode]);
-  const atlasRoute = useMemo(
-    () => arrivalAtlasRoute(accessLines, roadExperience?.routeDirection ?? "as-mapped"),
-    [accessLines, roadExperience?.routeDirection],
-  );
-  const corridorViewActive = approachViewActive && Boolean(atlasRoute);
   const roadFocus = useMemo(
     () => approachViewActive
       ? corridorCameraFocus(accessLines, {
@@ -611,10 +610,18 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     () => ({ latitude: homeLatitude, longitude: homeLongitude }),
     [homeLatitude, homeLongitude],
   );
+  const atlasRoute = useMemo(() => {
+    const mapped = arrivalAtlasRoute(accessLines, roadExperience?.routeDirection ?? "as-mapped");
+    return mapped ? roadTourWindow(mapped, entranceAnchor ?? societyInteriorAnchor, policy.road.spanEitherSideM) : null;
+  }, [accessLines, roadExperience?.routeDirection, entranceAnchor, societyInteriorAnchor]);
+  const corridorViewActive = approachViewActive && Boolean(atlasRoute);
+  const tourLines = useMemo(() => atlasRoute && accessLines[0]
+    ? [{...accessLines[0], coordinates: atlasRoute.coordinates}]
+    : [], [accessLines, atlasRoute]);
   const roadWaypoints = useMemo(
     () => roadFocus && roadExperience
       ? corridorTourWaypoints(
-        accessLines,
+        tourLines,
         { latitude: homeLatitude, longitude: homeLongitude },
         roadExperience.waypointSpacingM,
         {
@@ -623,7 +630,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
         },
       )
       : [],
-    [accessLines, entranceAnchor, homeLatitude, homeLongitude, roadExperience, roadFocus],
+    [tourLines, entranceAnchor, homeLatitude, homeLongitude, roadExperience, roadFocus],
   );
   const streetViewWaypoints = useMemo(
     () => roadWaypoints.length > 0
@@ -663,8 +670,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
   const roadTour = useGuidedStreetViewTour({
     active: streetViewWaypoints.length > 0 && streetRequested,
     anchor: entranceAnchor,
-    // Choosing Street View starts the complete home-arrival journey, even if
-    // the separate aerial tour was interrupted or had already passed the gate.
+    startPosition: streetStart,
     autoPlay: true,
     containerRef: streetViewContainerRef,
     experience: roadExperience,
@@ -682,8 +688,8 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
   const renderRoad = useCallback((pose: AtlasCameraPose) => {
     const map = mapRef.current;
     if (map) cameraArbiterRef.current.submit('road', () => {
-      settleCameraFraming(map, targetCamera(pose.center.latitude, pose.center.longitude,
-        pose.center.altitude, pose.range, pose.tilt, pose.heading));
+      settleCameraFraming(map, {...targetCamera(pose.center.latitude, pose.center.longitude,
+        pose.center.altitude, pose.range, pose.tilt, pose.heading), fov: policy.road.fieldOfViewDegrees});
       map.dataset.atlasCameraOwner = 'road';
     });
   }, []);
@@ -692,9 +698,9 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     if (!map) return;
     cameraArbiterRef.current.submit('road', () => {
       map.dataset.atlasCameraOwner = 'road';
-      map.flyCameraTo({ durationMillis: durationMs, endCamera: targetCamera(
+      map.flyCameraTo({ durationMillis: durationMs, endCamera: {...targetCamera(
         pose.center.latitude, pose.center.longitude, pose.center.altitude, pose.range, pose.tilt, pose.heading,
-      ) });
+      ), fov: policy.road.fieldOfViewDegrees} });
     });
   }, []);
   const traceRoadProgress = useCallback((distanceM: number, routeLengthM: number, heading: number) => {
@@ -704,7 +710,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     map.dataset.atlasRoadLength = routeLengthM.toFixed(2);
     map.dataset.atlasHeading = heading.toFixed(2);
   }, []);
-  const traceRoadPhase = useCallback((phase: "context" | "descent" | "flight" | "settled") => {
+  const traceRoadPhase = useCallback((phase: "context" | "descent" | "flight" | "entrance" | "settled") => {
     const map = mapRef.current;
     if (!map) return;
     map.dataset.atlasCameraOwner = 'road';
@@ -712,7 +718,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
   }, []);
   const roadFlight = useAtlasRoadFlight({
     active: Boolean(ready) && approachViewActive && !streetRequested,
-    route: atlasRoute, controller: playbackController,
+    route: atlasRoute, home: societyInteriorAnchor, entrance: entranceAnchor, controller: playbackController,
     elevation: groundElevation,
     width: mapWidth,
     render: renderRoad, fly: flyRoad, autoPlay: autoPlayApproach,
@@ -722,8 +728,9 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
   const exitStreet = useCallback(() => {
     if (atlasRoute) {
       const position = roadTour.position();
-      if (position) roadFlight.seek(projectStreetHandoff(atlasRoute, position, position.heading).distanceAlongM, position.heading);
-      else roadFlight.seek(roadFlight.position(), mapRef.current?.heading ?? 0);
+      const handoff = position ? projectStreetHandoff(atlasRoute, position, position.heading) : null;
+      roadFlight.seek(handoff && handoff.distanceFromRouteM <= policy.road.handoffMaximumDistanceM
+        ? handoff.distanceAlongM : roadFlight.position());
     }
     playbackController.cancel('settled');
     setStreetRequested(false);
@@ -1108,7 +1115,8 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     const cancelAutomaticCamera = () => {
       manualCameraRef.current = true;
       cameraMoveRef.current += 1;
-      playbackController.cancel("settled");
+      if (approachViewActive) playbackController.pause();
+      else playbackController.cancel("settled");
       onPlaybackCancelled?.();
     };
     const visibilityChanged = () => {
@@ -1124,7 +1132,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       map.removeEventListener("wheel", cancelAutomaticCamera);
       document.removeEventListener("visibilitychange", visibilityChanged);
     };
-  }, [onPlaybackCancelled, playbackController, ready]);
+  }, [approachViewActive, onPlaybackCancelled, playbackController, ready]);
 
   useEffect(() => {
     manualCameraRef.current = false;
@@ -1304,9 +1312,9 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       arc.dataset.atlasRelationship = 'true';
       map.append(arc); nextChildren.push(arc);
     }
-    const markerPlaces = corridorViewActive || nearbyDepth === 'home'
-      ? []
-      : places;
+    const markerPlaces = corridorViewActive
+      ? places.filter(place => place.icon === 'entrance')
+      : nearbyDepth === 'home' ? [] : places;
     for (const place of markerPlaces) {
       const popover = cameraMode === 'evidence' ? null : createPlacePopover(library, place);
       const isSelected = (place.id) === selectedPlaceId;
@@ -1700,7 +1708,10 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
             <button
               type="button"
               aria-label="Replay road tour"
-              onClick={streetRequested ? roadTour.replay : roadFlight.replay}
+              onClick={() => {
+                if (streetRequested) { setStreetStart(null); roadTour.replay(); }
+                else roadFlight.replay();
+              }}
             >
               <span aria-hidden="true">↻</span>
               <span>Replay</span>
@@ -1714,6 +1725,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
           {roadExperience && <button type="button" onClick={() => {
             if (streetRequested) exitStreet();
             else {
+              setStreetStart(atlasRoute ? pointAlongRoute(atlasRoute, roadFlight.position()) : null);
               playbackController.cancel('settled'); setStreetRequested(true);
             }
           }}>{streetRequested ? 'Back to aerial' : 'Street View'}</button>}

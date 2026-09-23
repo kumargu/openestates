@@ -1,4 +1,5 @@
 import type { SceneGeometry } from "../types.ts";
+import policy from "../atlasPolicy.ts";
 
 export type AtlasPoint = { latitude: number; longitude: number };
 export type AtlasRoute = {
@@ -24,9 +25,10 @@ export type AtlasRoadFlightTuning = Readonly<{
   lookBehindM: number;
   lookAheadM: number;
   altitudeOffsetM: number;
-  tilt: number;
-  desktopRangeM: number;
-  mobileRangeM: number;
+  flightHeightM: number;
+  mobileFlightHeightM: number;
+  maximumTilt: number;
+  homeFocusWeight: number;
   mobileBreakpointPx: number;
 }>;
 
@@ -36,19 +38,6 @@ export type AtlasStreetHandoff = {
   distanceFromRouteM: number;
   heading: number;
 };
-
-export const DEFAULT_ROAD_FLIGHT_TUNING: AtlasRoadFlightTuning = Object.freeze({
-  baseSpeedMps: 12,
-  minimumRate: 0.5,
-  maximumRate: 4,
-  lookBehindM: 25,
-  lookAheadM: 65,
-  altitudeOffsetM: 8,
-  tilt: 67,
-  desktopRangeM: 270,
-  mobileRangeM: 350,
-  mobileBreakpointPx: 700,
-});
 
 export function selectPrimaryAtlasRoute(
   geometries: readonly SceneGeometry[],
@@ -75,7 +64,7 @@ export function selectPrimaryAtlasRoute(
 
 export function clampRoadPlaybackRate(
   playbackRate: number,
-  tuning: AtlasRoadFlightTuning = DEFAULT_ROAD_FLIGHT_TUNING,
+  tuning: AtlasRoadFlightTuning = policy.road,
 ): number {
   return clamp(playbackRate, tuning.minimumRate, tuning.maximumRate);
 }
@@ -85,7 +74,7 @@ export function advanceRoadDistance(
   currentDistanceM: number,
   elapsedMs: number,
   playbackRate: number,
-  tuning: AtlasRoadFlightTuning = DEFAULT_ROAD_FLIGHT_TUNING,
+  tuning: AtlasRoadFlightTuning = policy.road,
 ): number {
   const elapsedSeconds = Math.max(0, elapsedMs) / 1_000;
   const metres = currentDistanceM
@@ -97,26 +86,46 @@ export function roadFlightCamera(
   route: AtlasRoute,
   distanceAlongM: number,
   groundElevationM: number,
-  viewportWidthPx: number,
-  tuning: AtlasRoadFlightTuning = DEFAULT_ROAD_FLIGHT_TUNING,
+  home: AtlasPoint,
+  flightHeightM: number,
+  tuning: AtlasRoadFlightTuning = policy.road,
 ): AtlasCameraPose {
   const point = pointAlongRoute(route, distanceAlongM);
-  return {
-    center: {
-      ...point,
-      altitude: groundElevationM + tuning.altitudeOffsetM,
-    },
-    heading: headingAlongRoute(
-      route,
-      distanceAlongM,
-      tuning.lookBehindM,
-      tuning.lookAheadM,
-    ),
-    range: viewportWidthPx < tuning.mobileBreakpointPx
-      ? tuning.mobileRangeM
-      : tuning.desktopRangeM,
-    tilt: tuning.tilt,
+  const center = {
+    latitude: mix(point.latitude, home.latitude, tuning.homeFocusWeight),
+    longitude: mix(point.longitude, home.longitude, tuning.homeFocusWeight),
+    altitude: groundElevationM + tuning.altitudeOffsetM,
   };
+  const eastM = (center.longitude - point.longitude) * 111_320 * Math.cos(point.latitude * Math.PI / 180);
+  const northM = (center.latitude - point.latitude) * 111_320;
+  const horizontalM = Math.hypot(eastM, northM);
+  const heightM = flightHeightM - tuning.altitudeOffsetM;
+  return {
+    center,
+    heading: horizontalM > 1
+      ? normalizeHeading(Math.atan2(eastM, northM) * 180 / Math.PI)
+      : headingAlongRoute(route, distanceAlongM, tuning.lookBehindM, tuning.lookAheadM),
+    range: Math.hypot(horizontalM, heightM),
+    tilt: Math.atan2(horizontalM, heightM) * 180 / Math.PI,
+  };
+}
+
+/** Clip a viewing itinerary to one existing line; never extend or connect roads. */
+export function roadTourWindow(route: AtlasRoute, anchor: AtlasPoint, eitherSideM: number): AtlasRoute {
+  const at = projectPointOntoRoute(route, anchor).distanceAlongM;
+  const start = Math.max(0, at - eitherSideM);
+  const end = Math.min(route.lengthM, at + eitherSideM);
+  const first = pointAlongRoute(route, start);
+  const last = pointAlongRoute(route, end);
+  return buildAtlasRoute({
+    type: 'LineString',
+    coordinates: [
+      [first.longitude, first.latitude],
+      ...route.coordinates.filter((_, index) => route.cumulativeDistancesM[index] > start
+        && route.cumulativeDistancesM[index] < end),
+      [last.longitude, last.latitude],
+    ],
+  });
 }
 
 export function projectStreetHandoff(

@@ -159,13 +159,13 @@ test("Waterford API scene reaches production metro, boundary, nearby and road pr
     "reverse",
   );
   const halfway = advanceRoadDistance(route, 0, 1000, 1);
-  assert.equal(halfway, 12);
-  assert.equal(advanceRoadDistance(route, 0, 1000, 2), 24);
-  // The production policy starts at 2×, with slower and faster inspection available.
-  assert.equal(atlasPolicy.road.defaultRate, 2);
-  assert.equal(advanceRoadDistance(route, 0, 1000, atlasPolicy.road.defaultRate, atlasPolicy.road), 24);
-  assert.equal(advanceRoadDistance(route, 0, 1000, atlasPolicy.road.minimumRate, atlasPolicy.road), 6);
-  assert.equal(advanceRoadDistance(route, 0, 1000, atlasPolicy.road.maximumRate, atlasPolicy.road), 48);
+  assert.equal(halfway, 6);
+  assert.equal(advanceRoadDistance(route, 0, 1000, 2), 12);
+  // The home-facing pass starts at 6 m/s (1×), slowing further near the entrance.
+  assert.equal(atlasPolicy.road.defaultRate, 1);
+  assert.equal(advanceRoadDistance(route, 0, 1000, atlasPolicy.road.defaultRate, atlasPolicy.road), 6);
+  assert.equal(advanceRoadDistance(route, 0, 1000, atlasPolicy.road.minimumRate, atlasPolicy.road), 3);
+  assert.equal(advanceRoadDistance(route, 0, 1000, atlasPolicy.road.maximumRate, atlasPolicy.road), 24);
   assert.equal(advanceRoadDistance(route, route.lengthM - 1, 1000, atlasPolicy.road.maximumRate, atlasPolicy.road), route.lengthM);
   const [longitude, latitude] = route.coordinates[0];
   assert.equal(
