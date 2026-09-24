@@ -497,6 +497,18 @@ async fn dag_plan_fans_all_current_support_partitions_into_society_gold_lineage(
         AssetPartition::global(),
     );
     write_current(&materializations, &osm_society_access_facts).await;
+    let osm_society_structure_facts = materialization_in_partition(
+        "osm_society_structure_facts",
+        AssetStage::Silver,
+        "2026-07-13",
+        vec![
+            canonical.materialization_id.clone(),
+            osm_society_access_facts.materialization_id.clone(),
+        ],
+        now,
+        AssetPartition::global(),
+    );
+    write_current(&materializations, &osm_society_structure_facts).await;
     let osm_power_line_facts = materialization_in_partition(
         "osm_power_line_facts",
         AssetStage::Silver,
@@ -535,6 +547,7 @@ async fn dag_plan_fans_all_current_support_partitions_into_society_gold_lineage(
             metro_station_facts.materialization_id.clone(),
             locality_boundary_facts.materialization_id.clone(),
             osm_society_access_facts.materialization_id.clone(),
+            osm_society_structure_facts.materialization_id.clone(),
             osm_power_line_facts.materialization_id.clone(),
         ],
         now,

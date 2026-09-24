@@ -133,7 +133,7 @@ class OverpassTransportTests(unittest.TestCase):
             time.sleep(0.005)
             with lock:
                 active -= 1
-            return {"query": query}
+            return {"query": query, "elements": []}
 
         outcomes = transport(
             fetch,
@@ -155,7 +155,7 @@ class OverpassTransportTests(unittest.TestCase):
 
         def fetch(_url, query):
             starts.append((query, clock.monotonic()))
-            return {"query": query}
+            return {"query": query, "elements": []}
 
         outcomes = transport(
             fetch,

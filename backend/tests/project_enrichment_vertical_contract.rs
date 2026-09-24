@@ -18,9 +18,9 @@ use backend::assets::{
     ExternalListingObservationRecord, ExternalListingsWeeklyInput, GoogleNearbyPlaceRecord,
     GoogleNearbyPlacesWeeklyInput, GooglePlaceSnapshotRecord, GooglePlacesWeeklyInput,
     OsmLocalityBoundariesInput, OsmLocalityBoundaryInput, OsmPowerInfrastructureInput,
-    OsmPowerLineObservationRecord, OsmSocietyAccessInput, ReraProjectPlanFramesInput,
-    ReraProjectSnapshotRecord, ReraRegistryMonthlyInput, SkillFactAnnotationRecord,
-    SkillFactRecord, SocietyGoldManifest, SourceEntitySeed, SourceWatermark,
+    OsmPowerLineObservationRecord, OsmSocietyAccessInput, OsmSocietyStructuresInput,
+    ReraProjectPlanFramesInput, ReraProjectSnapshotRecord, ReraRegistryMonthlyInput,
+    SkillFactAnnotationRecord, SkillFactRecord, SocietyGoldManifest, SourceEntitySeed, SourceWatermark,
     BUILDER_RERA_AGGREGATES_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
     EXTERNAL_LISTING_FACTS_ASSET_ID,
 };
@@ -217,7 +217,17 @@ async fn materialized_contract(carpet: bool) -> (tempfile::TempDir, Arc<AppState
         )
         .await
         .unwrap();
-    assert_eq!(report.manifest.status, DagRunStatus::Succeeded);
+    assert_eq!(
+        report.manifest.status,
+        DagRunStatus::Succeeded,
+        "{:?}",
+        report
+            .manifest
+            .steps
+            .iter()
+            .filter(|step| step.error.is_some())
+            .collect::<Vec<_>>()
+    );
     assert_eq!(report.manifest.failed_count, 0);
 
     for asset_id in [
@@ -1167,6 +1177,13 @@ fn source_inputs(
                 source: "fixture_osm_society_access_empty".to_string(),
                 high_watermark: "records=0".to_string(),
             }],
+        }),
+        osm_society_structures: Some(OsmSocietyStructuresInput {
+            snapshot_date: "2026-07-14".to_string(),
+            collection_status: "complete".to_string(),
+            coverage: Vec::new(),
+            records: Vec::new(),
+            source_watermarks: watermark.clone(),
         }),
         osm_power_infrastructure: Some(OsmPowerInfrastructureInput {
             snapshot_date: "2026-07-14".to_string(),

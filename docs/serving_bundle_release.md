@@ -23,9 +23,9 @@ the API and search process load one compact Parquet bundle and one Tantivy
 index, never per-society files.
 
 The immutable roster referenced by `manifests/catalog/dev.json` is authoritative.
-`data/catalog/bootstrap_roster.json` is used only for the first `rebuild` when
-no catalog pointer exists; commands never rewrite it. Each active generation
-stores a roster that pins the exact gold snapshots used by that bundle.
+When no pointer exists, `apply` starts from an empty roster; populate it with
+explicit society upserts. Each active generation stores a roster that pins the
+exact gold snapshots used by that bundle.
 
 ## Commands
 
@@ -56,7 +56,9 @@ warnings. Geographic search continues to fail closed when topology evidence
 is unavailable.
 
 An existing society whose legacy snapshot has no recoverable asset lineage is
-retained and reported in `skipped`; collection is not started for that society.
+retained and reported in `skipped` when the requested modules cannot be patched
+using configured contribution ownership. Supported module patches preserve the
+unmodified snapshot contributions.
 Every collection failure and skipped society is also written to immutable
 Parquet at:
 
@@ -75,9 +77,10 @@ Tantivy artifacts, projected properties, eligibility, evidence relations, and
 every local media reference. There is no frontend manifest mutation and no
 separate create/validate/promote workflow.
 
-After a successful pointer swap, cleanup retains only current and previous
-bundles, rosters, and referenced gold/topology snapshots. It also removes the
-retired release, environment, serving-materialization, and asset-pointer data.
+Cleanup is disabled during migration by `catalog_enrichment.json`. When enabled,
+it defers deletion while any catalog operation remains unfinished. Otherwise,
+it retains current and previous bundles, rosters, and referenced gold/topology
+snapshots, and removes retired release and serving-materialization pointers.
 
 ## Runtime
 

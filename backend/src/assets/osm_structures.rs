@@ -11,6 +11,7 @@ use crate::knowledge::FactValue;
 use crate::lake::LakeStore;
 
 use super::{
+    geometry::validate_geojson_geometry,
     source_resolution::{
         SourceEntityResolutionError, SourceEntityResolutionScope, SourceEntityResolver,
     },
@@ -206,12 +207,21 @@ pub fn osm_society_structure_facts_input(
             .cmp(&right.entity_id)
             .then(left.fact_key.cmp(&right.fact_key))
     });
+    let mut source_watermarks = input.source_watermarks.clone();
+    if facts.is_empty() {
+        // Validation above rejects incomplete collection. A complete empty
+        // observation must replace old contributions just like a populated one.
+        source_watermarks.push(SourceWatermark {
+            source: format!("{OSM_SOCIETY_STRUCTURE_SOURCE}_empty"),
+            high_watermark: "records=0".to_string(),
+        });
+    }
     Ok(SkillFactsInput {
         source: OSM_SOCIETY_STRUCTURE_SOURCE.to_string(),
         snapshot_date: input.snapshot_date.clone(),
         facts,
         fact_annotations: annotations,
-        source_watermarks: input.source_watermarks.clone(),
+        source_watermarks,
     })
 }
 
@@ -314,6 +324,12 @@ fn validate_input(input: &OsmSocietyStructuresInput) -> Result<(), OsmSocietyStr
                 record.osm_id
             )));
         }
+        validate_geojson_geometry(&record.geometry_geojson, None, None).map_err(|error| {
+            OsmSocietyStructuresAssetError::InvalidInput(format!(
+                "structure {} has invalid geometry: {error}",
+                record.osm_id
+            ))
+        })?;
         let parsed = record
             .geometry_geojson
             .parse::<GeoJson>()
