@@ -30,6 +30,7 @@ import {
   homeSceneCamera,
   nearbyRelationArc,
   nearbySceneCamera,
+  townshipTourStops,
   type AtlasSafeFrame,
   type NearbyCameraOrientation,
   type NearbyDepth,
@@ -121,6 +122,7 @@ export type ArrivalGoogle3DMapProps = {
   quiet?: boolean;
   showBoundary?: boolean;
   polygons?: MapOverlayPolygon[];
+  structurePolygons?: MapOverlayPolygon[];
   contextLines?: MapOverlayLine[];
   showExpandAction?: boolean;
   drawerOpen?: boolean;
@@ -234,6 +236,7 @@ const EVIDENCE_CAMERA_DURATION_MS = 600;
 const HOME_CAMERA_DURATION_MS = 350;
 const DEFAULT_HEADING = 210;
 const EMPTY_CONTEXT_LINES: MapOverlayLine[] = [];
+const EMPTY_POLYGONS: MapOverlayPolygon[] = [];
 
 function societyCameraAt(
   home: { latitude: number; longitude: number },
@@ -288,6 +291,19 @@ function targetCamera(
     range,
     tilt,
   };
+}
+
+function headingBetween(
+  from: {latitude:number; longitude:number},
+  to: {latitude:number; longitude:number},
+): number {
+  const latitude1 = from.latitude * Math.PI / 180;
+  const latitude2 = to.latitude * Math.PI / 180;
+  const longitudeDelta = (to.longitude - from.longitude) * Math.PI / 180;
+  const y = Math.sin(longitudeDelta) * Math.cos(latitude2);
+  const x = Math.cos(latitude1) * Math.sin(latitude2)
+    - Math.sin(latitude1) * Math.cos(latitude2) * Math.cos(longitudeDelta);
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
 }
 
 function settleCameraFraming(map: Map3DElement, camera: CameraOptions) {
@@ -461,6 +477,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     quiet = false,
     showBoundary = true,
     polygons,
+    structurePolygons = EMPTY_POLYGONS,
     contextLines = EMPTY_CONTEXT_LINES,
     showExpandAction = true,
     drawerOpen = false,
@@ -479,6 +496,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
   const libraryRef = useRef<Maps3DLibrary | null>(null);
   const markerLibraryRef = useRef<MarkerLibrary | null>(null);
   const childrenRef = useRef<Map3DChild[]>([]);
+  const structureLabelRef = useRef<Map3DChild | null>(null);
   const cameraMoveRef = useRef(0);
   const manualCameraRef = useRef(false);
   const cameraArbiterRef = useRef(new AtlasCameraArbiter());
@@ -579,6 +597,10 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
   const [streetStart, setStreetStart] = useState<AtlasPoint | null>(null);
   const homeLatitude = home.latitude;
   const homeLongitude = home.longitude;
+  const structureStops = useMemo(
+    () => townshipTourStops(home, structurePolygons),
+    [home, structurePolygons],
+  );
   const roadExperience = layerExperience?.kind === "street_view_tour"
     ? layerExperience
     : null;
@@ -828,6 +850,8 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       cameraMoveRef.current += 1;
       for (const child of childrenRef.current) child.remove();
       childrenRef.current = [];
+      structureLabelRef.current?.remove();
+      structureLabelRef.current = null;
       mapRef.current?.remove();
       mapRef.current = null;
       libraryRef.current = null;
@@ -914,9 +938,57 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
 
       applyOpening();
       const orbitCamera = homeOrbitCamera(homeSubject, terrainElevationRef.current, safeFrame);
+      const hasStructureTour = structureStops.length >= policy.homeOrbit.tourMinimumStops;
       const run = playbackController.begin('playing');
       if (!run.activate()) return;
-      let phase: 'opening' | 'orbit' = 'opening';
+      let phase: 'opening' | 'descent' | 'tourMove' | 'tourDwell' | 'orbit' = 'opening';
+      let currentStopIndex = 0;
+      const showStructureLabel = () => {
+        const stop = structureStops[currentStopIndex];
+        const library = libraryRef.current;
+        if (!stop || !library || !run.isCurrent()) return;
+        structureLabelRef.current?.remove();
+        const marker = new library.Marker3DInteractiveElement({
+          altitudeMode: 'CLAMP_TO_GROUND',
+          collisionBehavior: 'REQUIRED',
+          drawsWhenOccluded: true,
+          label: stop.name,
+          position: {lat: stop.latitude, lng: stop.longitude},
+          title: stop.name,
+        });
+        marker.dataset.atlasStructureId = stop.id;
+        map.append(marker);
+        structureLabelRef.current = marker;
+        map.dataset.atlasStructure = stop.name;
+      };
+      const startTourMove = (durationMillis: number) => {
+        const stop = structureStops[currentStopIndex];
+        if (!stop || !run.isCurrent()) return;
+        phase = 'tourMove';
+        structureLabelRef.current?.remove();
+        structureLabelRef.current = null;
+        const previous = currentStopIndex === 0
+          ? {latitude: homeLatitude, longitude: homeLongitude}
+          : structureStops[currentStopIndex - 1];
+        const heading = headingBetween(previous, stop);
+        const range = policy.homeOrbit.tourRangeM
+          * (safeFrame.width < policy.homeOrbit.mobileBreakpointPx ? policy.society.mobileRangeScale : 1);
+        cameraArbiterRef.current.submit('society', () => {
+          map.dataset.atlasScene = 'society:structure-tour';
+          map.dataset.atlasHomePhase = 'structure-tour';
+          map.flyCameraTo({
+            endCamera: targetCamera(
+              stop.latitude,
+              stop.longitude,
+              terrainElevationRef.current! + policy.homeOrbit.tourAltitudeOffsetM,
+              range,
+              policy.homeOrbit.tourTilt,
+              heading,
+            ),
+            durationMillis,
+          });
+        });
+      };
       const startOrbit = () => {
         if (!run.isCurrent()) return;
         phase = 'orbit';
@@ -930,20 +1002,50 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
           });
         });
       };
+      const startDescent = (durationMillis: number) => {
+        if (!run.isCurrent()) return;
+        phase = 'descent';
+        cameraArbiterRef.current.submit('society', () => {
+          map.dataset.atlasScene = 'society:descent';
+          map.dataset.atlasHomePhase = 'descent';
+          map.flyCameraTo({
+            endCamera: {...orbitCamera, heading: map.heading},
+            durationMillis,
+          });
+        });
+      };
       const stop = playbackController.registerStopper(() => {
         map.stopCameraAnimation();
       });
       const resume = playbackController.registerResumer(() => {
         if (!run.isCurrent()) return;
-        if (phase === 'orbit') startOrbit();
+        if (phase === 'descent') startDescent(playbackController.remainingWaitMs());
+        else if (phase === 'tourMove') startTourMove(playbackController.remainingWaitMs());
+        else if (phase === 'orbit') startOrbit();
       });
       void (async () => {
         if (!(await run.wait(policy.homeOrbit.openingHoldMs)) || !run.isCurrent()) return;
+        startDescent(policy.homeOrbit.descentMs);
+        if (!(await run.wait(policy.homeOrbit.descentMs)) || !run.isCurrent()) return;
+        settleCameraFraming(map, {...orbitCamera, heading: map.heading});
+        if (hasStructureTour) {
+          while (run.isCurrent()) {
+            startTourMove(policy.homeOrbit.tourTransitionMs);
+            if (!(await run.wait(policy.homeOrbit.tourTransitionMs)) || !run.isCurrent()) return;
+            phase = 'tourDwell';
+            showStructureLabel();
+            if (!(await run.wait(policy.homeOrbit.tourDwellMs)) || !run.isCurrent()) return;
+            currentStopIndex = (currentStopIndex + 1) % structureStops.length;
+          }
+          return;
+        }
         startOrbit();
       })();
       return () => {
         stop();
         resume();
+        structureLabelRef.current?.remove();
+        structureLabelRef.current = null;
         if (run.isCurrent()) playbackController.cancel('settled');
       };
     }
@@ -1106,6 +1208,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     safeFrame,
     drawerOpen,
     selectedSecondarySociety,
+    structureStops,
   ]);
 
   useEffect(() => {
@@ -1153,6 +1256,11 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
         policy.homeBoundary,
         nextChildren,
       );
+    }
+    if (cameraMode === 'home' && !terrainCorridor) {
+      for (const polygon of structurePolygons) {
+        addPolygon(map, library, polygon, policy.geometryStyles.society_structure, nextChildren);
+      }
     }
     const selected = places.find(place => (place.id) === selectedPlaceId);
     const isolatesSelection = Boolean(selected) && nearbyDepth !== 'overview';
@@ -1398,11 +1506,13 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
     showMetroLines,
     approachViewActive,
     corridorViewActive,
+    terrainCorridor,
     quiet,
     showBoundary,
     onSelectPlace,
     polygons,
     contextLines,
+    structurePolygons,
     selectedPlaceId,
     nearbyDepth,
     home,

@@ -1,0 +1,4152 @@
+{
+  "snapshot_date": "2026-09-21",
+  "collection_status": "incomplete",
+  "society_entity_id": "society:rera-7886bc98e6a977a5",
+  "boundary_osm_id": "way/266310354",
+  "boundary_geometry_hash": "6c282794a10edcb09bcd195c62be792128c22f32434e9c704018a3306f0fabfb",
+  "planner_version": 1,
+  "coverage": [
+    {
+      "tile_id": "way-266310354:r000:c000",
+      "bounds": [
+        12.9266233,
+        77.7316447,
+        12.93066570028746,
+        77.73579228995338
+      ],
+      "query_bounds": [
+        12.926443637765,
+        77.73146036266874,
+        12.930845362522458,
+        77.73597662728464
+      ],
+      "query": "[out:json][timeout:45];\n(\n  way[\"building\"](12.9264436,77.7314604,12.9308454,77.7359766);\n  relation[\"type\"=\"multipolygon\"][\"building\"](12.9264436,77.7314604,12.9308454,77.7359766);\n  way[\"building:part\"](12.9264436,77.7314604,12.9308454,77.7359766);\n  relation[\"type\"=\"multipolygon\"][\"building:part\"](12.9264436,77.7314604,12.9308454,77.7359766);\n);\nout body center geom;",
+      "query_hash": "cc46edf486549e645bfb4e5f7d9a3c20c1c385e4ff1b5cc1640053a562842956",
+      "status": "complete",
+      "element_count": 104,
+      "accepted_structure_count": 80,
+      "response_json_bytes": 82662,
+      "retryable": false
+    },
+    {
+      "tile_id": "way-266310354:r000:c001",
+      "bounds": [
+        12.9266233,
+        77.73579228995338,
+        12.93066570028746,
+        77.73993987990676
+      ],
+      "query_bounds": [
+        12.926443637765,
+        77.73560795262212,
+        12.930845362522458,
+        77.74012421723802
+      ],
+      "query": "[out:json][timeout:45];\n(\n  way[\"building\"](12.9264436,77.7356080,12.9308454,77.7401242);\n  relation[\"type\"=\"multipolygon\"][\"building\"](12.9264436,77.7356080,12.9308454,77.7401242);\n  way[\"building:part\"](12.9264436,77.7356080,12.9308454,77.7401242);\n  relation[\"type\"=\"multipolygon\"][\"building:part\"](12.9264436,77.7356080,12.9308454,77.7401242);\n);\nout body center geom;",
+      "query_hash": "88db78b0f90db6fa8ddfcad473ef2ecc9ae387371f5b5018ec5066bf099145ba",
+      "status": "complete",
+      "element_count": 102,
+      "accepted_structure_count": 6,
+      "response_json_bytes": 72849,
+      "retryable": false
+    },
+    {
+      "tile_id": "way-266310354:r000:c002",
+      "bounds": [
+        12.9266233,
+        77.73993987990674,
+        12.93066570028746,
+        77.7402985
+      ],
+      "query_bounds": [
+        12.926443637765,
+        77.73975554257548,
+        12.930845362522458,
+        77.74048283733126
+      ],
+      "query": "[out:json][timeout:45];\n(\n  way[\"building\"](12.9264436,77.7397555,12.9308454,77.7404828);\n  relation[\"type\"=\"multipolygon\"][\"building\"](12.9264436,77.7397555,12.9308454,77.7404828);\n  way[\"building:part\"](12.9264436,77.7397555,12.9308454,77.7404828);\n  relation[\"type\"=\"multipolygon\"][\"building:part\"](12.9264436,77.7397555,12.9308454,77.7404828);\n);\nout body center geom;",
+      "query_hash": "8f07306248011a038ddcc93584ff9717b8e362ee1ca80f0b6a17a3484529a4d6",
+      "status": "complete_empty",
+      "element_count": 16,
+      "accepted_structure_count": 0,
+      "response_json_bytes": 9067,
+      "retryable": false
+    },
+    {
+      "tile_id": "way-266310354:r001:c000",
+      "bounds": [
+        12.93066570028746,
+        77.7316447,
+        12.93470810057492,
+        77.73579228995338
+      ],
+      "query_bounds": [
+        12.93048603805246,
+        77.73146036266874,
+        12.934887762809918,
+        77.73597662728464
+      ],
+      "query": "[out:json][timeout:45];\n(\n  way[\"building\"](12.9304860,77.7314604,12.9348878,77.7359766);\n  relation[\"type\"=\"multipolygon\"][\"building\"](12.9304860,77.7314604,12.9348878,77.7359766);\n  way[\"building:part\"](12.9304860,77.7314604,12.9348878,77.7359766);\n  relation[\"type\"=\"multipolygon\"][\"building:part\"](12.9304860,77.7314604,12.9348878,77.7359766);\n);\nout body center geom;",
+      "query_hash": "1235a39362501ef07a127a966de83f51c833827ac24a075267e436c8cdd0c156",
+      "status": "failed",
+      "element_count": 0,
+      "accepted_structure_count": 0,
+      "response_json_bytes": 0,
+      "retryable": true,
+      "error": "HTTPError: HTTP Error 504: Gateway Timeout"
+    },
+    {
+      "tile_id": "way-266310354:r001:c001",
+      "bounds": [
+        12.93066570028746,
+        77.73579228995338,
+        12.93470810057492,
+        77.73993987990676
+      ],
+      "query_bounds": [
+        12.93048603805246,
+        77.73560795262212,
+        12.934887762809918,
+        77.74012421723802
+      ],
+      "query": "[out:json][timeout:45];\n(\n  way[\"building\"](12.9304860,77.7356080,12.9348878,77.7401242);\n  relation[\"type\"=\"multipolygon\"][\"building\"](12.9304860,77.7356080,12.9348878,77.7401242);\n  way[\"building:part\"](12.9304860,77.7356080,12.9348878,77.7401242);\n  relation[\"type\"=\"multipolygon\"][\"building:part\"](12.9304860,77.7356080,12.9348878,77.7401242);\n);\nout body center geom;",
+      "query_hash": "a042a521c9a70a23963e3592e56816e85c74904d9a0f9ff50a1e61776356e618",
+      "status": "complete",
+      "element_count": 41,
+      "accepted_structure_count": 33,
+      "response_json_bytes": 51260,
+      "retryable": false
+    },
+    {
+      "tile_id": "way-266310354:r001:c002",
+      "bounds": [
+        12.93066570028746,
+        77.73993987990674,
+        12.93470810057492,
+        77.7402985
+      ],
+      "query_bounds": [
+        12.93048603805246,
+        77.73975554257548,
+        12.934887762809918,
+        77.74048283733126
+      ],
+      "query": "[out:json][timeout:45];\n(\n  way[\"building\"](12.9304860,77.7397555,12.9348878,77.7404828);\n  relation[\"type\"=\"multipolygon\"][\"building\"](12.9304860,77.7397555,12.9348878,77.7404828);\n  way[\"building:part\"](12.9304860,77.7397555,12.9348878,77.7404828);\n  relation[\"type\"=\"multipolygon\"][\"building:part\"](12.9304860,77.7397555,12.9348878,77.7404828);\n);\nout body center geom;",
+      "query_hash": "4c42cf7fc28bf962aa587eda7c7d8789aae67c02cf1c7fa748f3788008f68a19",
+      "status": "complete_empty",
+      "element_count": 6,
+      "accepted_structure_count": 0,
+      "response_json_bytes": 10126,
+      "retryable": false
+    },
+    {
+      "tile_id": "way-266310354:r002:c000",
+      "bounds": [
+        12.934708100574918,
+        77.7316447,
+        12.9363483,
+        77.73579228995338
+      ],
+      "query_bounds": [
+        12.93452843833992,
+        77.73146036266874,
+        12.936527962235,
+        77.73597662728464
+      ],
+      "query": "[out:json][timeout:45];\n(\n  way[\"building\"](12.9345284,77.7314604,12.9365280,77.7359766);\n  relation[\"type\"=\"multipolygon\"][\"building\"](12.9345284,77.7314604,12.9365280,77.7359766);\n  way[\"building:part\"](12.9345284,77.7314604,12.9365280,77.7359766);\n  relation[\"type\"=\"multipolygon\"][\"building:part\"](12.9345284,77.7314604,12.9365280,77.7359766);\n);\nout body center geom;",
+      "query_hash": "8b95e35b7745a122d45ffe75fe748001d4193d23739ec197b84d460f3a2b6c76",
+      "status": "complete",
+      "element_count": 54,
+      "accepted_structure_count": 50,
+      "response_json_bytes": 23894,
+      "retryable": false
+    },
+    {
+      "tile_id": "way-266310354:r002:c001",
+      "bounds": [
+        12.934708100574918,
+        77.73579228995338,
+        12.9363483,
+        77.73993987990676
+      ],
+      "query_bounds": [
+        12.93452843833992,
+        77.73560795262212,
+        12.936527962235,
+        77.74012421723802
+      ],
+      "query": "[out:json][timeout:45];\n(\n  way[\"building\"](12.9345284,77.7356080,12.9365280,77.7401242);\n  relation[\"type\"=\"multipolygon\"][\"building\"](12.9345284,77.7356080,12.9365280,77.7401242);\n  way[\"building:part\"](12.9345284,77.7356080,12.9365280,77.7401242);\n  relation[\"type\"=\"multipolygon\"][\"building:part\"](12.9345284,77.7356080,12.9365280,77.7401242);\n);\nout body center geom;",
+      "query_hash": "e1070b254bb571403fb2fa20e2366f434efc079807d8a9f2ec165ca6bff139db",
+      "status": "complete",
+      "element_count": 8,
+      "accepted_structure_count": 5,
+      "response_json_bytes": 12437,
+      "retryable": false
+    }
+  ],
+  "records": [
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1071980224",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.93173245,
+      "longitude": 77.735858275,
+      "geometry_geojson": "{\"coordinates\":[[[77.7357776,12.9316992],[77.7359328,12.9316876],[77.7359389,12.9317657],[77.7357838,12.9317773],[77.7357776,12.9316992]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1071980224",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r001:c001"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1071980225",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.931858225,
+      "longitude": 77.735864025,
+      "geometry_geojson": "{\"coordinates\":[[[77.7357834,12.931825],[77.7359385,12.9318134],[77.7359447,12.9318914],[77.7357895,12.9319031],[77.7357834,12.931825]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1071980225",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r001:c001"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1071980226",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.931747300000001,
+      "longitude": 77.735684925,
+      "geometry_geojson": "{\"coordinates\":[[[77.7356043,12.9317141],[77.7357594,12.9317024],[77.7357656,12.9317805],[77.7356104,12.9317922],[77.7356043,12.9317141]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1071980226",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r001:c001"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1071980227",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.93187305,
+      "longitude": 77.7356907,
+      "geometry_geojson": "{\"coordinates\":[[[77.73561,12.9318398],[77.7357652,12.9318282],[77.7357714,12.9319063],[77.7356162,12.9319179],[77.73561,12.9318398]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1071980227",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r001:c001"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1071980228",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.9320441,
+      "longitude": 77.73570115,
+      "geometry_geojson": "{\"coordinates\":[[[77.7356099,12.9320071],[77.7357848,12.9319928],[77.7357924,12.9320811],[77.7356175,12.9320954],[77.7356099,12.9320071]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1071980228",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r001:c001"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1071980229",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.932034799999998,
+      "longitude": 77.73589162500001,
+      "geometry_geojson": "{\"coordinates\":[[[77.7358004,12.9319978],[77.7359752,12.9319835],[77.7359829,12.9320718],[77.735808,12.9320861],[77.7358004,12.9319978]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1071980229",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r001:c001"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1071980230",
+      "name": "Kiara",
+      "ref": null,
+      "building": "apartments",
+      "building_part": null,
+      "building_levels": 25.0,
+      "height_meters": null,
+      "latitude": 12.9317613,
+      "longitude": 77.73653009,
+      "geometry_geojson": "{\"coordinates\":[[[77.7365948,12.931955],[77.7365983,12.931786],[77.7367155,12.9317106],[77.7366634,12.9316336],[77.7365621,12.9316988],[77.7365069,12.9317025],[77.7364016,12.9316427],[77.7363468,12.9317344],[77.7364574,12.9317972],[77.7364541,12.9319522],[77.7365948,12.931955]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "apartments",
+        "building:levels": "25",
+        "name": "Kiara"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1071980230",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r001:c001"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1071980231",
+      "name": "Kiara",
+      "ref": null,
+      "building": "apartments",
+      "building_part": null,
+      "building_levels": 25.0,
+      "height_meters": null,
+      "latitude": 12.93180954,
+      "longitude": 77.73692221000002,
+      "geometry_geojson": "{\"coordinates\":[[[77.736937,12.9320079],[77.7369748,12.9318483],[77.7371163,12.9318284],[77.7370683,12.9317088],[77.7369709,12.9317459],[77.7369161,12.9317381],[77.7368304,12.9316565],[77.7367453,12.9317415],[77.7368482,12.9318395],[77.7368148,12.9319805],[77.736937,12.9320079]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "apartments",
+        "building:levels": "25",
+        "name": "Kiara"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1071980231",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r001:c001"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1071980232",
+      "name": "Jasper",
+      "ref": null,
+      "building": "apartments",
+      "building_part": null,
+      "building_levels": 26.0,
+      "height_meters": null,
+      "latitude": 12.932726433333334,
+      "longitude": 77.73721135000001,
+      "geometry_geojson": "{\"coordinates\":[[[77.7370173,12.9328128],[77.7370567,12.9327004],[77.7371285,12.9327243],[77.7371497,12.9326641],[77.7370791,12.9326405],[77.737109,12.9325552],[77.73741,12.9326556],[77.7373744,12.9327571],[77.7372725,12.9327232],[77.7372569,12.9327676],[77.7373607,12.9328022],[77.7373214,12.9329142],[77.7370173,12.9328128]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "apartments",
+        "building:levels": "26",
+        "name": "Jasper"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1071980232",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r001:c001"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1071980233",
+      "name": "Jasper",
+      "ref": null,
+      "building": "apartments",
+      "building_part": null,
+      "building_levels": 26.0,
+      "height_meters": null,
+      "latitude": 12.93267198333333,
+      "longitude": 77.73679851666667,
+      "geometry_geojson": "{\"coordinates\":[[[77.7366516,12.9328227],[77.7366451,12.9327041],[77.7367209,12.9327002],[77.7367174,12.9326366],[77.7366429,12.9326404],[77.736638,12.9325504],[77.7369557,12.932534],[77.7369615,12.9326411],[77.736854,12.9326467],[77.7368565,12.9326936],[77.7369661,12.9326879],[77.7369725,12.9328061],[77.7366516,12.9328227]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "apartments",
+        "building:levels": "26",
+        "name": "Jasper"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1071980233",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r001:c001"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1071980234",
+      "name": "Irwin",
+      "ref": null,
+      "building": "apartments",
+      "building_part": null,
+      "building_levels": 19.0,
+      "height_meters": null,
+      "latitude": 12.933329233333334,
+      "longitude": 77.73608358333334,
+      "geometry_geojson": "{\"coordinates\":[[[77.736139,12.93353],[77.7360318,12.9334736],[77.7360678,12.9334085],[77.7360103,12.9333783],[77.7359748,12.9334422],[77.7358934,12.9333994],[77.7360447,12.9331266],[77.7361415,12.9331776],[77.7360903,12.9332699],[77.7361328,12.9332922],[77.7361849,12.9331981],[77.7362917,12.9332544],[77.736139,12.93353]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "apartments",
+        "building:levels": "19",
+        "name": "Irwin"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1071980234",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r001:c001"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1071980235",
+      "name": "Irwin",
+      "ref": null,
+      "building": "apartments",
+      "building_part": null,
+      "building_levels": 19.0,
+      "height_meters": null,
+      "latitude": 12.933012266666667,
+      "longitude": 77.73634041666666,
+      "geometry_geojson": "{\"coordinates\":[[[77.7363084,12.9332178],[77.7362335,12.9331242],[77.7362933,12.9330787],[77.7362531,12.9330285],[77.7361942,12.9330732],[77.7361374,12.933002],[77.7363883,12.9328114],[77.736456,12.9328961],[77.736371,12.9329606],[77.7364007,12.9329976],[77.7364872,12.9329319],[77.7365619,12.9330252],[77.7363084,12.9332178]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "apartments",
+        "building:levels": "19",
+        "name": "Irwin"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1071980235",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r001:c001"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1071980238",
+      "name": "Giselle",
+      "ref": null,
+      "building": "apartments",
+      "building_part": null,
+      "building_levels": 30.0,
+      "height_meters": 108.0,
+      "latitude": 12.933684242105265,
+      "longitude": 77.73707604210527,
+      "geometry_geojson": "{\"coordinates\":[[[77.7374052,12.9333164],[77.7374283,12.9334291],[77.7375926,12.933481],[77.7375486,12.9336185],[77.7373936,12.9335734],[77.7372109,12.9337831],[77.7372919,12.9339454],[77.737123,12.933995],[77.7370606,12.9338597],[77.7367645,12.9338462],[77.736709,12.933995],[77.7365564,12.9339251],[77.7366397,12.9337786],[77.7365402,12.9336771],[77.7366859,12.9335847],[77.736783,12.9337019],[77.7371069,12.9336997],[77.7373196,12.9334585],[77.7372849,12.9333322],[77.7374052,12.9333164]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "apartments",
+        "building:levels": "30",
+        "height": "108",
+        "name": "Giselle"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1071980238",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r001:c001"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1071980239",
+      "name": "Humbert",
+      "ref": null,
+      "building": "apartments",
+      "building_part": null,
+      "building_levels": 30.0,
+      "height_meters": 108.0,
+      "latitude": 12.934501,
+      "longitude": 77.73637420833332,
+      "geometry_geojson": "{\"coordinates\":[[[77.7364366,12.9346999],[77.7363275,12.9346469],[77.7363612,12.9345808],[77.7363027,12.9345524],[77.7362694,12.9346175],[77.7361866,12.9345774],[77.7363282,12.9342997],[77.7364269,12.9343475],[77.7363789,12.9344415],[77.736422,12.9344624],[77.7364709,12.9343667],[77.7365796,12.9344193],[77.7364366,12.9346999]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "apartments",
+        "building:levels": "30",
+        "height": "108",
+        "name": "Humbert"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1071980239",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r001:c001",
+        "way-266310354:r002:c001"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1071980240",
+      "name": "Figaro",
+      "ref": null,
+      "building": "apartments",
+      "building_part": null,
+      "building_levels": 30.0,
+      "height_meters": 108.0,
+      "latitude": 12.933299099999997,
+      "longitude": 77.73832606666666,
+      "geometry_geojson": "{\"coordinates\":[[[77.7384952,12.9331724],[77.7384827,12.9332906],[77.7384073,12.933283],[77.7384006,12.9333464],[77.7384748,12.9333538],[77.7384653,12.9334435],[77.7381488,12.9334116],[77.7381601,12.9333049],[77.7382672,12.9333157],[77.7382722,12.933269],[77.7381631,12.933258],[77.7381755,12.9331403],[77.7384952,12.9331724]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "apartments",
+        "building:levels": "30",
+        "height": "108",
+        "name": "Figaro"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1071980240",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r001:c001"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1071980241",
+      "name": "Duncan",
+      "ref": null,
+      "building": "apartments",
+      "building_part": null,
+      "building_levels": 28.0,
+      "height_meters": null,
+      "latitude": 12.932565213636366,
+      "longitude": 77.73861782272728,
+      "geometry_geojson": "{\"coordinates\":[[[77.7381362,12.9324025],[77.7382004,12.9325341],[77.7380982,12.9326501],[77.7381838,12.9327229],[77.7382922,12.9326192],[77.7385536,12.932701],[77.7385592,12.9328515],[77.7387406,12.9328323],[77.7387341,12.9326841],[77.7389447,12.9325697],[77.7390405,12.9326674],[77.7391474,12.9325367],[77.7390391,12.9324559],[77.7390686,12.9323367],[77.7389196,12.9323084],[77.7389092,12.9324216],[77.7386266,12.9325779],[77.7386266,12.9325946],[77.7385917,12.9325954],[77.7385903,12.9325774],[77.7383176,12.9324391],[77.7382719,12.9323562],[77.7381362,12.9324025]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "apartments",
+        "building:levels": "28",
+        "name": "Duncan"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1071980241",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r001:c001"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1071980243",
+      "name": "Elinor",
+      "ref": null,
+      "building": "apartments",
+      "building_part": null,
+      "building_levels": 30.0,
+      "height_meters": 108.0,
+      "latitude": 12.933232674999998,
+      "longitude": 77.7389852,
+      "geometry_geojson": "{\"coordinates\":[[[77.738872,12.9334089],[77.7388414,12.9332939],[77.7389148,12.9332754],[77.7388985,12.9332137],[77.7388262,12.9332319],[77.7388031,12.9331446],[77.7391111,12.933067],[77.7391386,12.9331708],[77.7390344,12.9331971],[77.7390465,12.9332426],[77.7391527,12.9332158],[77.7391831,12.9333304],[77.738872,12.9334089]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "apartments",
+        "building:levels": "30",
+        "height": "108",
+        "name": "Elinor"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1071980243",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r001:c001"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1071980244",
+      "name": "Elinor",
+      "ref": null,
+      "building": "apartments",
+      "building_part": null,
+      "building_levels": 30.0,
+      "height_meters": 108.0,
+      "latitude": 12.933098441666667,
+      "longitude": 77.73939395000001,
+      "geometry_geojson": "{\"coordinates\":[[[77.7393356,12.9332984],[77.7392734,12.9331963],[77.7393386,12.9331585],[77.7393052,12.9331038],[77.7392411,12.9331409],[77.7391938,12.9330633],[77.7394675,12.9329051],[77.7395237,12.9329974],[77.739431,12.9330509],[77.7394556,12.9330913],[77.73955,12.9330368],[77.7396119,12.9331386],[77.7393356,12.9332984]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "apartments",
+        "building:levels": "30",
+        "height": "108",
+        "name": "Elinor"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1071980244",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r001:c001"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1071980263",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.9345548,
+      "longitude": 77.73426227499999,
+      "geometry_geojson": "{\"coordinates\":[[[77.734159,12.9345665],[77.7343314,12.9346305],[77.7343656,12.9345431],[77.7341931,12.9344791],[77.734159,12.9345665]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1071980263",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1071980264",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.93468235,
+      "longitude": 77.734202375,
+      "geometry_geojson": "{\"coordinates\":[[[77.7340986,12.9346891],[77.7342676,12.9347613],[77.7343061,12.9346756],[77.7341372,12.9346034],[77.7340986,12.9346891]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1071980264",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1071980265",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.9347991,
+      "longitude": 77.734158025,
+      "geometry_geojson": "{\"coordinates\":[[[77.7340541,12.9348029],[77.7342209,12.9348798],[77.7342619,12.9347953],[77.7340952,12.9347184],[77.7340541,12.9348029]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1071980265",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1071980266",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.934954725,
+      "longitude": 77.73408925,
+      "geometry_geojson": "{\"coordinates\":[[[77.7339854,12.9349493],[77.7341443,12.9350407],[77.7341931,12.9349601],[77.7340342,12.9348688],[77.7339854,12.9349493]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1071980266",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1071980269",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.93085605,
+      "longitude": 77.73424895,
+      "geometry_geojson": "{\"coordinates\":[[[77.734166,12.9308197],[77.7343243,12.9308064],[77.7343319,12.9308924],[77.7341736,12.9309057],[77.734166,12.9308197]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1071980269",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1071980270",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.93073935,
+      "longitude": 77.7342423,
+      "geometry_geojson": "{\"coordinates\":[[[77.7341594,12.930703],[77.7343176,12.9306897],[77.7343252,12.9307757],[77.734167,12.930789],[77.7341594,12.930703]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1071980270",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1071980271",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.930622549999999,
+      "longitude": 77.73423565,
+      "geometry_geojson": "{\"coordinates\":[[[77.7341527,12.9305862],[77.734311,12.9305729],[77.7343186,12.9306589],[77.7341603,12.9306722],[77.7341527,12.9305862]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1071980271",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1071980272",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.930490749999999,
+      "longitude": 77.73422455,
+      "geometry_geojson": "{\"coordinates\":[[[77.7341416,12.9304544],[77.7342999,12.9304411],[77.7343075,12.9305271],[77.7341492,12.9305404],[77.7341416,12.9304544]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1071980272",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1071980273",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.93036315,
+      "longitude": 77.73422455,
+      "geometry_geojson": "{\"coordinates\":[[[77.7341416,12.9303268],[77.7342999,12.9303135],[77.7343075,12.9303995],[77.7341492,12.9304128],[77.7341416,12.9303268]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1071980273",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1071980282",
+      "name": null,
+      "ref": null,
+      "building": "yes",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.930549806666669,
+      "longitude": 77.73796689999999,
+      "geometry_geojson": "{\"coordinates\":[[[77.7377593,12.9306781],[77.7378329,12.9305483],[77.737805,12.9302304],[77.737988,12.9302013],[77.7380039,12.9303525],[77.7380556,12.9303564],[77.7380675,12.9305134],[77.7380178,12.9305114],[77.7380059,12.9305793],[77.73799,12.9306219],[77.7379721,12.9306645],[77.7380536,12.9306956],[77.7380357,12.9307498],[77.7379939,12.9307304],[77.7379223,12.9308138],[77.7377593,12.9306781]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "yes"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1071980282",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c001",
+        "way-266310354:r001:c001"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268798",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.927971666666666,
+      "longitude": 77.7345375,
+      "geometry_geojson": "{\"coordinates\":[[[77.7344737,12.9279362],[77.7346225,12.9279294],[77.7346268,12.9280187],[77.7345151,12.9280238],[77.734512,12.9279601],[77.7344749,12.9279618],[77.7344737,12.9279362]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268798",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268799",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.928092066666666,
+      "longitude": 77.73454808333334,
+      "geometry_geojson": "{\"coordinates\":[[[77.7344843,12.9280566],[77.7346331,12.9280498],[77.7346374,12.9281391],[77.7345256,12.9281442],[77.7345226,12.9280805],[77.7344855,12.9280822],[77.7344843,12.9280566]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268799",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268800",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.928342200000001,
+      "longitude": 77.73456080000001,
+      "geometry_geojson": "{\"coordinates\":[[[77.734497,12.9283067],[77.7346458,12.9282999],[77.7346501,12.9283892],[77.7345384,12.9283943],[77.7345353,12.9283307],[77.7344982,12.9283324],[77.734497,12.9283067]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268800",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268801",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.928221833333334,
+      "longitude": 77.73455021666666,
+      "geometry_geojson": "{\"coordinates\":[[[77.7344864,12.9281863],[77.7346353,12.9281795],[77.7346395,12.9282689],[77.7345278,12.928274],[77.7345247,12.9282103],[77.7344876,12.928212],[77.7344864,12.9281863]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268801",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268802",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.928588266666665,
+      "longitude": 77.73458494999998,
+      "geometry_geojson": "{\"coordinates\":[[[77.7345211,12.9285528],[77.73467,12.928546],[77.7346743,12.9286353],[77.7345625,12.9286404],[77.7345594,12.9285767],[77.7345224,12.9285784],[77.7345211,12.9285528]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268802",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268803",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.928467883333331,
+      "longitude": 77.73457436666666,
+      "geometry_geojson": "{\"coordinates\":[[[77.7345105,12.9284324],[77.7346594,12.9284256],[77.7346637,12.9285149],[77.7345519,12.92852],[77.7345489,12.9284564],[77.7345118,12.928458],[77.7345105,12.9284324]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268803",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268804",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.928837966666668,
+      "longitude": 77.73459793333332,
+      "geometry_geojson": "{\"coordinates\":[[[77.7345341,12.9288025],[77.734683,12.9287957],[77.7346872,12.928885],[77.7345755,12.9288901],[77.7345724,12.9288264],[77.7345354,12.9288281],[77.7345341,12.9288025]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268804",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268805",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.928717566666668,
+      "longitude": 77.73458736666667,
+      "geometry_geojson": "{\"coordinates\":[[[77.7345235,12.9286821],[77.7346724,12.9286753],[77.7346767,12.9287646],[77.7345649,12.9287697],[77.7345619,12.928706],[77.7345248,12.9287077],[77.7345235,12.9286821]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268805",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268806",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.928709483333334,
+      "longitude": 77.73389996666667,
+      "geometry_geojson": "{\"coordinates\":[[[77.7338361,12.928674],[77.733985,12.9286672],[77.7339893,12.9287565],[77.7338775,12.9287616],[77.7338745,12.928698],[77.7338374,12.9286996],[77.7338361,12.928674]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268806",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268807",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.928589099999998,
+      "longitude": 77.73388938333333,
+      "geometry_geojson": "{\"coordinates\":[[[77.7338256,12.9285536],[77.7339744,12.9285468],[77.7339787,12.9286361],[77.7338669,12.9286412],[77.7338639,12.9285776],[77.7338268,12.9285793],[77.7338256,12.9285536]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268807",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268808",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.928951933333332,
+      "longitude": 77.7339148,
+      "geometry_geojson": "{\"coordinates\":[[[77.733851,12.9289164],[77.7339998,12.9289096],[77.7340041,12.928999],[77.7338924,12.9290041],[77.7338893,12.9289404],[77.7338522,12.9289421],[77.733851,12.9289164]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268808",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268809",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.928831566666666,
+      "longitude": 77.73390421666666,
+      "geometry_geojson": "{\"coordinates\":[[[77.7338404,12.9287961],[77.7339893,12.9287893],[77.7339935,12.9288786],[77.7338818,12.9288837],[77.7338787,12.92882],[77.7338416,12.9288217],[77.7338404,12.9287961]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268809",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268810",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.929201599999999,
+      "longitude": 77.73394078333334,
+      "geometry_geojson": "{\"coordinates\":[[[77.733877,12.9291661],[77.7340258,12.9291593],[77.7340301,12.9292486],[77.7339183,12.9292537],[77.7339153,12.9291901],[77.7338782,12.9291918],[77.733877,12.9291661]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268810",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268811",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.929081233333333,
+      "longitude": 77.73393019999999,
+      "geometry_geojson": "{\"coordinates\":[[[77.7338664,12.9290457],[77.7340152,12.9290389],[77.7340195,12.9291283],[77.7339078,12.9291334],[77.7339047,12.9290697],[77.7338676,12.9290714],[77.7338664,12.9290457]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268811",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268812",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.929449466666666,
+      "longitude": 77.73395194999999,
+      "geometry_geojson": "{\"coordinates\":[[[77.7338881,12.929414],[77.734037,12.9294072],[77.7340413,12.9294965],[77.7339295,12.9295016],[77.7339264,12.9294379],[77.7338894,12.9294396],[77.7338881,12.929414]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268812",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268813",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.929329083333334,
+      "longitude": 77.73394136666667,
+      "geometry_geojson": "{\"coordinates\":[[[77.7338775,12.9292936],[77.7340264,12.9292868],[77.7340307,12.9293761],[77.7339189,12.9293812],[77.7339159,12.9293176],[77.7338788,12.9293192],[77.7338775,12.9292936]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268813",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268814",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.927921233333334,
+      "longitude": 77.73365188333334,
+      "geometry_geojson": "{\"coordinates\":[[[77.7335856,12.9278904],[77.7337335,12.927873],[77.7337445,12.9279618],[77.7336334,12.9279748],[77.7336256,12.9279115],[77.7335887,12.9279159],[77.7335856,12.9278904]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268814",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268815",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.927801933333333,
+      "longitude": 77.73363230000001,
+      "geometry_geojson": "{\"coordinates\":[[[77.733566,12.9277711],[77.7337139,12.9277537],[77.7337249,12.9278425],[77.7336138,12.9278555],[77.733606,12.9277922],[77.7335692,12.9277966],[77.733566,12.9277711]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268815",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268816",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.9276781,
+      "longitude": 77.73361818333335,
+      "geometry_geojson": "{\"coordinates\":[[[77.7335519,12.9276472],[77.7336998,12.9276299],[77.7337108,12.9277187],[77.7335997,12.9277317],[77.7335919,12.9276684],[77.733555,12.9276727],[77.7335519,12.9276472]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268816",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268817",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.9275588,
+      "longitude": 77.73359861666667,
+      "geometry_geojson": "{\"coordinates\":[[[77.7335323,12.9275279],[77.7336803,12.9275106],[77.7336912,12.9275994],[77.7335801,12.9276124],[77.7335723,12.9275491],[77.7335355,12.9275534],[77.7335323,12.9275279]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268817",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268818",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.92743205,
+      "longitude": 77.73358478333334,
+      "geometry_geojson": "{\"coordinates\":[[[77.7335185,12.9274012],[77.7336664,12.9273838],[77.7336774,12.9274726],[77.7335663,12.9274856],[77.7335585,12.9274224],[77.7335216,12.9274267],[77.7335185,12.9274012]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268818",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268819",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.927312733333332,
+      "longitude": 77.7335652,
+      "geometry_geojson": "{\"coordinates\":[[[77.7334989,12.9272819],[77.7336468,12.9272645],[77.7336578,12.9273533],[77.7335467,12.9273663],[77.7335389,12.927303],[77.7335021,12.9273074],[77.7334989,12.9272819]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268819",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268820",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.927180549999997,
+      "longitude": 77.73354761666667,
+      "geometry_geojson": "{\"coordinates\":[[[77.7334813,12.9271497],[77.7336293,12.9271323],[77.7336402,12.9272211],[77.7335291,12.9272341],[77.7335213,12.9271709],[77.7334845,12.9271752],[77.7334813,12.9271497]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268820",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268821",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.927061250000001,
+      "longitude": 77.73352808333333,
+      "geometry_geojson": "{\"coordinates\":[[[77.7334618,12.9270304],[77.7336097,12.927013],[77.7336207,12.9271018],[77.7335096,12.9271148],[77.7335018,12.9270516],[77.7334649,12.9270559],[77.7334618,12.9270304]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268821",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268822",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.926941733333335,
+      "longitude": 77.73351050000001,
+      "geometry_geojson": "{\"coordinates\":[[[77.7334442,12.9269109],[77.7335921,12.9268935],[77.7336031,12.9269823],[77.733492,12.9269953],[77.7334842,12.926932],[77.7334474,12.9269364],[77.7334442,12.9269109]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268822",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268823",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.926822433333333,
+      "longitude": 77.73349096666668,
+      "geometry_geojson": "{\"coordinates\":[[[77.7334247,12.9267916],[77.7335726,12.9267742],[77.7335835,12.926863],[77.7334725,12.926876],[77.7334647,12.9268127],[77.7334278,12.9268171],[77.7334247,12.9267916]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268823",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268824",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.9273809,
+      "longitude": 77.733120275,
+      "geometry_geojson": "{\"coordinates\":[[[77.7330478,12.9274361],[77.7332056,12.9274143],[77.7331927,12.9273257],[77.733035,12.9273475],[77.7330478,12.9274361]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268824",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268825",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.927505324999998,
+      "longitude": 77.733140775,
+      "geometry_geojson": "{\"coordinates\":[[[77.7330683,12.9275605],[77.7332261,12.9275387],[77.7332132,12.9274502],[77.7330555,12.9274719],[77.7330683,12.9275605]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268825",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268826",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.9277485,
+      "longitude": 77.73317700000001,
+      "geometry_geojson": "{\"coordinates\":[[[77.7331046,12.9278037],[77.7332623,12.9277819],[77.7332494,12.9276933],[77.7330917,12.9277151],[77.7331046,12.9278037]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268826",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268827",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.927624049999999,
+      "longitude": 77.7331565,
+      "geometry_geojson": "{\"coordinates\":[[[77.7330841,12.9276792],[77.7332418,12.9276574],[77.7332289,12.9275689],[77.7330712,12.9275907],[77.7330841,12.9276792]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268827",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268828",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.9278708,
+      "longitude": 77.733192725,
+      "geometry_geojson": "{\"coordinates\":[[[77.7331203,12.927926],[77.733278,12.9279042],[77.7332652,12.9278156],[77.7331074,12.9278374],[77.7331203,12.927926]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268828",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268829",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.9278233,
+      "longitude": 77.732984675,
+      "geometry_geojson": "{\"coordinates\":[[[77.7329405,12.9279095],[77.7330499,12.9278957],[77.7330288,12.9277371],[77.7329195,12.9277509],[77.7329405,12.9279095]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268829",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268830",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.927838283333331,
+      "longitude": 77.7334933,
+      "geometry_geojson": "{\"coordinates\":[[[77.7334103,12.9278884],[77.7335284,12.9278724],[77.7335238,12.9278405],[77.733553,12.9278366],[77.7335458,12.9277859],[77.7333985,12.9278059],[77.7334103,12.9278884]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268830",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268831",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.927719966666666,
+      "longitude": 77.73347758333334,
+      "geometry_geojson": "{\"coordinates\":[[[77.7333946,12.9277701],[77.7335126,12.927754],[77.7335081,12.9277222],[77.7335373,12.9277183],[77.7335301,12.9276676],[77.7333828,12.9276876],[77.7333946,12.9277701]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268831",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268832",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.9275897,
+      "longitude": 77.73345716666667,
+      "geometry_geojson": "{\"coordinates\":[[[77.7333742,12.9276398],[77.7334922,12.9276238],[77.7334877,12.927592],[77.7335169,12.927588],[77.7335096,12.9275373],[77.7333624,12.9275573],[77.7333742,12.9276398]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268832",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268833",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.927468483333334,
+      "longitude": 77.73344046666666,
+      "geometry_geojson": "{\"coordinates\":[[[77.7333575,12.9275186],[77.7334755,12.9275026],[77.733471,12.9274707],[77.7335002,12.9274668],[77.7334929,12.9274161],[77.7333457,12.9274361],[77.7333575,12.9275186]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268833",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268834",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.927343633333335,
+      "longitude": 77.7334219,
+      "geometry_geojson": "{\"coordinates\":[[[77.7333389,12.9273938],[77.733457,12.9273777],[77.7334524,12.9273459],[77.7334816,12.9273419],[77.7334744,12.9272912],[77.7333271,12.9273113],[77.7333389,12.9273938]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268834",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268835",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.927222416666666,
+      "longitude": 77.73341076666667,
+      "geometry_geojson": "{\"coordinates\":[[[77.7333278,12.9272725],[77.7334458,12.9272565],[77.7334413,12.9272247],[77.7334705,12.9272207],[77.7334632,12.92717],[77.733316,12.9271901],[77.7333278,12.9272725]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268835",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268836",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.92709215,
+      "longitude": 77.73338476666667,
+      "geometry_geojson": "{\"coordinates\":[[[77.7333018,12.9271423],[77.7334198,12.9271262],[77.7334153,12.9270944],[77.7334445,12.9270904],[77.7334372,12.9270398],[77.73329,12.9270598],[77.7333018,12.9271423]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268836",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268837",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.926976350000002,
+      "longitude": 77.73337176666666,
+      "geometry_geojson": "{\"coordinates\":[[[77.7332888,12.9270265],[77.7334068,12.9270104],[77.7334023,12.9269786],[77.7334315,12.9269746],[77.7334242,12.926924],[77.733277,12.926944],[77.7332888,12.9270265]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268837",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268838",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.926846083333333,
+      "longitude": 77.73335506666666,
+      "geometry_geojson": "{\"coordinates\":[[[77.7332721,12.9268962],[77.7333901,12.9268802],[77.7333856,12.9268483],[77.7334148,12.9268444],[77.7334075,12.9267937],[77.7332603,12.9268137],[77.7332721,12.9268962]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268838",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268839",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.928902525,
+      "longitude": 77.733479075,
+      "geometry_geojson": "{\"coordinates\":[[[77.7335569,12.928946],[77.7335524,12.9288521],[77.7334012,12.928859],[77.7334058,12.928953],[77.7335569,12.928946]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268839",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268840",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.929019675,
+      "longitude": 77.73349532499999,
+      "geometry_geojson": "{\"coordinates\":[[[77.7335732,12.9290632],[77.7335686,12.9289692],[77.7334175,12.9289762],[77.733422,12.9290701],[77.7335732,12.9290632]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268840",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268841",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.929146325,
+      "longitude": 77.733499025,
+      "geometry_geojson": "{\"coordinates\":[[[77.7335769,12.9291898],[77.7335723,12.9290959],[77.7334212,12.9291028],[77.7334257,12.9291968],[77.7335769,12.9291898]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268841",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268842",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.929272975,
+      "longitude": 77.7335046,
+      "geometry_geojson": "{\"coordinates\":[[[77.7335824,12.9293165],[77.7335779,12.9292225],[77.7334268,12.9292295],[77.7334313,12.9293234],[77.7335824,12.9293165]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268842",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268843",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.928782675,
+      "longitude": 77.73347302500001,
+      "geometry_geojson": "{\"coordinates\":[[[77.7335509,12.9288262],[77.7335463,12.9287322],[77.7333952,12.9287392],[77.7333997,12.9288331],[77.7335509,12.9288262]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268843",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268844",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.928604416666667,
+      "longitude": 77.73375248333333,
+      "geometry_geojson": "{\"coordinates\":[[[77.7336654,12.9286473],[77.7337822,12.9286411],[77.7337805,12.9286121],[77.7338147,12.9286103],[77.7338115,12.9285538],[77.7336606,12.9285619],[77.7336654,12.9286473]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268844",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268845",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.928728616666666,
+      "longitude": 77.73376259999999,
+      "geometry_geojson": "{\"coordinates\":[[[77.7336755,12.9287715],[77.7337923,12.9287653],[77.7337907,12.9287363],[77.7338248,12.9287345],[77.7338216,12.928678],[77.7336707,12.9286861],[77.7336755,12.9287715]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268845",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268846",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.928848033333331,
+      "longitude": 77.73376446666667,
+      "geometry_geojson": "{\"coordinates\":[[[77.7336774,12.9288909],[77.7337941,12.9288847],[77.7337925,12.9288557],[77.7338267,12.9288539],[77.7338235,12.9287975],[77.7336726,12.9288055],[77.7336774,12.9288909]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268846",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268847",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.929097716666666,
+      "longitude": 77.73378488333334,
+      "geometry_geojson": "{\"coordinates\":[[[77.7336978,12.9291406],[77.7338146,12.9291344],[77.7338129,12.9291054],[77.7338471,12.9291036],[77.7338439,12.9290471],[77.733693,12.9290552],[77.7336978,12.9291406]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268847",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268848",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.928980116666667,
+      "longitude": 77.73377376666667,
+      "geometry_geojson": "{\"coordinates\":[[[77.7336867,12.929023],[77.7338034,12.9290168],[77.7338018,12.9289878],[77.733836,12.928986],[77.7338328,12.9289295],[77.7336819,12.9289376],[77.7336867,12.929023]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268848",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268849",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.929227983333334,
+      "longitude": 77.73380158333335,
+      "geometry_geojson": "{\"coordinates\":[[[77.7337145,12.9292709],[77.7338313,12.9292646],[77.7338296,12.9292357],[77.7338638,12.9292339],[77.7338606,12.9291774],[77.7337097,12.9291854],[77.7337145,12.9292709]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268849",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268850",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.929345583333335,
+      "longitude": 77.73379975,
+      "geometry_geojson": "{\"coordinates\":[[[77.7337127,12.9293885],[77.7338294,12.9293822],[77.7338278,12.9293533],[77.7338619,12.9293515],[77.7338588,12.929295],[77.7337079,12.929303],[77.7337127,12.9293885]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268850",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268851",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.929463183333333,
+      "longitude": 77.73381086666667,
+      "geometry_geojson": "{\"coordinates\":[[[77.7337238,12.9295061],[77.7338405,12.9294998],[77.7338389,12.9294709],[77.7338731,12.9294691],[77.7338699,12.9294126],[77.733719,12.9294206],[77.7337238,12.9295061]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268851",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268852",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.929409224999999,
+      "longitude": 77.73445285,
+      "geometry_geojson": "{\"coordinates\":[[[77.7343695,12.9294617],[77.7345406,12.9294544],[77.7345362,12.9293568],[77.7343651,12.929364],[77.7343695,12.9294617]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268852",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268853",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.929289575,
+      "longitude": 77.73444595000001,
+      "geometry_geojson": "{\"coordinates\":[[[77.7343626,12.929342],[77.7345337,12.9293348],[77.7345293,12.9292371],[77.7343582,12.9292444],[77.7343626,12.929342]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268853",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268854",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.929163025,
+      "longitude": 77.73444205,
+      "geometry_geojson": "{\"coordinates\":[[[77.7343587,12.9292155],[77.7345298,12.9292082],[77.7345254,12.9291106],[77.7343543,12.9291178],[77.7343587,12.9292155]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268854",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268855",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.929036475,
+      "longitude": 77.73443415,
+      "geometry_geojson": "{\"coordinates\":[[[77.7343508,12.9290889],[77.7345219,12.9290817],[77.7345175,12.928984],[77.7343464,12.9289913],[77.7343508,12.9290889]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268855",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268856",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.928915700000001,
+      "longitude": 77.7344204,
+      "geometry_geojson": "{\"coordinates\":[[[77.734337,12.9289682],[77.7345081,12.9289609],[77.7345038,12.9288632],[77.7343327,12.9288705],[77.734337,12.9289682]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268856",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268857",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.928791050000001,
+      "longitude": 77.73441055,
+      "geometry_geojson": "{\"coordinates\":[[[77.7343272,12.9288435],[77.7344983,12.9288363],[77.7344939,12.9287386],[77.7343228,12.9287458],[77.7343272,12.9288435]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268857",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268858",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.928666425,
+      "longitude": 77.73439875,
+      "geometry_geojson": "{\"coordinates\":[[[77.7343156,12.9287193],[77.7344867,12.9287112],[77.7344819,12.9286136],[77.7343108,12.9286216],[77.7343156,12.9287193]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268858",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268859",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.928173675,
+      "longitude": 77.73436530000001,
+      "geometry_geojson": "{\"coordinates\":[[[77.7342819,12.9282261],[77.734453,12.9282189],[77.7344487,12.9281212],[77.7342776,12.9281285],[77.7342819,12.9282261]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268859",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268860",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.92829445,
+      "longitude": 77.73437712500001,
+      "geometry_geojson": "{\"coordinates\":[[[77.7342937,12.9283469],[77.7344649,12.9283397],[77.7344605,12.928242],[77.7342894,12.9282492],[77.7342937,12.9283469]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268860",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268861",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.928421025,
+      "longitude": 77.73438105,
+      "geometry_geojson": "{\"coordinates\":[[[77.7342977,12.9284735],[77.7344688,12.9284662],[77.7344644,12.9283686],[77.7342933,12.9283758],[77.7342977,12.9284735]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268861",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268862",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.928537975000001,
+      "longitude": 77.734388925,
+      "geometry_geojson": "{\"coordinates\":[[[77.7343055,12.9285904],[77.7344767,12.9285832],[77.7344723,12.9284855],[77.7343012,12.9284928],[77.7343055,12.9285904]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268862",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268863",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.929784250000003,
+      "longitude": 77.73454108333333,
+      "geometry_geojson": "{\"coordinates\":[[[77.7344293,12.9298445],[77.7345899,12.9298344],[77.7345857,12.9297692],[77.7346102,12.9297677],[77.7346083,12.9297391],[77.7344231,12.9297506],[77.7344293,12.9298445]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268863",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268864",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.929905216666667,
+      "longitude": 77.73454713333335,
+      "geometry_geojson": "{\"coordinates\":[[[77.7344354,12.9299654],[77.734596,12.9299554],[77.7345917,12.9298902],[77.7346162,12.9298887],[77.7346143,12.92986],[77.7344292,12.9298716],[77.7344354,12.9299654]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268864",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268865",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.930031750000003,
+      "longitude": 77.73455501666666,
+      "geometry_geojson": "{\"coordinates\":[[[77.7344432,12.930092],[77.7346039,12.9300819],[77.7345996,12.9300167],[77.7346241,12.9300152],[77.7346222,12.9299866],[77.7344371,12.9299981],[77.7344432,12.930092]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268865",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268866",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.93015255,
+      "longitude": 77.73453923333334,
+      "geometry_geojson": "{\"coordinates\":[[[77.7344275,12.9302128],[77.7345881,12.9302027],[77.7345838,12.9301375],[77.7346083,12.930136],[77.7346064,12.9301074],[77.7344213,12.9301189],[77.7344275,12.9302128]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268866",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268867",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.930281016666667,
+      "longitude": 77.73454321666667,
+      "geometry_geojson": "{\"coordinates\":[[[77.7344314,12.9303412],[77.7345921,12.9303312],[77.7345878,12.930266],[77.7346123,12.9302645],[77.7346104,12.9302358],[77.7344253,12.9302474],[77.7344314,12.9303412]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268867",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268868",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.930409500000001,
+      "longitude": 77.73455103333333,
+      "geometry_geojson": "{\"coordinates\":[[[77.7344393,12.9304697],[77.7345999,12.9304597],[77.7345956,12.9303945],[77.7346201,12.9303929],[77.7346182,12.9303643],[77.7344331,12.9303759],[77.7344393,12.9304697]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268868",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268869",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.930530266666667,
+      "longitude": 77.73455693333334,
+      "geometry_geojson": "{\"coordinates\":[[[77.7344452,12.9305905],[77.7346058,12.9305805],[77.7346015,12.9305152],[77.734626,12.9305137],[77.7346241,12.9304851],[77.734439,12.9304966],[77.7344452,12.9305905]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268869",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268870",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.930653,
+      "longitude": 77.73456483333332,
+      "geometry_geojson": "{\"coordinates\":[[[77.7344531,12.9307132],[77.7346137,12.9307032],[77.7346094,12.930638],[77.7346339,12.9306364],[77.734632,12.9306078],[77.7344469,12.9306194],[77.7344531,12.9307132]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268870",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268871",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.930781433333335,
+      "longitude": 77.73457861666667,
+      "geometry_geojson": "{\"coordinates\":[[[77.7344668,12.9308417],[77.7346275,12.9308316],[77.7346232,12.9307664],[77.7346477,12.9307649],[77.7346458,12.9307362],[77.7344607,12.9307478],[77.7344668,12.9308417]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268871",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268875",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": 2.0,
+      "height_meters": null,
+      "latitude": 12.930894,
+      "longitude": 77.7347862,
+      "geometry_geojson": "{\"coordinates\":[[[77.734718,12.9309462],[77.7348604,12.9309378],[77.7348544,12.9308418],[77.734712,12.9308502],[77.734718,12.9309462]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house",
+        "building:levels": "2"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268875",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268926",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.934504066666667,
+      "longitude": 77.73276995,
+      "geometry_geojson": "{\"coordinates\":[[[77.732704,12.9344526],[77.7328632,12.9344536],[77.7328625,12.9345611],[77.7327429,12.9345603],[77.7327434,12.9344985],[77.7327037,12.9344983],[77.732704,12.9344526]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268926",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268931",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.934654049999999,
+      "longitude": 77.7328018,
+      "geometry_geojson": "{\"coordinates\":[[[77.7328528,12.9347386],[77.7328552,12.9346015],[77.7327941,12.9346004],[77.7327937,12.9346237],[77.7327585,12.9346231],[77.7327565,12.934737],[77.7328528,12.9347386]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268931",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268932",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.9346849,
+      "longitude": 77.73267385,
+      "geometry_geojson": "{\"coordinates\":[[[77.7327244,12.934752],[77.7327279,12.9346204],[77.7326233,12.9346178],[77.7326198,12.9347494],[77.7327244,12.934752]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268932",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268936",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.934859600000001,
+      "longitude": 77.73552810000001,
+      "geometry_geojson": "{\"coordinates\":[[[77.7354517,12.9347939],[77.735628,12.9348402],[77.7356045,12.9349253],[77.7354282,12.934879],[77.7354517,12.9347939]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268936",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r001:c001",
+        "way-266310354:r002:c000",
+        "way-266310354:r002:c001"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268937",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.934737675,
+      "longitude": 77.73556669999999,
+      "geometry_geojson": "{\"coordinates\":[[[77.7354903,12.934672],[77.7356666,12.9347183],[77.7356431,12.9348034],[77.7354668,12.934757],[77.7354903,12.934672]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268937",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r001:c001",
+        "way-266310354:r002:c000",
+        "way-266310354:r002:c001"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268938",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.9346177,
+      "longitude": 77.73561720000001,
+      "geometry_geojson": "{\"coordinates\":[[[77.7355408,12.934552],[77.7357171,12.9345983],[77.7356936,12.9346834],[77.7355173,12.9346371],[77.7355408,12.934552]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268938",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r001:c001",
+        "way-266310354:r002:c000",
+        "way-266310354:r002:c001"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268939",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.934488475,
+      "longitude": 77.73564875,
+      "geometry_geojson": "{\"coordinates\":[[[77.7355707,12.9344247],[77.7357481,12.9344666],[77.7357268,12.9345523],[77.7355494,12.9345103],[77.7355707,12.9344247]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268939",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r001:c001",
+        "way-266310354:r002:c000",
+        "way-266310354:r002:c001"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268940",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.934371549999998,
+      "longitude": 77.73567084999999,
+      "geometry_geojson": "{\"coordinates\":[[[77.7355945,12.9343059],[77.7357708,12.9343522],[77.7357472,12.9344372],[77.7355709,12.9343909],[77.7355945,12.9343059]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268940",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r001:c001"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268941",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.933986975,
+      "longitude": 77.73572767499999,
+      "geometry_geojson": "{\"coordinates\":[[[77.7358137,12.9340401],[77.7356321,12.9340214],[77.7356417,12.9339338],[77.7358232,12.9339526],[77.7358137,12.9340401]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268941",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r001:c001"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268942",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.934110050000001,
+      "longitude": 77.7357119,
+      "geometry_geojson": "{\"coordinates\":[[[77.7356249,12.9340584],[77.7358068,12.9340739],[77.7357989,12.9341617],[77.735617,12.9341462],[77.7356249,12.9340584]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268942",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r001:c001"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268943",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.934239275,
+      "longitude": 77.735702425,
+      "geometry_geojson": "{\"coordinates\":[[[77.7356187,12.9341828],[77.7357993,12.9342086],[77.7357862,12.9342958],[77.7356055,12.9342699],[77.7356187,12.9341828]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268943",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r001:c001"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268944",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.933857775000002,
+      "longitude": 77.73572767499999,
+      "geometry_geojson": "{\"coordinates\":[[[77.7358137,12.9339109],[77.7356321,12.9338922],[77.7356417,12.9338046],[77.7358232,12.9338234],[77.7358137,12.9339109]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268944",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r001:c001"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268945",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.9336947,
+      "longitude": 77.7357245,
+      "geometry_geojson": "{\"coordinates\":[[[77.7358203,12.9337284],[77.7356389,12.9337485],[77.7356287,12.933661],[77.7358101,12.9336409],[77.7358203,12.9337284]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268945",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r001:c001"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268946",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.935168425,
+      "longitude": 77.73420295,
+      "geometry_geojson": "{\"coordinates\":[[[77.7340991,12.935163],[77.734258,12.9352544],[77.7343068,12.9351738],[77.7341479,12.9350825],[77.7340991,12.935163]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268946",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268947",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.935045325,
+      "longitude": 77.73428185,
+      "geometry_geojson": "{\"coordinates\":[[[77.734178,12.9350399],[77.7343369,12.9351313],[77.7343857,12.9350507],[77.7342268,12.9349594],[77.734178,12.9350399]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268947",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268948",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.934897625000001,
+      "longitude": 77.73437659999999,
+      "geometry_geojson": "{\"coordinates\":[[[77.7342726,12.9349005],[77.7344387,12.9349789],[77.7344806,12.9348947],[77.7343145,12.9348164],[77.7342726,12.9349005]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268948",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268949",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.934762275,
+      "longitude": 77.73442395000001,
+      "geometry_geojson": "{\"coordinates\":[[[77.73432,12.9347652],[77.734486,12.9348436],[77.7345279,12.9347593],[77.7343619,12.934681],[77.73432,12.9347652]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268949",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076268950",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.9346238,
+      "longitude": 77.734480775,
+      "geometry_geojson": "{\"coordinates\":[[[77.7343775,12.9346355],[77.7345499,12.9346995],[77.7345841,12.9346121],[77.7344116,12.9345481],[77.7343775,12.9346355]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076268950",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076304323",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.9352514,
+      "longitude": 77.73479285,
+      "geometry_geojson": "{\"coordinates\":[[[77.7347314,12.9351753],[77.7348916,12.935241],[77.7348543,12.9353275],[77.7346941,12.9352618],[77.7347314,12.9351753]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076304323",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076304324",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.935134775,
+      "longitude": 77.73485249999999,
+      "geometry_geojson": "{\"coordinates\":[[[77.7347911,12.9350587],[77.7349512,12.9351244],[77.7349139,12.9352108],[77.7347538,12.9351452],[77.7347911,12.9350587]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076304324",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076304325",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.935021424999999,
+      "longitude": 77.73491065,
+      "geometry_geojson": "{\"coordinates\":[[[77.7348492,12.9349454],[77.7350094,12.935011],[77.7349721,12.9350975],[77.7348119,12.9350318],[77.7348492,12.9349454]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076304325",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076304326",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.934894475,
+      "longitude": 77.73495715,
+      "geometry_geojson": "{\"coordinates\":[[[77.734894,12.9348198],[77.7350556,12.9348819],[77.7350203,12.9349692],[77.7348587,12.934907],[77.734894,12.9348198]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076304326",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076304327",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.9347834,
+      "longitude": 77.734996725,
+      "geometry_geojson": "{\"coordinates\":[[[77.7350629,12.9348556],[77.7348988,12.9347998],[77.7349306,12.9347112],[77.7350946,12.934767],[77.7350629,12.9348556]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076304327",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076304328",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.9346587,
+      "longitude": 77.73503625,
+      "geometry_geojson": "{\"coordinates\":[[[77.7351024,12.9347309],[77.7349384,12.9346751],[77.7349701,12.9345865],[77.7351341,12.9346423],[77.7351024,12.9347309]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076304328",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076304329",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.934534024999998,
+      "longitude": 77.7350758,
+      "geometry_geojson": "{\"coordinates\":[[[77.7351507,12.9345976],[77.7349808,12.9345622],[77.7350009,12.9344705],[77.7351708,12.9345058],[77.7351507,12.9345976]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076304329",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076304358",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.934580475,
+      "longitude": 77.7352933,
+      "geometry_geojson": "{\"coordinates\":[[[77.7353682,12.934644],[77.7351983,12.9346087],[77.7352184,12.9345169],[77.7353883,12.9345523],[77.7353682,12.934644]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076304358",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076304359",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.9347316,
+      "longitude": 77.73524834999999,
+      "geometry_geojson": "{\"coordinates\":[[[77.7353145,12.9348038],[77.7351505,12.934748],[77.7351822,12.9346594],[77.7353462,12.9347152],[77.7353145,12.9348038]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076304359",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076304360",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.934856250000001,
+      "longitude": 77.735208825,
+      "geometry_geojson": "{\"coordinates\":[[[77.735275,12.9349284],[77.7351109,12.9348726],[77.7351427,12.9347841],[77.7353067,12.9348399],[77.735275,12.9349284]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076304360",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076304361",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.93496735,
+      "longitude": 77.73516925,
+      "geometry_geojson": "{\"coordinates\":[[[77.7351061,12.9348927],[77.7352677,12.9349548],[77.7352324,12.935042],[77.7350708,12.9349799],[77.7351061,12.9348927]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076304361",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076304362",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.935112425000002,
+      "longitude": 77.73510879999999,
+      "geometry_geojson": "{\"coordinates\":[[[77.7350474,12.9350364],[77.7352075,12.935102],[77.7351702,12.9351885],[77.7350101,12.9351228],[77.7350474,12.9350364]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076304362",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076304363",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.935655525000001,
+      "longitude": 77.73479605,
+      "geometry_geojson": "{\"coordinates\":[[[77.7347613,12.9355834],[77.7348776,12.9356604],[77.7348308,12.9357276],[77.7347145,12.9356507],[77.7347613,12.9355834]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076304363",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076304364",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.935755725,
+      "longitude": 77.73471835000001,
+      "geometry_geojson": "{\"coordinates\":[[[77.7346836,12.9356836],[77.7347999,12.9357606],[77.7347531,12.9358278],[77.7346368,12.9357509],[77.7346836,12.9356836]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076304364",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076304365",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.93585195,
+      "longitude": 77.73464877500001,
+      "geometry_geojson": "{\"coordinates\":[[[77.7346165,12.9357735],[77.7347355,12.9358508],[77.734681,12.9359304],[77.7345621,12.9358531],[77.7346165,12.9357735]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076304365",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076304366",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.93596135,
+      "longitude": 77.73455977500001,
+      "geometry_geojson": "{\"coordinates\":[[[77.7345275,12.9358829],[77.7346465,12.9359602],[77.734592,12.9360398],[77.7344731,12.9359625],[77.7345275,12.9358829]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076304366",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076304367",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.93605215,
+      "longitude": 77.73448702499999,
+      "geometry_geojson": "{\"coordinates\":[[[77.7344548,12.9359737],[77.7345737,12.936051],[77.7345193,12.9361306],[77.7344003,12.9360533],[77.7344548,12.9359737]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076304367",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076304368",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.935652450000001,
+      "longitude": 77.73445587500001,
+      "geometry_geojson": "{\"coordinates\":[[[77.7344224,12.9355729],[77.734544,12.9356568],[77.7344894,12.935732],[77.7343677,12.9356481],[77.7344224,12.9355729]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076304368",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076304369",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.935754424999999,
+      "longitude": 77.73437397500001,
+      "geometry_geojson": "{\"coordinates\":[[[77.7343502,12.9356716],[77.734461,12.9357687],[77.7343978,12.9358373],[77.7342869,12.9357401],[77.7343502,12.9356716]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076304369",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076304370",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.935854249999998,
+      "longitude": 77.73428254999999,
+      "geometry_geojson": "{\"coordinates\":[[[77.7342587,12.9357714],[77.7343696,12.9358685],[77.7343064,12.9359371],[77.7341955,12.93584],[77.7342587,12.9357714]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076304370",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076304371",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.935957225,
+      "longitude": 77.7341864,
+      "geometry_geojson": "{\"coordinates\":[[[77.7341626,12.9358744],[77.7342734,12.9359715],[77.7342102,12.9360401],[77.7340994,12.9359429],[77.7341626,12.9358744]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076304371",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076304372",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.93605095,
+      "longitude": 77.7340997,
+      "geometry_geojson": "{\"coordinates\":[[[77.7340759,12.9359681],[77.7341867,12.9360652],[77.7341235,12.9361338],[77.7340127,12.9360367],[77.7340759,12.9359681]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076304372",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076304373",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.9361385,
+      "longitude": 77.73399565,
+      "geometry_geojson": "{\"coordinates\":[[[77.7339782,12.9360542],[77.7340814,12.936159],[77.7340131,12.9362228],[77.7339099,12.936118],[77.7339782,12.9360542]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076304373",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076304374",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.936092425,
+      "longitude": 77.733785975,
+      "geometry_geojson": "{\"coordinates\":[[[77.7337685,12.9360081],[77.7338717,12.9361129],[77.7338034,12.9361768],[77.7337003,12.9360719],[77.7337685,12.9360081]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076304374",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076304375",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.93600945,
+      "longitude": 77.73388215,
+      "geometry_geojson": "{\"coordinates\":[[[77.7338647,12.9359251],[77.7339679,12.93603],[77.7338996,12.9360938],[77.7337964,12.9359889],[77.7338647,12.9359251]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076304375",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076304376",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.935642275,
+      "longitude": 77.7342274,
+      "geometry_geojson": "{\"coordinates\":[[[77.7342021,12.9355598],[77.7343147,12.9356551],[77.7342527,12.9357247],[77.7341401,12.9356295],[77.7342021,12.9355598]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076304376",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076304377",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.9357538,
+      "longitude": 77.73415525,
+      "geometry_geojson": "{\"coordinates\":[[[77.7340692,12.9357476],[77.7341316,12.9356729],[77.7342413,12.93576],[77.7341789,12.9358347],[77.7340692,12.9357476]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076304377",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076304378",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.935842,
+      "longitude": 77.73406027499999,
+      "geometry_geojson": "{\"coordinates\":[[[77.7339747,12.9358309],[77.7340416,12.9357599],[77.7341458,12.9358531],[77.734079,12.9359241],[77.7339747,12.9358309]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076304378",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076304379",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.935932650000002,
+      "longitude": 77.73397514999999,
+      "geometry_geojson": "{\"coordinates\":[[[77.7338891,12.9359265],[77.7339515,12.9358518],[77.7340612,12.9359388],[77.7339988,12.9360135],[77.7338891,12.9359265]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076304379",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076304380",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.9358717,
+      "longitude": 77.7348585,
+      "geometry_geojson": "{\"coordinates\":[[[77.7348264,12.9357913],[77.734947,12.9358746],[77.7348906,12.9359521],[77.73477,12.9358688],[77.7348264,12.9357913]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076304380",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076304381",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.935964900000002,
+      "longitude": 77.734785425,
+      "geometry_geojson": "{\"coordinates\":[[[77.7347533,12.9358845],[77.7348739,12.9359678],[77.7348175,12.9360453],[77.734697,12.935962],[77.7347533,12.9358845]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076304381",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076304382",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.93608903,
+      "longitude": 77.73470151,
+      "geometry_geojson": "{\"coordinates\":[[[77.734804,12.936079],[77.7346723,12.9359931],[77.7346,12.9360983],[77.7346381,12.9361232],[77.7346498,12.9361061],[77.7346748,12.9361224],[77.7347021,12.9360826],[77.7347347,12.9361038],[77.7347516,12.9360791],[77.7347877,12.9361027],[77.734804,12.936079]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076304382",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076327945",
+      "name": "Andrina",
+      "ref": null,
+      "building": "apartments",
+      "building_part": null,
+      "building_levels": 30.0,
+      "height_meters": 108.0,
+      "latitude": 12.92996104736842,
+      "longitude": 77.73707056842107,
+      "geometry_geojson": "{\"coordinates\":[[[77.7372362,12.9295004],[77.7371241,12.9295365],[77.7369968,12.9294229],[77.7368958,12.9295281],[77.7370126,12.9296371],[77.7369158,12.9298956],[77.7367309,12.9299071],[77.7367702,12.9300747],[77.7369217,12.9300609],[77.7370799,12.930305],[77.7369746,12.9304256],[77.7371124,12.9305204],[77.7372019,12.9303775],[77.7373416,12.9304117],[77.7373521,12.9302426],[77.7371995,12.9302181],[77.7370416,12.9299425],[77.7371517,12.9296431],[77.7372814,12.9296101],[77.7372362,12.9295004]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "apartments",
+        "building:levels": "30",
+        "height": "108",
+        "name": "Andrina"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076327945",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c001",
+        "way-266310354:r001:c001"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076327946",
+      "name": "Basil",
+      "ref": null,
+      "building": "apartments",
+      "building_part": null,
+      "building_levels": 26.0,
+      "height_meters": null,
+      "latitude": 12.930924526315788,
+      "longitude": 77.73786800526317,
+      "geometry_geojson": "{\"coordinates\":[[[77.7382888,12.9306293],[77.7382872,12.9307551],[77.7383877,12.9308377],[77.7382824,12.9309664],[77.738176,12.9308864],[77.7379913,12.9310073],[77.7380274,12.9311478],[77.7378553,12.931197],[77.7378217,12.9310509],[77.7375737,12.9310286],[77.737494,12.9311666],[77.7373552,12.9310733],[77.7374423,12.9309692],[77.73735,12.9308668],[77.7374675,12.9307852],[77.7375215,12.9308946],[77.7378664,12.9309438],[77.7381473,12.930745],[77.7381564,12.930615],[77.7382888,12.9306293]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "apartments",
+        "building:levels": "26",
+        "name": "Basil"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076327946",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c001",
+        "way-266310354:r001:c001"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076327947",
+      "name": "Calliope",
+      "ref": null,
+      "building": "apartments",
+      "building_part": null,
+      "building_levels": 24.0,
+      "height_meters": null,
+      "latitude": 12.931296229999997,
+      "longitude": 77.7387272,
+      "geometry_geojson": "{\"coordinates\":[[[77.7385652,12.9314171],[77.7387228,12.9313603],[77.7388175,12.9314647],[77.7388938,12.93136],[77.7388085,12.931301],[77.7387851,12.9312521],[77.7388081,12.9311375],[77.7386885,12.9311147],[77.7386609,12.9312524],[77.7385216,12.9313025],[77.7385652,12.9314171]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "apartments",
+        "building:levels": "24",
+        "name": "Calliope"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076327947",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r001:c001"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1076327948",
+      "name": "Calliope",
+      "ref": null,
+      "building": "apartments",
+      "building_part": null,
+      "building_levels": 24.0,
+      "height_meters": null,
+      "latitude": 12.93095075,
+      "longitude": 77.73890626,
+      "geometry_geojson": "{\"coordinates\":[[[77.7388283,12.9311224],[77.7389188,12.9310263],[77.7390406,12.9310876],[77.7390837,12.9309404],[77.7389837,12.9309163],[77.7389423,12.9308897],[77.7389254,12.9307626],[77.7387802,12.9308036],[77.7388322,12.9309319],[77.7387274,12.9310267],[77.7388283,12.9311224]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "apartments",
+        "building:levels": "24",
+        "name": "Calliope"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1076327948",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c001",
+        "way-266310354:r001:c001"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1242735501",
+      "name": null,
+      "ref": null,
+      "building": "yes",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.930103249999998,
+      "longitude": 77.73901995000001,
+      "geometry_geojson": "{\"coordinates\":[[[77.7391465,12.9301158],[77.7391087,12.9301382],[77.7391518,12.9302073],[77.7389863,12.9303052],[77.7388116,12.9300249],[77.738909,12.9299672],[77.7389699,12.930065],[77.7390758,12.9300024],[77.7391465,12.9301158]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "yes"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1242735501",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c001"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1242735502",
+      "name": null,
+      "ref": null,
+      "building": "yes",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.92999965,
+      "longitude": 77.73930795,
+      "geometry_geojson": "{\"coordinates\":[[[77.7391663,12.9301129],[77.7394903,12.9300166],[77.7394496,12.9298864],[77.7391256,12.9299827],[77.7391663,12.9301129]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "yes"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1242735502",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r000:c001"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1507815057",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.9347318,
+      "longitude": 77.73313300000001,
+      "geometry_geojson": "{\"coordinates\":[[[77.7330864,12.9347972],[77.7331816,12.9347958],[77.7331796,12.9346664],[77.7330844,12.9346678],[77.7330864,12.9347972]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1507815057",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    },
+    {
+      "society_entity_id": "society:rera-7886bc98e6a977a5",
+      "boundary_osm_id": "way/266310354",
+      "osm_id": "way/1507815058",
+      "name": null,
+      "ref": null,
+      "building": "house",
+      "building_part": null,
+      "building_levels": null,
+      "height_meters": null,
+      "latitude": 12.9345632,
+      "longitude": 77.73313165,
+      "geometry_geojson": "{\"coordinates\":[[[77.733085,12.9346286],[77.7331802,12.9346272],[77.7331783,12.9344978],[77.7330831,12.9344992],[77.733085,12.9346286]]],\"type\":\"Polygon\"}",
+      "source_tags": {
+        "building": "house"
+      },
+      "source_url": "https://www.openstreetmap.org/way/1507815058",
+      "confidence": 0.8,
+      "fetched_at": "2026-09-21T19:15:00+05:30",
+      "fetch_source": "overpass_society_structure_snapshot",
+      "coverage_tile_ids": [
+        "way-266310354:r002:c000"
+      ]
+    }
+  ],
+  "source_watermarks": [
+    {
+      "source": "openstreetmap_society_structures",
+      "high_watermark": "boundary_sha256:6c282794a10edcb09bcd195c62be792128c22f32434e9c704018a3306f0fabfb;tiles=8;structures=161"
+    }
+  ]
+}

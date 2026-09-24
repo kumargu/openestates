@@ -1,6 +1,11 @@
 {
   "version": 1,
   "description": "Polygon-scoped OpenStreetMap building footprints for society structure rendering.",
+  "facts": {
+    "linked_entity_fact_key": "society.structure_entity",
+    "observed_levels_fact_key": "structure.observed_levels",
+    "observed_height_fact_key": "structure.observed_height_m"
+  },
   "collector": {
     "source_id": "openstreetmap_society_structures",
     "source_type": "OpenStreetMap",
@@ -9,6 +14,8 @@
     "default_overpass_url": "https://overpass-api.de/api/interpreter",
     "query_timeout_seconds": 45,
     "tile_size_meters": 450.0,
+    "minimum_split_tile_meters": 150.0,
+    "max_split_depth": 2,
     "tile_overlap_meters": 20.0,
     "max_tiles_per_society": 64,
     "max_consecutive_failed_tiles": 2,

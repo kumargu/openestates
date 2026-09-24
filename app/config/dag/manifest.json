@@ -19,6 +19,7 @@
     "google_place_resolution.json",
     "nearby_place_categories.json",
     "osm_access_corridors.json",
+    "osm_society_structures.json",
     "ontology.json",
     "resolution_policies.json",
     "rera_decision_labels.json",

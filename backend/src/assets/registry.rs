@@ -757,6 +757,15 @@ pub fn default_openestates_registry() -> AssetRegistry {
             TrustTier::Support,
         ),
         asset(
+            "osm_society_structure_facts",
+            AssetStage::Silver,
+            "Optional polygon-scoped OpenStreetMap building footprints and observed structure names for society rendering.",
+            &["canonical_society_nodes", "osm_society_access_facts"],
+            RefreshCadence::Monthly,
+            CostTier::Free,
+            TrustTier::Support,
+        ),
+        asset(
             "society_fact_snapshot",
             AssetStage::Gold,
             "Compacted society-scoped fact rows for immutable gold snapshots. Graph-shaped assets stay as direct dependencies.",
@@ -773,6 +782,7 @@ pub fn default_openestates_registry() -> AssetRegistry {
                 "bengaluru_metro_station_facts",
                 "osm_locality_boundary_facts",
                 "osm_society_access_facts",
+                "osm_society_structure_facts",
                 "osm_power_line_facts",
             ],
             RefreshCadence::OnChange,
@@ -804,6 +814,7 @@ pub fn default_openestates_registry() -> AssetRegistry {
         .with_optional_dependency("bengaluru_metro_station_facts")
         .with_optional_dependency("osm_locality_boundary_facts")
         .with_optional_dependency("osm_society_access_facts")
+        .with_optional_dependency("osm_society_structure_facts")
         .with_optional_dependency("osm_power_line_facts"),
         asset(
             "society_gold_snapshot",

@@ -21,6 +21,7 @@ pub mod materialization;
 pub mod media;
 pub mod osm_access;
 pub mod osm_power;
+pub mod osm_structures;
 pub mod paths;
 pub mod planner;
 pub mod project_enrichment;
@@ -88,6 +89,11 @@ pub use osm_access::{
 pub use osm_power::{
     canonicalize_osm_power_infrastructure_input, osm_power_line_facts_input, OsmPowerAssetError,
     OsmPowerInfrastructureInput, OsmPowerLineObservationRecord, OSM_POWER_LINE_FACTS_ASSET_ID,
+};
+pub use osm_structures::{
+    canonicalize_osm_society_structures_input, osm_society_structure_facts_input,
+    OsmSocietyStructureRecord, OsmSocietyStructuresAssetError, OsmSocietyStructuresInput,
+    OSM_SOCIETY_STRUCTURE_FACTS_ASSET_ID,
 };
 pub use paths::AssetPathBuilder;
 pub use planner::{

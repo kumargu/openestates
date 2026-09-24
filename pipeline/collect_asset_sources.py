@@ -49,6 +49,7 @@ from pipeline.skills.rera_document_intelligence import (
     canonical_rera_society_entity_id,
 )
 from pipeline.sources.osm_access_corridors import collect_society_access_records
+from pipeline.sources.osm_society_structures import collect_society_structures
 from pipeline.sources.overpass_transport import (
     OverpassTransport,
     fetch_overpass_json_once as fetch_overpass_json,
@@ -159,6 +160,7 @@ BENGALURU_METRO_STATION_FACTS = "bengaluru_metro_station_facts"
 OSM_LOCALITY_BOUNDARY_FACTS = "osm_locality_boundary_facts"
 OSM_POWER_LINE_FACTS = "osm_power_line_facts"
 OSM_SOCIETY_ACCESS_FACTS = "osm_society_access_facts"
+OSM_SOCIETY_STRUCTURE_FACTS = "osm_society_structure_facts"
 RERA_DETAIL_RECEIPT_CACHE_DIR = PROJECT_ROOT / "data" / "cache" / "skills" / "rera_detail_receipts"
 RERA_REGULATORY_CACHE_DIR = PROJECT_ROOT / "data" / "cache" / "skills" / "rera_regulatory_records"
 RERA_REGULATORY_LIST_CACHE_DIR = PROJECT_ROOT / "data" / "cache" / "skills" / "rera_regulatory_lists"
@@ -189,6 +191,7 @@ SUPPORTED_ASSETS = frozenset(
         BENGALURU_METRO_STATION_FACTS,
         OSM_LOCALITY_BOUNDARY_FACTS,
         OSM_SOCIETY_ACCESS_FACTS,
+        OSM_SOCIETY_STRUCTURE_FACTS,
         OSM_POWER_LINE_FACTS,
     )
 )
@@ -322,6 +325,16 @@ def collect_asset_sources(
         except Exception as error:
             record_source_failure(
                 source_failures, [OSM_SOCIETY_ACCESS_FACTS], error
+            )
+    if OSM_SOCIETY_STRUCTURE_FACTS in requested:
+        try:
+            output["osm_society_structures"] = collect_osm_society_structures(
+                request,
+                output.get("osm_society_access"),
+            )
+        except Exception as error:
+            record_source_failure(
+                source_failures, [OSM_SOCIETY_STRUCTURE_FACTS], error
             )
     if OSM_POWER_LINE_FACTS in requested:
         try:
@@ -499,6 +512,63 @@ def collect_osm_society_access(
                 ),
             }
         ],
+    }
+
+
+def collect_osm_society_structures(
+    request: Dict[str, Any],
+    access_input: Dict[str, Any] = None,
+) -> Dict[str, Any]:
+    """Collect exact building footprints inside pinned OSM society boundaries."""
+    planned_at = normalized_planned_at(request)
+    snapshot_date = partition_values(request).get("dt") or planned_at[:10]
+    access_records = (access_input or {}).get("records") or []
+    boundaries = [
+        record
+        for record in access_records
+        if record.get("entity_id")
+        and record.get("boundary_way_id")
+        and record.get("boundary_geometry_geojson")
+    ]
+    if not boundaries:
+        raise ValueError(
+            "OSM society structure collection requires a pinned OSM boundary"
+        )
+
+    records = []
+    coverage = []
+    source_watermarks = []
+    incomplete_tiles = []
+    for boundary in boundaries:
+        result = collect_society_structures(
+            society_entity_id=str(boundary["entity_id"]),
+            boundary_osm_id=str(boundary["boundary_way_id"]),
+            boundary_geometry_geojson=str(boundary["boundary_geometry_geojson"]),
+            planned_at=planned_at,
+            fetch=fetch_overpass_json,
+        )
+        records.extend(result.get("records") or [])
+        coverage.extend(result.get("coverage") or [])
+        source_watermarks.extend(result.get("source_watermarks") or [])
+        incomplete_tiles.extend(
+            row.get("tile_id")
+            for row in result.get("coverage") or []
+            if not str(row.get("status") or "").startswith("complete")
+            and row.get("status") != "split_after_failure"
+        )
+    if incomplete_tiles:
+        raise ValueError(
+            "OSM society structure coverage incomplete for tiles: {}".format(
+                ", ".join(sorted(str(tile) for tile in incomplete_tiles if tile))
+            )
+        )
+    records.sort(key=lambda record: (record["society_entity_id"], record["osm_id"]))
+    return {
+        "snapshot_date": snapshot_date,
+        "collection_status": "complete",
+        "coverage": coverage,
+        "records": records,
+        "source_watermarks": source_watermarks,
     }
 
 

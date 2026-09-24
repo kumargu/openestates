@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fmt;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -13,12 +13,13 @@ use super::{
     AssetSourceInputs, AssetStage, DependencyFanInPolicy, EnvironmentalAssetError,
     GooglePlaceAssetError, GooglePlaceSnapshotMaterializer, LocalityAssetError, MaterializationId,
     MaterializationRecord, MediaAssetError, MediaAssetMaterializer, OsmAccessAssetError,
-    OsmPowerAssetError, PartitionResolutionError, PlannerError, ProjectEnrichmentAssetError,
-    ProjectEnrichmentMaterializer, ReraAssetError, ReraClaimMaterializeError,
-    ReraClaimsMaterializer, ReraEvidenceError, ReraPlanFramesAssetError, ReraReceiptsMaterializer,
-    ReraRegistryMaterializer, ReraSourceRecordsError, ReraSourceRecordsMaterializer,
-    RunManifestError, SkillFactMaterializeError, SkillFactMaterializer, SkillFactsInput,
-    SocietyFactSnapshotError, SocietyFactSnapshotMaterializer, SocietyGoldSnapshotMaterialization,
+    OsmPowerAssetError, OsmSocietyStructuresAssetError, PartitionResolutionError, PlannerError,
+    ProjectEnrichmentAssetError, ProjectEnrichmentMaterializer, ReraAssetError,
+    ReraClaimMaterializeError, ReraClaimsMaterializer, ReraEvidenceError, ReraPlanFramesAssetError,
+    ReraReceiptsMaterializer, ReraRegistryMaterializer, ReraSourceRecordsError,
+    ReraSourceRecordsMaterializer, RunManifestError, SkillFactMaterializeError,
+    SkillFactMaterializer, SkillFactsInput, SocietyFactSnapshotError,
+    SocietyFactSnapshotMaterializer, SocietyGoldSnapshotMaterialization,
     SocietyGoldSnapshotMaterializeError, SocietyGoldSnapshotMaterializer,
     SourceEntityResolutionScope, SourceWatermark, TransitAssetError,
     BENGALURU_METRO_STATION_FACTS_ASSET_ID, BUILDER_RERA_AGGREGATES_ASSET_ID,
@@ -27,10 +28,11 @@ use super::{
     GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID, GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
     GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID, HOME_STATE_SIGNALS_ASSET_ID,
     IMAGE_MEDIA_FACTS_ASSET_ID, OSM_LOCALITY_BOUNDARY_FACTS_ASSET_ID,
-    OSM_POWER_LINE_FACTS_ASSET_ID, OSM_SOCIETY_ACCESS_FACTS_ASSET_ID, RERA_CLAIMS_ASSET_ID,
-    RERA_LEGAL_FACTS_ASSET_ID, RERA_PROJECT_PLAN_FRAMES_ASSET_ID, RERA_RECEIPTS_ASSET_ID,
-    RERA_REGISTRY_MONTHLY_ASSET_ID, RERA_SOURCE_RECORDS_ASSET_ID, SOCIETY_FACT_SNAPSHOT_ASSET_ID,
-    SOCIETY_GOLD_SNAPSHOT_ASSET_ID, SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
+    OSM_POWER_LINE_FACTS_ASSET_ID, OSM_SOCIETY_ACCESS_FACTS_ASSET_ID,
+    OSM_SOCIETY_STRUCTURE_FACTS_ASSET_ID, RERA_CLAIMS_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID,
+    RERA_PROJECT_PLAN_FRAMES_ASSET_ID, RERA_RECEIPTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
+    RERA_SOURCE_RECORDS_ASSET_ID, SOCIETY_FACT_SNAPSHOT_ASSET_ID, SOCIETY_GOLD_SNAPSHOT_ASSET_ID,
+    SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
 };
 use crate::knowledge::KnowledgeGraph;
 use crate::lake::{LakeError, LakeStore};
@@ -1241,6 +1243,10 @@ impl BuiltInAssetExecutorRegistry {
             BuiltInAssetExecutor::OsmSocietyAccessFacts,
         );
         executors.insert(
+            static_asset_id(OSM_SOCIETY_STRUCTURE_FACTS_ASSET_ID),
+            BuiltInAssetExecutor::OsmSocietyStructureFacts,
+        );
+        executors.insert(
             static_asset_id(SOCIETY_FACT_SNAPSHOT_ASSET_ID),
             BuiltInAssetExecutor::SocietyFactSnapshot,
         );
@@ -1280,6 +1286,7 @@ enum BuiltInAssetExecutor {
     OsmLocalityBoundaryFacts,
     OsmPowerLineFacts,
     OsmSocietyAccessFacts,
+    OsmSocietyStructureFacts,
     SocietyFactSnapshot,
     SocietyGoldSnapshot,
     #[cfg(test)]
@@ -1920,6 +1927,41 @@ impl BuiltInAssetExecutor {
                 let materialization = execute_skill_fact_asset(context, &input).await?;
                 Ok(ExecutedAsset::SkillFacts(materialization))
             }
+            Self::OsmSocietyStructureFacts => {
+                ensure_global_partition(context.asset_id, context.asset_partition)?;
+                let input = context
+                    .options
+                    .source_inputs
+                    .osm_society_structures
+                    .as_ref()
+                    .ok_or_else(|| source_input_error(&context))?;
+                let parent_records = context
+                    .dag
+                    .dependency_materialization_records(
+                        context.asset_id,
+                        &context.options.partition,
+                        context.records_by_asset,
+                        context.dependency_snapshot,
+                    )
+                    .await?;
+                let canonical_record = dependency_record(
+                    context.asset_id,
+                    &parent_records,
+                    CANONICAL_SOCIETY_NODES_ASSET_ID,
+                )?;
+                let input = super::canonicalize_osm_society_structures_input(
+                    &context.dag.lake,
+                    input,
+                    canonical_record,
+                    &context.options.source_inputs.source_entities,
+                    context.options.source_scope,
+                )
+                .await?;
+                let input =
+                    super::osm_society_structure_facts_input(&input, &context.run_id.to_string())?;
+                let materialization = execute_skill_fact_asset(context, &input).await?;
+                Ok(ExecutedAsset::SkillFacts(materialization))
+            }
             Self::SocietyFactSnapshot => {
                 let parent_records = context
                     .dag
@@ -2181,6 +2223,7 @@ pub enum AssetDagExecutorError {
     Locality(LocalityAssetError),
     OsmAccess(OsmAccessAssetError),
     OsmPower(OsmPowerAssetError),
+    OsmStructures(OsmSocietyStructuresAssetError),
     SocietyFactSnapshot(SocietyFactSnapshotError),
     ReraEvidence(ReraEvidenceError),
     ReraSourceRecords(ReraSourceRecordsError),
@@ -2269,6 +2312,9 @@ impl fmt::Display for AssetDagExecutorError {
             Self::Locality(err) => write!(f, "locality asset execution failed: {err}"),
             Self::OsmAccess(err) => write!(f, "OSM access asset execution failed: {err}"),
             Self::OsmPower(err) => write!(f, "OSM power asset execution failed: {err}"),
+            Self::OsmStructures(err) => {
+                write!(f, "OSM society structure asset execution failed: {err}")
+            }
             Self::SocietyFactSnapshot(err) => {
                 write!(f, "current project facts compaction failed: {err}")
             }
@@ -2473,6 +2519,12 @@ impl From<OsmAccessAssetError> for AssetDagExecutorError {
     }
 }
 
+impl From<OsmSocietyStructuresAssetError> for AssetDagExecutorError {
+    fn from(err: OsmSocietyStructuresAssetError) -> Self {
+        Self::OsmStructures(err)
+    }
+}
+
 impl From<SocietyFactSnapshotError> for AssetDagExecutorError {
     fn from(err: SocietyFactSnapshotError) -> Self {
         Self::SocietyFactSnapshot(err)
@@ -2575,19 +2627,23 @@ fn unavailable_planned_assets(
     manifest: &AssetDagRunManifest,
     source_inputs: &AssetSourceInputs,
 ) -> HashMap<AssetId, String> {
-    let planned = manifest
+    let steps = manifest
         .steps
         .iter()
-        .filter(|step| step.status == super::AssetRunStepStatus::Planned)
-        .map(|step| step.asset_id.clone())
-        .collect::<HashSet<_>>();
+        .map(|step| (step.asset_id.clone(), step))
+        .collect::<HashMap<_, _>>();
     let mut unavailable = HashMap::new();
 
     for asset_id in registry
         .topological_order()
         .expect("validated asset registry has a topological order")
     {
-        if !planned.contains(&asset_id) {
+        let Some(step) = steps.get(&asset_id) else {
+            continue;
+        };
+        let needs_materialization = step.status == super::AssetRunStepStatus::Planned
+            || step.current_materialization_id.is_none();
+        if !needs_materialization {
             continue;
         }
         if let Some(reason) = source_input_unavailable_reason(&asset_id, source_inputs) {
@@ -2603,6 +2659,15 @@ fn unavailable_planned_assets(
             unavailable.insert(
                 asset_id,
                 format!("required dependency {dependency} was unavailable; skipped"),
+            );
+            continue;
+        }
+        if step.status != super::AssetRunStepStatus::Planned
+            && step.current_materialization_id.is_none()
+        {
+            unavailable.insert(
+                asset_id,
+                "no pinned materialization; skipped by selective execution".to_string(),
             );
         }
     }
@@ -2634,6 +2699,7 @@ fn source_input_unavailable_reason(
         BENGALURU_METRO_STATION_FACTS_ASSET_ID => source_inputs.bengaluru_metro_stations.is_none(),
         OSM_LOCALITY_BOUNDARY_FACTS_ASSET_ID => source_inputs.osm_locality_boundaries.is_none(),
         OSM_SOCIETY_ACCESS_FACTS_ASSET_ID => source_inputs.osm_society_access.is_none(),
+        OSM_SOCIETY_STRUCTURE_FACTS_ASSET_ID => source_inputs.osm_society_structures.is_none(),
         OSM_POWER_LINE_FACTS_ASSET_ID => source_inputs.osm_power_infrastructure.is_none(),
         _ => false,
     };
@@ -2709,6 +2775,7 @@ fn is_default_source_inputs(source_inputs: &AssetSourceInputs) -> bool {
         && source_inputs.bengaluru_metro_stations.is_none()
         && source_inputs.osm_locality_boundaries.is_none()
         && source_inputs.osm_society_access.is_none()
+        && source_inputs.osm_society_structures.is_none()
         && source_inputs.osm_power_infrastructure.is_none()
 }
 

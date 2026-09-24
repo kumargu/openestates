@@ -6,6 +6,7 @@ use super::environment::EnvironmentGroundwaterPotentialInput;
 use super::locality::OsmLocalityBoundariesInput;
 use super::osm_access::OsmSocietyAccessInput;
 use super::osm_power::OsmPowerInfrastructureInput;
+use super::osm_structures::OsmSocietyStructuresInput;
 use super::source_provider::SourceEntitySeed;
 use super::transit::BengaluruMetroStationsInput;
 use super::{
@@ -18,9 +19,9 @@ use super::{
     GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID, GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
     GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID, IMAGE_MEDIA_FACTS_ASSET_ID,
     OSM_POWER_LINE_FACTS_ASSET_ID, OSM_SOCIETY_ACCESS_FACTS_ASSET_ID,
-    RERA_PROJECT_PLAN_FRAMES_ASSET_ID, RERA_RECEIPTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
-    RERA_SOURCE_RECORDS_ASSET_ID, SOCIETY_FACT_SNAPSHOT_ASSET_ID,
-    SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
+    OSM_SOCIETY_STRUCTURE_FACTS_ASSET_ID, RERA_PROJECT_PLAN_FRAMES_ASSET_ID,
+    RERA_RECEIPTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID, RERA_SOURCE_RECORDS_ASSET_ID,
+    SOCIETY_FACT_SNAPSHOT_ASSET_ID, SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
 };
 
 /// Control-plane input for source executors.
@@ -62,6 +63,8 @@ pub struct AssetSourceInputs {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub osm_society_access: Option<OsmSocietyAccessInput>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub osm_society_structures: Option<OsmSocietyStructuresInput>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub osm_power_infrastructure: Option<OsmPowerInfrastructureInput>,
 }
 
@@ -87,6 +90,7 @@ impl AssetSourceInputs {
             BENGALURU_METRO_STATION_FACTS_ASSET_ID,
             super::OSM_LOCALITY_BOUNDARY_FACTS_ASSET_ID,
             OSM_SOCIETY_ACCESS_FACTS_ASSET_ID,
+            OSM_SOCIETY_STRUCTURE_FACTS_ASSET_ID,
             OSM_POWER_LINE_FACTS_ASSET_ID,
         ]
         .into_iter()
@@ -109,6 +113,7 @@ impl AssetSourceInputs {
                 | BENGALURU_METRO_STATION_FACTS_ASSET_ID
                 | super::OSM_LOCALITY_BOUNDARY_FACTS_ASSET_ID
                 | OSM_SOCIETY_ACCESS_FACTS_ASSET_ID
+                | OSM_SOCIETY_STRUCTURE_FACTS_ASSET_ID
                 | OSM_POWER_LINE_FACTS_ASSET_ID
         )
     }
@@ -169,6 +174,7 @@ impl AssetSourceInputs {
             SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
             super::OSM_LOCALITY_BOUNDARY_FACTS_ASSET_ID,
             OSM_SOCIETY_ACCESS_FACTS_ASSET_ID,
+            OSM_SOCIETY_STRUCTURE_FACTS_ASSET_ID,
             OSM_POWER_LINE_FACTS_ASSET_ID,
         ] {
             add_raw_companion(
@@ -242,6 +248,7 @@ impl AssetSourceInputs {
             SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
             super::OSM_LOCALITY_BOUNDARY_FACTS_ASSET_ID,
             OSM_SOCIETY_ACCESS_FACTS_ASSET_ID,
+            OSM_SOCIETY_STRUCTURE_FACTS_ASSET_ID,
             OSM_POWER_LINE_FACTS_ASSET_ID,
         ] {
             add_raw_companion(

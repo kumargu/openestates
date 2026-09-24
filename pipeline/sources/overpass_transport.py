@@ -45,7 +45,7 @@ class OverpassTransport:
     ) -> None:
         config = dict(load_overpass_transport_policy())
         config.update(policy or {})
-        retry_status_codes = {
+        self._retry_status_codes = {
             int(code) for code in config.get("retry_status_codes", [])
         }
         self.request_timeout_seconds = float(
@@ -74,7 +74,7 @@ class OverpassTransport:
                     config.get("min_request_interval_seconds", 0.0)
                 ),
             ),
-            lambda error: overpass_error_is_retryable(error, retry_status_codes),
+            self.is_retryable,
             lambda error: retry_after_seconds(
                 error, self.max_retry_after_seconds
             ),
@@ -82,12 +82,25 @@ class OverpassTransport:
         )
 
     def request(self, url: str, query: str) -> Dict[str, Any]:
-        return self._pipeline.call(lambda: self._fetch(url, query))
+        return self._pipeline.call(lambda: self._validated_fetch(url, query))
+
+    def is_retryable(self, error: Exception) -> bool:
+        return overpass_error_is_retryable(error, self._retry_status_codes)
+
+    def _validated_fetch(self, url: str, query: str) -> Dict[str, Any]:
+        payload = self._fetch(url, query)
+        if not isinstance(payload, dict) or not isinstance(payload.get("elements"), list):
+            raise ValueError("Overpass response must contain an elements list")
+        if payload.get("remark"):
+            # Overpass also reports failed/partial queries with HTTP 200.
+            # Such responses must never replace accepted evidence with absence.
+            raise ValueError(f"Overpass incomplete response: {payload['remark']}")
+        return payload
 
     def map_requests(
         self, url: str, queries: Iterable[str]
     ) -> List[RequestOutcome[Dict[str, Any]]]:
-        return self._pipeline.map(queries, lambda query: self._fetch(url, query))
+        return self._pipeline.map(queries, lambda query: self._validated_fetch(url, query))
 
 
 def overpass_error_is_retryable(

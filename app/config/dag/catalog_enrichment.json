@@ -13,7 +13,8 @@
     "location": {
       "scope": "society",
       "refresh": [
-        "osm_society_access_facts"
+        "osm_society_access_facts",
+        "osm_society_structure_facts"
       ],
       "ensure": [
         "google_places_weekly"
@@ -169,6 +170,14 @@
       ],
       "context": []
     },
+    "osm_society_structure_facts": {
+      "input_field": "osm_society_structures",
+      "scope": "society",
+      "requires": [
+        "osm_society_access_facts"
+      ],
+      "context": []
+    },
     "osm_power_line_facts": {
       "input_field": "osm_power_infrastructure",
       "scope": "society",
@@ -188,6 +197,7 @@
   "origin_dependents": [
     "google_nearby_places_weekly",
     "osm_society_access_facts",
+    "osm_society_structure_facts",
     "osm_power_line_facts",
     "society_groundwater_potential_facts"
   ],
@@ -202,6 +212,9 @@
   "society_fact_producers": {
     "osm_society_access_facts": [
       "osm_society_access_facts"
+    ],
+    "osm_society_structure_facts": [
+      "osm_society_structure_facts"
     ]
   }
 }

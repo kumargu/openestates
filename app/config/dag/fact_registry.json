@@ -2986,8 +2986,21 @@
       "label": "Listed area",
       "fact_keys": [],
       "measurement_basis": "*",
-      "query_excludes": ["carpet", "usable"],
-      "query_units": [{"unit": "sqft", "aliases": ["sqft", "sq ft", "square feet"], "to_canonical": 1.0}],
+      "query_excludes": [
+        "carpet",
+        "usable"
+      ],
+      "query_units": [
+        {
+          "unit": "sqft",
+          "aliases": [
+            "sqft",
+            "sq ft",
+            "square feet"
+          ],
+          "to_canonical": 1.0
+        }
+      ],
       "proof_sources": [],
       "scoring_method": "inventory-measurement"
     },
@@ -2996,18 +3009,29 @@
       "label": "Carpet area",
       "fact_keys": [],
       "supported": false,
-      "query_requires": ["carpet", "usable"],
+      "query_requires": [
+        "carpet",
+        "usable"
+      ],
       "measurement_basis": "carpet",
       "query_units": [
         {
           "unit": "sqft",
-          "aliases": ["sqft", "sq ft", "square feet"],
+          "aliases": [
+            "sqft",
+            "sq ft",
+            "square feet"
+          ],
           "to_canonical": 1.0
         }
       ],
       "qualitative_bounds": [
         {
-          "patterns": ["high carpet area", "large carpet area", "large usable area"],
+          "patterns": [
+            "high carpet area",
+            "large carpet area",
+            "large usable area"
+          ],
           "operator": "min",
           "value": 2000.0,
           "unit": "sqft"
@@ -3019,11 +3043,18 @@
     {
       "dimension": "lake_distance",
       "label": "Nearest observed lake",
-      "fact_keys": ["nearby_lakes"],
+      "fact_keys": [
+        "nearby_lakes"
+      ],
       "query_units": [
         {
           "unit": "km",
-          "aliases": ["km", "kms", "kilometer", "kilometers"],
+          "aliases": [
+            "km",
+            "kms",
+            "kilometer",
+            "kilometers"
+          ],
           "to_canonical": 1.0
         }
       ],
@@ -3044,7 +3075,9 @@
       ],
       "value_kind": "numeric",
       "aggregation": "minimum",
-      "proof_sources": ["Google"],
+      "proof_sources": [
+        "Google"
+      ],
       "scoring_method": "serving-nearby-distance"
     },
     {
@@ -3090,7 +3123,11 @@
       ],
       "qualitative_bounds": [
         {
-          "patterns": ["large open space", "high open area", "lots of open space"],
+          "patterns": [
+            "large open space",
+            "high open area",
+            "lots of open space"
+          ],
           "operator": "min",
           "value": 60.0,
           "unit": "percent"
@@ -6984,13 +7021,27 @@
       "label": "entrance status",
       "lens": "proof",
       "polarity": "neutral",
-      "scopes": ["place"],
-      "enrichment_terms": ["entrance", "main gate"],
-      "answers_preferences": ["entrance", "main gate"],
+      "scopes": [
+        "place"
+      ],
+      "enrichment_terms": [
+        "entrance",
+        "main gate"
+      ],
+      "answers_preferences": [
+        "entrance",
+        "main gate"
+      ],
       "never_default": true,
-      "source_types": ["OpenStreetMap", "Official"],
+      "source_types": [
+        "OpenStreetMap",
+        "Official"
+      ],
       "display_template": "entrance status: {value}",
-      "scoring_hint": {"direction": "text_match", "weight": 0.0}
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.0
+      }
     },
     {
       "fact_key": "entrance.association_method",
@@ -6998,13 +7049,21 @@
       "label": "entrance association",
       "lens": "proof",
       "polarity": "neutral",
-      "scopes": ["place"],
+      "scopes": [
+        "place"
+      ],
       "enrichment_terms": [],
       "answers_preferences": [],
       "never_default": true,
-      "source_types": ["OpenStreetMap", "Official"],
+      "source_types": [
+        "OpenStreetMap",
+        "Official"
+      ],
       "display_template": "entrance association: {value}",
-      "scoring_hint": {"direction": "text_match", "weight": 0.0}
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.0
+      }
     },
     {
       "fact_key": "road.direction",
@@ -7012,13 +7071,20 @@
       "label": "road direction",
       "lens": "proof",
       "polarity": "neutral",
-      "scopes": ["place"],
+      "scopes": [
+        "place"
+      ],
       "enrichment_terms": [],
       "answers_preferences": [],
       "never_default": true,
-      "source_types": ["OpenStreetMap"],
+      "source_types": [
+        "OpenStreetMap"
+      ],
       "display_template": "road direction: {value}",
-      "scoring_hint": {"direction": "text_match", "weight": 0.0}
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.0
+      }
     },
     {
       "fact_key": "road.association_method",
@@ -7026,13 +7092,20 @@
       "label": "road association",
       "lens": "proof",
       "polarity": "neutral",
-      "scopes": ["place"],
+      "scopes": [
+        "place"
+      ],
       "enrichment_terms": [],
       "answers_preferences": [],
       "never_default": true,
-      "source_types": ["OpenStreetMap"],
+      "source_types": [
+        "OpenStreetMap"
+      ],
       "display_template": "road association: {value}",
-      "scoring_hint": {"direction": "text_match", "weight": 0.0}
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.0
+      }
     },
     {
       "fact_key": "road.source_geometry_geojson",
@@ -7040,13 +7113,20 @@
       "label": "road source geometry",
       "lens": "proof",
       "polarity": "neutral",
-      "scopes": ["place"],
+      "scopes": [
+        "place"
+      ],
       "enrichment_terms": [],
       "answers_preferences": [],
       "never_default": true,
-      "source_types": ["OpenStreetMap"],
+      "source_types": [
+        "OpenStreetMap"
+      ],
       "display_template": "road source geometry: {value}",
-      "scoring_hint": {"direction": "text_match", "weight": 0.0}
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.0
+      }
     },
     {
       "fact_key": "road.corridor_length_m",
@@ -8040,12 +8120,102 @@
         "direction": "text_match",
         "weight": 1.2
       }
+    },
+    {
+      "fact_key": "society.structure_entity",
+      "bucket": "geo",
+      "label": "mapped society structure",
+      "lens": "proof",
+      "polarity": "neutral",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [],
+      "answers_preferences": [],
+      "never_default": true,
+      "source_types": [
+        "OpenStreetMap"
+      ],
+      "display_template": null,
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.0
+      }
+    },
+    {
+      "fact_key": "structure.observed_name",
+      "bucket": "geo",
+      "label": "observed structure name",
+      "lens": "proof",
+      "polarity": "neutral",
+      "scopes": [
+        "place"
+      ],
+      "enrichment_terms": [],
+      "answers_preferences": [],
+      "never_default": true,
+      "source_types": [
+        "OpenStreetMap"
+      ],
+      "display_template": null,
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.0
+      }
+    },
+    {
+      "fact_key": "structure.observed_levels",
+      "bucket": "geo",
+      "label": "observed building levels",
+      "lens": "proof",
+      "polarity": "neutral",
+      "scopes": [
+        "place"
+      ],
+      "enrichment_terms": [],
+      "answers_preferences": [],
+      "never_default": true,
+      "source_types": [
+        "OpenStreetMap"
+      ],
+      "display_template": null,
+      "scoring_hint": {
+        "direction": "numeric",
+        "numeric_direction": "HigherIsBetter",
+        "weight": 0.0
+      }
+    },
+    {
+      "fact_key": "structure.observed_height_m",
+      "bucket": "geo",
+      "label": "observed building height",
+      "lens": "proof",
+      "polarity": "neutral",
+      "scopes": [
+        "place"
+      ],
+      "enrichment_terms": [],
+      "answers_preferences": [],
+      "never_default": true,
+      "source_types": [
+        "OpenStreetMap"
+      ],
+      "display_template": null,
+      "scoring_hint": {
+        "direction": "numeric",
+        "numeric_direction": "HigherIsBetter",
+        "weight": 0.0
+      }
     }
   ],
-  "fact_count": 139,
+  "fact_count": 143,
   "excluded_search_fact_keys": [
     "google_review_cards",
-    "google_review_snippets"
+    "google_review_snippets",
+    "society.structure_entity",
+    "structure.observed_name",
+    "structure.observed_levels",
+    "structure.observed_height_m"
   ],
   "property_context": {
     "maximum_features": 512,
@@ -8088,28 +8258,15 @@
         "linked_entity_fact_keys": [],
         "attribute_fact_keys": []
       },
-      "nearby_breweries": {
-        "linked_entity_fact_keys": [],
-        "attribute_fact_keys": []
-      },
       "nearby_graveyards": {
         "linked_entity_fact_keys": [
-          "high_voltage_transmission_line_place_entity",
-          "stormwater_drain_place_entity"
+          "high_voltage_transmission_line_place_entity"
         ],
         "attribute_fact_keys": []
       },
       "high_voltage_transmission_line_nearby": {
         "linked_entity_fact_keys": [
-          "high_voltage_transmission_line_place_entity",
-          "stormwater_drain_place_entity"
-        ],
-        "attribute_fact_keys": []
-      },
-      "stormwater_drain_nearby": {
-        "linked_entity_fact_keys": [
-          "high_voltage_transmission_line_place_entity",
-          "stormwater_drain_place_entity"
+          "high_voltage_transmission_line_place_entity"
         ],
         "attribute_fact_keys": []
       },
@@ -8156,15 +8313,11 @@
         "attribute_fact_keys": []
       },
       "rajakaluve_nearby": {
-        "linked_entity_fact_keys": [
-          "stormwater_drain_place_entity"
-        ],
+        "linked_entity_fact_keys": [],
         "attribute_fact_keys": []
       },
       "rajakaluve_encroachment_record": {
-        "linked_entity_fact_keys": [
-          "stormwater_drain_place_entity"
-        ],
+        "linked_entity_fact_keys": [],
         "attribute_fact_keys": []
       }
     }

@@ -296,7 +296,8 @@
         "approach_road",
         "approach_road_entity",
         "society.entrance_entity",
-        "geo.geometry_geojson"
+        "geo.geometry_geojson",
+        "society.structure_entity"
       ],
       "traversal": [
         "property -> in_society -> society",
@@ -362,6 +363,32 @@
               "rating": "google_rating",
               "reviewCount": "google_review_count"
             }
+          },
+          {
+            "id": "structures",
+            "label": "Buildings",
+            "factKeys": [
+              "society.structure_entity"
+            ],
+            "linkedEntityFactKeys": [
+              "society.structure_entity"
+            ],
+            "family": "context",
+            "relationClass": "context",
+            "renderKind": "structure_footprint",
+            "mapPresentation": "immersive_3d",
+            "featureProperties": {
+              "levels": "structure.observed_levels",
+              "heightM": "structure.observed_height_m",
+              "observedName": "structure.observed_name"
+            },
+            "sort": "distance",
+            "maxItems": 500,
+            "showReviewMetrics": false,
+            "enabledByDefault": true,
+            "rank": 2,
+            "tone": "neutral",
+            "kind": "structure"
           },
           {
             "id": "entrance",

@@ -33,6 +33,7 @@ class StructureTile:
     tile_id: str
     bounds: Bounds
     query_bounds: Bounds
+    depth: int = 0
 
 
 def load_structure_config(path: Path = CONFIG_PATH) -> Dict[str, Any]:
@@ -64,7 +65,11 @@ def collect_society_structures(
     consecutive_failures = 0
     stopped = False
 
-    for tile in tiles:
+    pending_tiles = list(tiles)
+    tile_index = 0
+    while tile_index < len(pending_tiles):
+        tile = pending_tiles[tile_index]
+        tile_index += 1
         query = structure_overpass_query(
             tile.query_bounds,
             int(config.get("query_timeout_seconds") or 45),
@@ -121,6 +126,23 @@ def collect_society_structures(
             )
             consecutive_failures = 0
         except Exception as error:
+            retryable = transport.is_retryable(error)
+            split_tiles = split_structure_tile(tile, polygons, config) if retryable else []
+            maximum_tiles = int(config.get("max_tiles_per_society") or 64)
+            if split_tiles and len(pending_tiles) + len(split_tiles) <= maximum_tiles:
+                coverage.append(
+                    _coverage_row(
+                        tile,
+                        query,
+                        query_hash,
+                        "split_after_failure",
+                        error=f"{type(error).__name__}: {error}",
+                        retryable=True,
+                    )
+                )
+                pending_tiles[tile_index:tile_index] = split_tiles
+                consecutive_failures = 0
+                continue
             consecutive_failures += 1
             coverage.append(
                 _coverage_row(
@@ -129,17 +151,21 @@ def collect_society_structures(
                     query_hash,
                     "failed",
                     error=f"{type(error).__name__}: {error}",
-                    retryable=True,
+                    retryable=retryable,
                 )
             )
-            stopped = consecutive_failures >= int(
+            stopped = not retryable or consecutive_failures >= int(
                 config.get("max_consecutive_failed_tiles") or 2
             )
 
     ordered_records = sorted(records.values(), key=lambda row: row["osm_id"])
     for record in ordered_records:
         record["coverage_tile_ids"].sort()
-    complete = all(row["status"].startswith("complete") for row in coverage)
+    complete = all(
+        row["status"].startswith("complete")
+        or row["status"] == "split_after_failure"
+        for row in coverage
+    )
     boundary_hash = hashlib.sha256(
         canonical_geometry(boundary_geometry_geojson).encode("utf-8")
     ).hexdigest()
@@ -214,6 +240,58 @@ def plan_structure_tiles(
             f"society polygon requires {len(tiles)} structure tiles; maximum is {maximum}"
         )
     return tiles
+
+
+def split_structure_tile(
+    tile: StructureTile,
+    polygons: Sequence[Polygon],
+    collector: Dict[str, Any],
+) -> List[StructureTile]:
+    """Quarter one dense failed tile without widening its source scope."""
+    max_depth = int(collector.get("max_split_depth") or 0)
+    if tile.depth >= max_depth:
+        return []
+    south, west, north, east = tile.bounds
+    center_latitude = (south + north) / 2.0
+    height_meters = (north - south) * 111_320.0
+    width_meters = (east - west) * 111_320.0 * max(
+        0.2, math.cos(math.radians(center_latitude))
+    )
+    minimum = float(collector.get("minimum_split_tile_meters") or 0.0)
+    if max(height_meters, width_meters) / 2.0 < minimum:
+        return []
+    middle_latitude = (south + north) / 2.0
+    middle_longitude = (west + east) / 2.0
+    overlap_meters = float(collector.get("tile_overlap_meters") or 0.0)
+    latitude_overlap = overlap_meters / 111_320.0
+    longitude_overlap = overlap_meters / max(
+        1.0, 111_320.0 * math.cos(math.radians(center_latitude))
+    )
+    quadrants = [
+        (south, west, middle_latitude, middle_longitude),
+        (south, middle_longitude, middle_latitude, east),
+        (middle_latitude, west, north, middle_longitude),
+        (middle_latitude, middle_longitude, north, east),
+    ]
+    children = []
+    for index, bounds in enumerate(quadrants):
+        if not polygon_intersects_bounds(polygons, bounds):
+            continue
+        child_south, child_west, child_north, child_east = bounds
+        children.append(
+            StructureTile(
+                tile_id=f"{tile.tile_id}:s{index}",
+                bounds=bounds,
+                query_bounds=(
+                    child_south - latitude_overlap,
+                    child_west - longitude_overlap,
+                    child_north + latitude_overlap,
+                    child_east + longitude_overlap,
+                ),
+                depth=tile.depth + 1,
+            )
+        )
+    return children
 
 
 def structure_overpass_query(bounds: Bounds, timeout_seconds: int) -> str:
