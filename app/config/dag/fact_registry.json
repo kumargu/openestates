@@ -8279,6 +8279,16 @@
           "entrance.status"
         ]
       },
+      "society.structure_entity": {
+        "linked_entity_fact_keys": [
+          "society.structure_entity"
+        ],
+        "attribute_fact_keys": [
+          "structure.observed_name",
+          "structure.observed_levels",
+          "structure.observed_height_m"
+        ]
+      },
       "approach_road": {
         "linked_entity_fact_keys": [
           "approach_road_entity"

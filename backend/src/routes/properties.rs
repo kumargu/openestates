@@ -1306,7 +1306,7 @@ fn build_community_pulse_panel(
 
 fn collect_buyer_context_items(
     snapshot_identity: &str,
-    _property: &crate::models::Property,
+    property: &crate::models::Property,
     projection: Option<&SocietyFactProjection<'_>>,
     serving_facts: Option<&ServingFactIndex>,
     facts: &[ContextFactDefinition],
