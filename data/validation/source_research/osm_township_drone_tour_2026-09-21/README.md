@@ -1,6 +1,6 @@
 # Named-building township tour research
 
-This research extends the 20-society OSM pilot with a closer look at large sites. It preserves raw OSM IDs, names, refs, coordinates, exact polygons, observed levels/heights, tile coverage, and failures. The production rule is generic: group footprints by a normalized sourced name and visit the combined group centroid. A missing name never becomes a label.
+This research extends the 20-society OSM pilot with a closer look at large sites. The raw OSM responses remain in the local lake archive and are excluded from Git; their content hashes are recorded in `../raw_capture_manifest.sha256`. This reviewed summary preserves the source handles, coverage, labels, and failure classification needed to assess the generic rule: group footprints by a normalized sourced name and visit the combined group centroid. A missing name never becomes a label.
 
 The broader sample and per-society coverage remain in [`../osm_pilot_20_2026-09-20/README.md`](../osm_pilot_20_2026-09-20/README.md). That pilot completed 35/35 structure tiles, including 298 Lakeside footprints and 118 Brigade Orchards footprints.
 

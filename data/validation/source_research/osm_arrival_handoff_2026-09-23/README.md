@@ -9,7 +9,9 @@ For Brigade Woods, a bounded 200 m Overpass query around OSM gate
 `G. R. Tech Park Road`. The gate is at `12.984046, 77.7429562`. Its nearest
 point on the exact OSM road geometry is `12.984084189987005,
 77.74296963937813`, a separation of 4.47 m.
-The complete bounded response is retained in `overpass_gate_sample.json`.
+The complete bounded response was inspected from the local lake archive and is
+excluded from Git. Its content hash remains in
+`../raw_capture_manifest.sha256`.
 
 The earlier collector required a road-to-gate separation of at most 1 m, so it
 kept the gate but discarded the road. Google Street View could render a

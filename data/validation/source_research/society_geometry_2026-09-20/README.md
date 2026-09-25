@@ -21,10 +21,11 @@ production crawler rule is changed.
 - Existing roster coordinates were used only to rank or sanity-check OSM
   candidates. They are not presented as RERA or OSM coordinates.
 
-The compact side-by-side table is in `source_comparison.csv`. Structured RERA
-observations and chosen OSM handles are in `source_comparison.json`. All OSM
-candidates, tags, bounding boxes, and full polygon coordinates are in
-`osm_candidates.json`.
+The compact side-by-side table is in `source_comparison.csv`. The raw OSM and
+RERA responses were inspected from a local lake archive and are intentionally
+excluded from Git. Their filenames and content hashes remain in
+`../raw_capture_manifest.sha256` so the exact research inputs stay identifiable
+without adding source payloads to this review.
 
 ## Observed pattern
 
