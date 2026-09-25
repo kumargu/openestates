@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "availability": {
+    "active": "Advertised",
+    "disappeared": "No longer listed",
+    "stale": "Not reconfirmed",
+    "unknown": "Availability unconfirmed"
+  },
+  "seller": { "owner": "Owner", "broker": "Broker", "builder": "Builder", "unknown": "" },
+  "areaBasis": { "super_built_up": "super built-up", "built_up": "built-up", "carpet": "carpet" },
+  "clues": {
+    "single": "View advertisement",
+    "multiple": "{count} advertisements for this home",
+    "disagreement": "{count} advertisements · different asks",
+    "uncertain": "Possibly the same home · details differ",
+    "inactive": "No advertisement confirmed active",
+    "partial": "Only {active} of {count} advertisements active",
+    "missing": "View available details"
+  }
+}

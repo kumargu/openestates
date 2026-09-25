@@ -1,0 +1,413 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "InventoryDetail",
+  "type": "object",
+  "properties": {
+    "advertisements": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Advertisement"
+      }
+    },
+    "candidates": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Advertisement"
+      }
+    },
+    "comparables": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Advertisement"
+      }
+    },
+    "contract_version": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "fixture": {
+      "type": "boolean"
+    },
+    "registrations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Advertisement"
+      }
+    },
+    "snapshot_id": {
+      "type": "string"
+    },
+    "summary": {
+      "$ref": "#/definitions/HomeSummary"
+    }
+  },
+  "required": [
+    "contract_version",
+    "snapshot_id",
+    "fixture",
+    "summary",
+    "advertisements",
+    "candidates",
+    "comparables",
+    "registrations"
+  ],
+  "definitions": {
+    "Advertisement": {
+      "type": "object",
+      "properties": {
+        "history": {
+          "description": "Explicit predecessor order, newest first. Never sorted by timestamps.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Observation"
+          }
+        },
+        "identity": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/IdentitySignal"
+          }
+        },
+        "observation": {
+          "$ref": "#/definitions/Observation"
+        }
+      },
+      "required": [
+        "observation",
+        "history",
+        "identity"
+      ]
+    },
+    "AskRange": {
+      "type": "object",
+      "properties": {
+        "max_inr": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "min_inr": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "observation_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "min_inr",
+        "max_inr",
+        "observation_ids"
+      ]
+    },
+    "Availability": {
+      "type": "string",
+      "enum": [
+        "active",
+        "disappeared",
+        "stale",
+        "unknown"
+      ]
+    },
+    "Home": {
+      "type": "object",
+      "properties": {
+        "area_basis": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "area_sqft": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "bhk": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "floor": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "id": {
+          "type": "string"
+        },
+        "image": {
+          "type": "string"
+        },
+        "location": {
+          "type": "string"
+        },
+        "scenario": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "location",
+        "bhk",
+        "area_sqft",
+        "area_basis",
+        "floor",
+        "image",
+        "scenario"
+      ]
+    },
+    "HomeSummary": {
+      "type": "object",
+      "properties": {
+        "active_count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "advertisement_count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "ask": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/AskRange"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "conflicts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/IdentitySignal"
+          }
+        },
+        "home": {
+          "$ref": "#/definitions/Home"
+        },
+        "observed_on": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "price_change": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/PriceChange"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "uncertain_count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "home",
+        "ask",
+        "advertisement_count",
+        "active_count",
+        "uncertain_count",
+        "conflicts",
+        "observed_on",
+        "price_change"
+      ]
+    },
+    "IdentitySignal": {
+      "type": "object",
+      "properties": {
+        "disagrees": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "observation_id": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "observation_id",
+        "label",
+        "value",
+        "disagrees"
+      ]
+    },
+    "Observation": {
+      "type": "object",
+      "properties": {
+        "advertisement_id": {
+          "type": "string"
+        },
+        "amount_inr": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "area_basis": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "area_sqft": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "availability": {
+          "$ref": "#/definitions/Availability"
+        },
+        "bhk": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "current": {
+          "type": "boolean"
+        },
+        "first_seen": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "floor": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "home_id": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "last_seen": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "observed_on": {
+          "type": "string"
+        },
+        "predecessor_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "provider_id": {
+          "type": "string"
+        },
+        "relation": {
+          "$ref": "#/definitions/Relation"
+        },
+        "reliable": {
+          "type": "boolean"
+        },
+        "seller": {
+          "type": "string"
+        },
+        "source_label": {
+          "type": "string"
+        },
+        "source_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "home_id",
+        "provider_id",
+        "advertisement_id",
+        "source_label",
+        "source_url",
+        "relation",
+        "seller",
+        "availability",
+        "current",
+        "predecessor_id",
+        "amount_inr",
+        "bhk",
+        "area_sqft",
+        "area_basis",
+        "floor",
+        "observed_on",
+        "first_seen",
+        "last_seen",
+        "reliable"
+      ]
+    },
+    "PriceChange": {
+      "type": "object",
+      "properties": {
+        "difference_inr": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "observation_id": {
+          "type": "string"
+        },
+        "previous_observation_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "observation_id",
+        "previous_observation_id",
+        "difference_inr"
+      ]
+    },
+    "Relation": {
+      "type": "string",
+      "enum": [
+        "confirmed",
+        "likely",
+        "comparable",
+        "registration"
+      ]
+    }
+  }
+}
