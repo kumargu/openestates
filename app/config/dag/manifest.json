@@ -31,7 +31,7 @@
     "source_adapters/"
   ],
   "pending": [],
-  "contract_only": [],
+  "contract_only": ["inventory_preview_policy.json"],
   "proof_labels": {
     "verified": 0.8,
     "supported": 0.6,

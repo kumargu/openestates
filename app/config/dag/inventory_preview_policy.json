@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "price_relation": "confirmed",
+  "price_availability": "active",
+  "require_reliable_registrations": true
+}

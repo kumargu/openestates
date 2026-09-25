@@ -10,6 +10,7 @@ type NotebookCommentAnchorProps = {
   source: string;
   label?: string;
   className?: string;
+  onOpen?: () => void;
 };
 
 export function NotebookCommentAnchor({
@@ -19,12 +20,19 @@ export function NotebookCommentAnchor({
   source,
   label,
   className = "",
+  onOpen,
 }: NotebookCommentAnchorProps) {
   const { addHandwritten } = useNotebook();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  function close() {
+    setOpen(false);
+    triggerRef.current?.focus({ preventScroll: true });
+  }
 
   useEffect(() => {
     if (!open) return undefined;
@@ -49,15 +57,23 @@ export function NotebookCommentAnchor({
       source,
     });
     setDraft("");
-    setOpen(false);
+    close();
   }
 
   return (
     <div
       ref={rootRef}
       className={`notebook-comment-anchor ${className}`.trim()}
+      onKeyDown={event => {
+        if (open && event.key === "Escape") {
+          event.preventDefault();
+          event.stopPropagation();
+          close();
+        }
+      }}
     >
       <button
+        ref={triggerRef}
         type="button"
         className="notebook-comment-anchor__button"
         aria-label="Add note"
@@ -66,6 +82,7 @@ export function NotebookCommentAnchor({
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
+          if (!open) onOpen?.();
           setOpen((current) => !current);
         }}
       >
@@ -89,7 +106,7 @@ export function NotebookCommentAnchor({
             aria-label="Note"
           />
           <div>
-            <button type="button" onClick={() => setOpen(false)}>
+            <button type="button" onClick={close}>
               Cancel
             </button>
             <button type="submit" disabled={!draft.trim()}>

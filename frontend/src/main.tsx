@@ -20,7 +20,9 @@ import { NotebookToast } from "./components/notebook/NotebookToast.tsx";
 import { WorkspaceFrame } from "./components/workspace/WorkspaceFrame.tsx";
 
 const HomePage = lazy(() => import("./pages/HomePage.tsx").then(m => ({ default: m.HomePage })));
-const PropertyPage = lazy(() => import("./pages/PropertyPage.tsx").then(m => ({ default: m.PropertyPage })));
+const PropertyPage = lazy(() => import.meta.env.MODE === "inventory"
+  ? import("../prototypes/inventory-truth/IntegratedProperty.tsx").then(m => ({ default: m.IntegratedProperty }))
+  : import("./pages/PropertyPage.tsx").then(m => ({ default: m.PropertyPage })));
 const HomePlanPage = lazy(() => import("./pages/HomePlanPage.tsx").then(m => ({ default: m.HomePlanPage })));
 const ReraReportPage = lazy(() => import("./pages/ReraReportPage.tsx").then(m => ({ default: m.ReraReportPage })));
 const WorkspacePage = lazy(() => import("./pages/WorkspacePage.tsx").then(m => ({ default: m.WorkspacePage })));

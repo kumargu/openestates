@@ -33,6 +33,7 @@ pipeline/feedback/
 
 # Rust build artifacts
 backend/target/
+backend/prototypes/*/target/
 
 # Node
 node_modules/

@@ -2,6 +2,7 @@ import { identityReceiptLabel } from "../lib/proof-focus.ts";
 import { projectPropertyContext } from "../lib/property-context.ts";
 import measurementPresentation from "../../../app/config/ui/measurements.json";
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import type { PropertyIdentityDetail } from "../components/property/PropertyArrivalMap.tsx";
 import {
   Link,
   useNavigate,
@@ -31,7 +32,7 @@ import { SaveHeartButton } from "../components/SaveHeartButton.tsx";
 import { PUBLIC_BRAND_NAME } from "../lib/brand.ts";
 import { PropertyArrivalFilm } from "../components/property/PropertyArrivalFilm.tsx";
 import { PropertyArrivalMap } from "../components/property/PropertyArrivalMap.tsx";
-import { PropertyAtlasFacts, PropertyAtlasPhotos } from "../components/property/PropertyAtlasContent.tsx";
+import { PropertyAtlasPhotos } from "../components/property/PropertyAtlasContent.tsx";
 import { GoogleReviewsSection } from "../components/property/GoogleReviewsSection.tsx";
 import { AtlasIcon } from "../components/property/AtlasIcon.tsx";
 import { PropertyReviewsDeck } from "../components/property/PropertyReviewsDeck.tsx";
@@ -163,7 +164,15 @@ function buildPropertyJsonLd(p: PropertyDetailResponse["property"]) {
   return jsonLd;
 }
 
-export function PropertyPage() {
+// The caller must explicitly bind a unit identity to this property. Never infer
+// a particular home's measurements or asking prices from a society range.
+export type PropertyHomeIdentity = {
+  propertyId: string;
+  facts: { key: string; value: string }[];
+  detail: PropertyIdentityDetail;
+};
+
+export function PropertyPage({ homeIdentity }: { homeIdentity?: PropertyHomeIdentity } = {}) {
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
 
@@ -186,6 +195,7 @@ export function PropertyPage() {
       focusParam={focusParam}
       contextId={contextId}
       contextQueryFingerprint={contextQueryFingerprint}
+      homeIdentity={homeIdentity?.propertyId === id ? homeIdentity : undefined}
     />
   );
 }
@@ -195,11 +205,13 @@ function PropertyPageBody({
   focusParam,
   contextId,
   contextQueryFingerprint,
+  homeIdentity,
 }: {
   id: string;
   focusParam: string | null;
   contextId: string | null;
   contextQueryFingerprint: string | null;
+  homeIdentity?: PropertyHomeIdentity;
 }) {
   const navigate = useNavigate();
   const propertySearchContext = useSearchSpan();
@@ -485,7 +497,7 @@ function PropertyPageBody({
     ? `${p.price_per_sqft.toLocaleString("en-IN")} /sqft`
     : null;
   const sizeLabel = propertyAreaLabel(p);
-  const pageDescription = [
+  const pageDescription = homeIdentity ? [...homeIdentity.facts.map(fact => fact.value), p.area, p.city].join(". ") : [
     hasKnownNumber(p.bhk) ? `${p.bhk} BHK` : null,
     sizeLabel,
     `in ${society?.name ? society.name + ", " : ""}${p.area}`,
@@ -502,6 +514,7 @@ function PropertyPageBody({
   const story = projectPropertyStory(data, {
     mapAvailable: showNearbyPlate,
   });
+  if (homeIdentity) story.identity = { ...story.identity, facts: homeIdentity.facts };
   const proofSourceUrl = proofFocus
     ? focusedEvidenceSource(data, proofFocus)
     : undefined;
@@ -549,9 +562,9 @@ function PropertyPageBody({
         <meta property="og:url" content={canonicalUrl} />
         <link rel="canonical" href={canonicalUrl} />
         {socialImageUrl && <meta property="og:image" content={socialImageUrl} />}
-        <script type="application/ld+json">
+        {!homeIdentity && <script type="application/ld+json">
           {JSON.stringify(buildPropertyJsonLd(p))}
-        </script>
+        </script>}
         <PropertyArrivalMap
           key={p.id}
           context={arrivalContext}
@@ -564,7 +577,8 @@ function PropertyPageBody({
             location: story.identity.location,
             title: story.identity.title,
             facts: story.identity.facts.map((fact) => fact.value),
-            actions: (
+            detail: homeIdentity?.detail,
+            actions: (onOpenOverlay) => (
               <>
                 <SaveHeartButton
                   propertyId={p.id}
@@ -577,6 +591,7 @@ function PropertyPageBody({
                   detail={displayTitle}
                   source="Property detail"
                   label="Note"
+                  onOpen={onOpenOverlay}
                 />
               </>
             ),
@@ -596,7 +611,6 @@ function PropertyPageBody({
           <GoogleReviewsSection reviews={data.external_reviews} expandable />
         </section>}
         <PropertySearchMatch data={data} focus={proofFocus} />
-        <PropertyAtlasFacts data={data} story={story} focus={proofFocus} />
       </div>
     );
   }
@@ -612,9 +626,9 @@ function PropertyPageBody({
       <meta property="og:url" content={canonicalUrl} />
       <link rel="canonical" href={canonicalUrl} />
       {socialImageUrl && <meta property="og:image" content={socialImageUrl} />}
-      <script type="application/ld+json">
+      {!homeIdentity && <script type="application/ld+json">
         {JSON.stringify(buildPropertyJsonLd(p))}
-      </script>
+      </script>}
       <header className="property-journey-header">
         <Link to="/" className="property-journey-header__brand">
           <BrandMark size={30} />
@@ -646,7 +660,11 @@ function PropertyPageBody({
           <PropertySceneCard
             sectionId="property-cover"
             story={story}
-            identityPlacement="overlay"
+            identityPlacement={homeIdentity ? "above" : "overlay"}
+            identityDetails={homeIdentity && <section className="property-home-price" aria-label="Asking price">
+              {homeIdentity.detail.summary}
+              <details><summary>{homeIdentity.detail.label}</summary>{homeIdentity.detail.content}</details>
+            </section>}
             actions={(
               <>
                 <SaveHeartButton

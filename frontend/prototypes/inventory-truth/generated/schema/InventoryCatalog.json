@@ -1,0 +1,225 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "InventoryCatalog",
+  "type": "object",
+  "properties": {
+    "contract_version": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "fixture": {
+      "type": "boolean"
+    },
+    "homes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/HomeSummary"
+      }
+    },
+    "snapshot_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "contract_version",
+    "snapshot_id",
+    "fixture",
+    "homes"
+  ],
+  "definitions": {
+    "AskRange": {
+      "type": "object",
+      "properties": {
+        "max_inr": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "min_inr": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "observation_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "min_inr",
+        "max_inr",
+        "observation_ids"
+      ]
+    },
+    "Home": {
+      "type": "object",
+      "properties": {
+        "area_basis": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "area_sqft": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "bhk": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "floor": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "id": {
+          "type": "string"
+        },
+        "image": {
+          "type": "string"
+        },
+        "location": {
+          "type": "string"
+        },
+        "scenario": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "location",
+        "bhk",
+        "area_sqft",
+        "area_basis",
+        "floor",
+        "image",
+        "scenario"
+      ]
+    },
+    "HomeSummary": {
+      "type": "object",
+      "properties": {
+        "active_count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "advertisement_count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "ask": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/AskRange"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "conflicts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/IdentitySignal"
+          }
+        },
+        "home": {
+          "$ref": "#/definitions/Home"
+        },
+        "observed_on": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "price_change": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/PriceChange"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "uncertain_count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "home",
+        "ask",
+        "advertisement_count",
+        "active_count",
+        "uncertain_count",
+        "conflicts",
+        "observed_on",
+        "price_change"
+      ]
+    },
+    "IdentitySignal": {
+      "type": "object",
+      "properties": {
+        "disagrees": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "observation_id": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "observation_id",
+        "label",
+        "value",
+        "disagrees"
+      ]
+    },
+    "PriceChange": {
+      "type": "object",
+      "properties": {
+        "difference_inr": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "observation_id": {
+          "type": "string"
+        },
+        "previous_observation_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "observation_id",
+        "previous_observation_id",
+        "difference_inr"
+      ]
+    }
+  }
+}

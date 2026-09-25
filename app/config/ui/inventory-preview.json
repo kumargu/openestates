@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "integrated": {
+    "exampleAsk": "Example asking price",
+    "exampleUnavailable": "Example · no active asking price",
+    "compare": "Compare {count} asking prices",
+    "single": "View price & advertisement",
+    "inactive": "Check advertisement availability",
+    "partial": "{active} of {count} advertisements active",
+    "uncertain": "Compare prices · check home details",
+    "title": "This home’s asking prices"
+  },
+  "availability": {
+    "active": "Advertised",
+    "disappeared": "No longer listed",
+    "stale": "Not reconfirmed",
+    "unknown": "Availability unconfirmed"
+  },
+  "seller": { "owner": "Owner", "broker": "Broker", "builder": "Builder", "unknown": "" },
+  "areaBasis": { "super_built_up": "super built-up", "built_up": "built-up", "carpet": "carpet" },
+  "clues": {
+    "single": "View advertisement",
+    "multiple": "{count} advertisements for this home",
+    "disagreement": "{count} advertisements · different asks",
+    "uncertain": "Possibly the same home · details differ",
+    "inactive": "No advertisement confirmed active",
+    "partial": "Only {active} of {count} advertisements active",
+    "missing": "View available details"
+  }
+}

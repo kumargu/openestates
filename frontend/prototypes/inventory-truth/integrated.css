@@ -1,0 +1,29 @@
+.inventory-integrated {
+  --inventory-ink: #243638;
+  --inventory-muted: #626c63;
+  --inventory-rule: #263b3129;
+  color: var(--inventory-ink);
+}
+.inventory-integrated :is(button, summary, a, select):focus-visible { outline: 2px solid #a45137; outline-offset: 3px; }
+.inventory-integrated__ask { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 12px; }
+.inventory-integrated__ask > span { font-size: 11px; color: var(--inventory-muted); }
+.inventory-integrated__ask > strong { font-size: clamp(23px, 2.4vw, 30px); font-weight: 550; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+.inventory-integrated__state { padding: 80px 32px; }
+.inventory-integrated__state button { min-height: 44px; padding: 8px 20px; border: 1px solid var(--inventory-rule); border-radius: 8px; background: transparent; cursor: pointer; }
+.inventory-integrated .property-atlas__drawer--detail {
+  --atlas-ink: #243638;
+  --atlas-muted: #626c63;
+  --atlas-rule: #263b3129;
+  color-scheme: light;
+  background: #fffdf8;
+  width: min(440px, calc(100% - 48px));
+  padding: 16px 0 0;
+}
+.inventory-integrated .property-atlas__drawer--detail > header { padding: 0 20px 8px 24px; margin: 0; border-bottom: 1px solid var(--inventory-rule); }
+.inventory-integrated .property-atlas__drawer--detail h2 { font-size: 18px; }
+.inventory-integrated .property-atlas__drawer--detail .inventory-evidence__body { overflow: visible; padding-inline: 24px; }
+.inventory-integrated .inventory-evidence__footer { margin-top: 16px; }
+@media (max-width: 560px) {
+  .inventory-integrated__ask > strong { font-size: 25px; }
+  .inventory-integrated .property-atlas__drawer--detail { width: auto; }
+}

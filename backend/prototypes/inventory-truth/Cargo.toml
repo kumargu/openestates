@@ -1,0 +1,23 @@
+[package]
+name = "inventory-truth-preview"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+arrow = { version = "58.3.0", default-features = false }
+parquet = { version = "58.3.0", default-features = false, features = ["arrow", "zstd"] }
+axum = "0.8"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+schemars = "1"
+sha2 = "0.11.0"
+
+[dev-dependencies]
+tempfile = "3"
+tower = { version = "0.5", features = ["util"] }
+
+[profile.dev]
+debug = false
+incremental = false
