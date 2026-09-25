@@ -4,7 +4,7 @@ import { journeyFixture, retainedFixture } from "./fixtures/search-journey.ts";
 import { projectSearchJourney, readSavedJourney, saveJourney, selectJourneyProperty, journeyEditTargets, journeyUrl, readSearchCheckpoint } from "../src/lib/search-journey.ts";
 import { primaryProofFocus, resolvedProofFocus } from "../src/lib/proof-focus.ts";
 import { searchResultReasonLabels } from "../src/lib/search.ts";
-import { getDiscovery, getPropertyContextsBatch, resumeSearch, resumeSearchCheckpoint, reviseSearch, searchProperties, resolveSearchProof } from "../src/lib/api.ts";
+import { getDiscovery, getProperty, getPropertyContextsBatch, resumeSearch, resumeSearchCheckpoint, reviseSearch, searchProperties, resolveSearchProof } from "../src/lib/api.ts";
 
 test("wire envelope projects ranked cards and server-selected proof without reparsing the query", () => {
   const envelope = journeyFixture();
@@ -184,4 +184,41 @@ test("concurrent landing discovery effects share one catalog request", async () 
     assert.deepEqual(await first, { product_promise: "proof", quotes: [], shelves: [] });
     assert.deepEqual(await second, { product_promise: "proof", quotes: [], shelves: [] });
   } finally { globalThis.fetch = original; }
+});
+
+test("snapshot conflicts prevent an older discovery request from restoring the cache", async () => {
+  const original = globalThis.fetch;
+  const discoveryResolvers: Array<(response: Response) => void> = [];
+  let discoveryCalls = 0;
+  globalThis.fetch = (input) => {
+    const path = String(input);
+    if (path.includes("/api/properties/")) {
+      return Promise.resolve(Response.json(
+        { code: "stale_snapshot" },
+        { status: 409 },
+      ));
+    }
+    discoveryCalls += 1;
+    return new Promise<Response>((resolve) => discoveryResolvers.push(resolve));
+  };
+  try {
+    await assert.rejects(getProperty("reset-cache"));
+    const retired = getDiscovery();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(discoveryCalls, 1);
+
+    await assert.rejects(getProperty("detect-conflict"));
+    const current = getDiscovery();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(discoveryCalls, 2);
+
+    discoveryResolvers[0](Response.json({ product_promise: "retired", quotes: [], shelves: [] }));
+    discoveryResolvers[1](Response.json({ product_promise: "current", quotes: [], shelves: [] }));
+    assert.equal((await retired).product_promise, "retired");
+    assert.equal((await current).product_promise, "current");
+    assert.equal((await getDiscovery()).product_promise, "current");
+    assert.equal(discoveryCalls, 2);
+  } finally {
+    globalThis.fetch = original;
+  }
 });

@@ -35,6 +35,7 @@ let inFlightPropertyCatalog: Promise<PropertyCard[]> | null = null;
 let cachedDiscovery: { loadedAt: number; value: DiscoveryResponse } | null = null;
 let inFlightDiscovery: Promise<DiscoveryResponse> | null = null;
 let propertyCatalogRequestGeneration = 0;
+let discoveryRequestGeneration = 0;
 const DEFAULT_API_TIMEOUT_MS = 4_000;
 const GET_ATTEMPT_COUNT = 2;
 const GET_RETRY_DELAY_MS = 200;
@@ -141,6 +142,8 @@ function invalidateSnapshotCaches() {
   cachedPropertyCatalog = null;
   cachedDiscovery = null;
   propertyCatalogRequestGeneration += 1;
+  discoveryRequestGeneration += 1;
+  inFlightDiscovery = null;
   inFlightSearches.clear();
   inFlightResumes.clear();
   inFlightContextBatches.clear();
@@ -370,10 +373,13 @@ export function getDiscovery(options?: ApiFetchOptions): Promise<DiscoveryRespon
   if (cachedDiscovery && now - cachedDiscovery.loadedAt < DISCOVERY_CACHE_MS) {
     return withCallerAbort(Promise.resolve(cachedDiscovery.value), options?.signal);
   }
+  const generation = discoveryRequestGeneration;
   const request = inFlightDiscovery ?? fetchJson<DiscoveryResponse>("/api/discovery", {
     timeoutMs: options?.timeoutMs,
   }).then((value) => {
-    cachedDiscovery = { loadedAt: Date.now(), value };
+    if (generation === discoveryRequestGeneration) {
+      cachedDiscovery = { loadedAt: Date.now(), value };
+    }
     return value;
   });
   if (!inFlightDiscovery) {

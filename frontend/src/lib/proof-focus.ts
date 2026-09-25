@@ -1,5 +1,15 @@
 import contextPresentation from "../../../app/config/ui/property-context.json" with { type: "json" };
-import type { ProofFocus, SearchProofResolution, SearchResultItem } from "./types.ts";
+import type { ProofFocus, SearchProofResolution, SearchResultItem, SurfaceSceneResponse } from "./types.ts";
+
+export function proofFocusRendered(
+  focus: ProofFocus | undefined,
+  scene: SurfaceSceneResponse | null,
+): boolean {
+  if (!focus) return false;
+  if (focus.destinationKind !== "scene") return true;
+  return scene?.proofFocusStatus === "applied"
+    && scene.proofFocus?.proofToken === focus.proofToken;
+}
 
 function proofDestination(factKey: string) {
   const surfaces: ReadonlyArray<{ id: string; proofHandoff?: { kind: string; targetId: string; factKeys?: string[] }; scene?: { layers: Array<{ id: string; factKeys: string[] }> } }> = contextPresentation.surfaces;

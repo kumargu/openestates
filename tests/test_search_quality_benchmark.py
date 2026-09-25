@@ -10,6 +10,7 @@ from pipeline.benchmark_search_quality import (
     flattened_results,
     journey_results,
     load_suite,
+    project_context_handoff,
     public_quality_summary,
     serving_bundle_requirement_error,
 )
@@ -514,6 +515,52 @@ class SearchQualityBenchmarkTests(unittest.TestCase):
             "receipt_lineage_1",
             {check["check"] for check in failed if not check["passed"]},
         )
+
+    def test_context_handoff_projects_only_renderable_matched_evidence(self) -> None:
+        focus = {
+            "surfaceId": "around_this_home",
+            "layerId": "metro",
+            "factKey": "nearby_metro_stations",
+            "entityId": "place:hoodi",
+            "destinationKind": "scene",
+        }
+        proof = {
+            "factKey": "nearby_metro_stations",
+            "targetEntityId": "place:hoodi",
+            "sourceObservations": [{"observationId": "observation:hoodi"}],
+            "derivationChain": [],
+        }
+        fact = {
+            "id": "fact:hoodi",
+            "factKey": "nearby_metro_stations",
+            "sourceType": "Google",
+            "sourceUrl": "https://maps.google.com/hoodi",
+            "observedAt": "2026-08-01T00:00:00Z",
+            "evidence": {"evidence_id": {"kind": "observation", "id": "observation:hoodi"}},
+        }
+        context = {
+            "matchedProof": proof,
+            "features": [{
+                "fact": fact,
+                "target": {
+                    "entityId": "place:hoodi",
+                    "geometry": {"type": "Point", "coordinates": [77.7, 13.0]},
+                    "point": [77.7, 13.0],
+                },
+            }],
+        }
+
+        scene = project_context_handoff(context, focus, "bundle-v1")
+
+        self.assertEqual(scene["servingBundleVersion"], "bundle-v1")
+        self.assertEqual(scene["proofFocus"]["receiptId"], "fact:hoodi")
+        self.assertEqual(scene["features"][0]["entityId"], "place:hoodi")
+        self.assertEqual(scene["receipts"][0]["sourceType"], "Google")
+
+        context["features"][0]["target"]["geometry"] = None
+        context["features"][0]["target"]["point"] = None
+        nonspatial = project_context_handoff(context, focus, "bundle-v1")
+        self.assertIsNone(nonspatial["proofFocus"])
 
     def test_section_proof_handoff_requires_target_and_reachable_detail(self) -> None:
         focus = {

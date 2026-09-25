@@ -59,6 +59,7 @@ import {
   initialPropertySurfaceId,
   propertyProofMatch,
   propertySceneProofFocus,
+  proofFocusRendered,
   resolvedProofFocus,
 } from "../lib/proof-focus.ts";
 import { backendUrl, publicSiteUrl } from "../lib/runtimeConfig.ts";
@@ -519,6 +520,9 @@ function PropertyPageBody({
   );
   const hasGoogleReviews = Boolean(data.external_reviews?.reviews?.length
     || data.external_reviews?.google_reviews_url || hasKnownNumber(data.external_reviews?.google_rating));
+  const showGenericReceipt = Boolean(
+    receipt && !proofFocusRendered(proofFocus, aroundThisHomeScene),
+  );
 
   if (arrivalSceneStatus === "loading") {
     return (
@@ -578,7 +582,7 @@ function PropertyPageBody({
             ),
           }}
         />
-        {receipt && !proofFocus && <GenericSearchReceipt receipt={receipt} />}
+        {showGenericReceipt && receipt && <GenericSearchReceipt receipt={receipt} />}
         {proofError && <p className="property-atlas-proof-status" role="status">{proofError === "stale_proof_snapshot" ? "This evidence changed since your search. Search again to see the latest homes." : proofError === "proof_evidence_missing" ? "This receipt is no longer available." : "This receipt could not be opened. Try again."}</p>}
         {hasGoogleReviews && <section id="resident-voice" className="property-atlas-reviews" aria-labelledby="atlas-reviews-title" tabIndex={-1}>
           <header>
@@ -666,7 +670,7 @@ function PropertyPageBody({
           />
 
           <main className="property-clean-flow">
-            {receipt && !proofFocus && <GenericSearchReceipt receipt={receipt} />}
+            {showGenericReceipt && receipt && <GenericSearchReceipt receipt={receipt} />}
         {proofError && <p role="status">{proofError === "stale_proof_snapshot" ? "This evidence changed since your search. Search again to see the latest homes." : proofError === "proof_evidence_missing" ? "This receipt is no longer available." : "This receipt could not be opened. Try again."}</p>}
             <PropertySearchMatch data={data} focus={proofFocus} />
 

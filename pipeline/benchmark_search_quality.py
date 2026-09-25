@@ -293,6 +293,108 @@ def call_health(base_url: str, timeout_seconds: int) -> Optional[Dict[str, Any]]
         return None
 
 
+def project_context_handoff(
+    context: Dict[str, Any], focus: Dict[str, Any], serving_bundle_version: Any
+) -> Dict[str, Any]:
+    """Project the typed context receipt into the benchmark's focus contract."""
+    proof = field_value(context, "matched_proof")
+    scene = {
+        "servingBundleVersion": serving_bundle_version,
+        "proofFocus": None,
+        "features": [],
+        "receipts": [],
+    }
+    if not isinstance(proof, dict):
+        return scene
+
+    source_ids = {
+        field_value(source, "observation_id")
+        for source in field_value(proof, "source_observations") or []
+        if isinstance(source, dict)
+    }
+    derivation_ids = {
+        field_value(item, "derivation_id")
+        for item in field_value(proof, "derivation_chain") or []
+        if isinstance(item, dict)
+    }
+    matched = None
+    for candidate in context.get("features") or []:
+        if not isinstance(candidate, dict):
+            continue
+        fact = candidate.get("fact")
+        target = candidate.get("target")
+        if not isinstance(fact, dict):
+            continue
+        evidence = field_value(fact, "evidence") or {}
+        evidence_id = field_value(evidence, "evidence_id") or {}
+        target_id = field_value(target, "entity_id") if isinstance(target, dict) else None
+        if (
+            field_value(fact, "fact_key") == field_value(proof, "fact_key")
+            and (
+                not field_value(proof, "target_entity_id")
+                or target_id == field_value(proof, "target_entity_id")
+            )
+            and field_value(evidence_id, "id") in (source_ids | derivation_ids)
+        ):
+            matched = candidate
+            break
+
+    if matched is not None:
+        fact = matched["fact"]
+        target = matched.get("target") or {}
+        geometry = field_value(target, "geometry")
+        point = field_value(target, "point")
+        if not geometry and point:
+            geometry = {"type": "Point", "coordinates": point}
+        receipt = {
+            "id": field_value(fact, "id"),
+            "factKey": field_value(fact, "fact_key"),
+            "sourceType": field_value(fact, "source_type"),
+            "sourceUrl": field_value(fact, "source_url"),
+            "learnedAt": field_value(fact, "observed_at"),
+        }
+        entity_id = field_value(target, "entity_id")
+    else:
+        derivations = field_value(proof, "derivation_chain") or []
+        sources = field_value(proof, "source_observations") or []
+        geometry = field_value(proof, "geometry")
+        if not geometry or not derivations or not sources:
+            return scene
+        derivation = derivations[0]
+        source = sources[0]
+        receipt = {
+            "id": field_value(derivation, "derivation_id"),
+            "factKey": field_value(proof, "fact_key"),
+            "sourceType": field_value(source, "provider"),
+            "sourceUrl": field_value(source, "source_url"),
+            "learnedAt": field_value(source, "observed_at"),
+        }
+        entity_id = field_value(proof, "target_entity_id")
+
+    if not geometry:
+        return scene
+    feature_id = ":".join(
+        [
+            str(field_value(focus, "surface_id") or ""),
+            str(field_value(focus, "layer_id") or ""),
+            str(receipt["id"]),
+        ]
+    )
+    scene["proofFocus"] = {
+        **focus,
+        "featureId": feature_id,
+        "receiptId": receipt["id"],
+    }
+    scene["features"] = [{
+        "id": feature_id,
+        "entityId": entity_id,
+        "layerId": field_value(focus, "layer_id"),
+        "receiptIds": [receipt["id"]],
+    }]
+    scene["receipts"] = [receipt]
+    return scene
+
+
 def collect_proof_handoffs(
     base_url: str, response: Dict[str, Any], timeout_seconds: int
 ) -> List[Dict[str, Any]]:
@@ -344,18 +446,20 @@ def collect_proof_handoffs(
                             handoff["detail"] = detail
                     handoffs.append(handoff)
                     continue
-                surface_path = urllib.parse.quote(surface_id, safe="")
                 focus_query = urllib.parse.urlencode(
                     {"proofToken": token}
                 )
-                url = (
-                    f"{base_url}/api/properties/{property_path}/surfaces/"
-                    f"{surface_path}?{focus_query}"
-                )
-                with urllib.request.urlopen(url, timeout=timeout_seconds) as surface_response:
-                    scene = json.loads(surface_response.read())
-                    if isinstance(scene, dict):
-                        handoff["scene"] = scene
+                url = f"{base_url}/api/properties/{property_path}/context?{focus_query}"
+                with urllib.request.urlopen(url, timeout=timeout_seconds) as context_response:
+                    context = json.loads(context_response.read())
+                    if isinstance(context, dict):
+                        handoff["context"] = context
+                        runtime = response.get("runtimeVersion") or {}
+                        handoff["scene"] = project_context_handoff(
+                            context,
+                            focus,
+                            field_value(runtime, "serving_bundle_version"),
+                        )
             except (urllib.error.URLError, json.JSONDecodeError) as err:
                 handoff["error"] = str(err)
             handoffs.append(handoff)
