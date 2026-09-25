@@ -12,6 +12,13 @@ import type { NumberedPlace } from './nearbyPlateProjection.ts';
 export type NearbyDepth = 'overview' | 'pair' | 'inspect' | 'home';
 export type NearbyCameraOrientation = 'category-stable' | 'selected-home-foreground';
 export type AtlasSafeFrame = AtlasScreenFrame;
+export type TownshipTourStop = Readonly<{
+  id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  footprints: readonly MapOverlayPolygon[];
+}>;
 type Home = { latitude: number; longitude: number; name: string; boundary?: MapOverlayPolygon };
 const points = (coordinates: [number, number][]) => coordinates.map(([lng, lat]) => ({ lat, lng }));
 
@@ -33,9 +40,59 @@ export function homeSceneCamera(home: Home, elevation: number, frame: AtlasSafeF
   return {...camera, fov: fieldOfViewDegrees};
 }
 
-/** Orbit preserves the complete-boundary opening instead of shrinking Home as motion starts. */
+/** Descend from the complete-boundary opening into a road-height, size-aware orbit. */
 export function homeOrbitCamera(home: Home, elevation: number, frame: AtlasSafeFrame) {
-  return homeSceneCamera(home, elevation, frame);
+  const opening = homeSceneCamera(home, elevation, frame);
+  const minimumRange = frame.width < policy.homeOrbit.mobileBreakpointPx
+    ? policy.homeOrbit.mobileMinimumRangeM
+    : policy.homeOrbit.desktopMinimumRangeM;
+  return {
+    ...opening,
+    center: {...opening.center, altitude: elevation + policy.homeOrbit.altitudeOffsetM},
+    range: Math.max(minimumRange, opening.range * policy.homeOrbit.rangeScale),
+    tilt: policy.homeOrbit.tilt,
+  };
+}
+
+/** Group exact OSM footprints by their observed name, then minimize long camera jumps. */
+export function townshipTourStops(
+  home: Pick<Home, 'latitude' | 'longitude'>,
+  footprints: readonly MapOverlayPolygon[],
+): TownshipTourStop[] {
+  const groups = new Map<string, {name:string; footprints:MapOverlayPolygon[]}>();
+  for (const footprint of footprints) {
+    const observedName = footprint.properties?.observedName?.trim();
+    if (!observedName || footprint.coordinates.length < 4) continue;
+    const key = normalizeStructureName(observedName);
+    if (!key) continue;
+    const group = groups.get(key) ?? {name: observedName, footprints: []};
+    group.footprints.push(footprint);
+    groups.set(key, group);
+  }
+  const remaining = [...groups.entries()].map(([id, group]): TownshipTourStop => {
+    const coordinates = group.footprints.flatMap(footprint => footprint.coordinates);
+    return {
+      id,
+      name: group.name,
+      latitude: (Math.min(...coordinates.map(point => point[1])) + Math.max(...coordinates.map(point => point[1]))) / 2,
+      longitude: (Math.min(...coordinates.map(point => point[0])) + Math.max(...coordinates.map(point => point[0]))) / 2,
+      footprints: group.footprints,
+    };
+  });
+  const ordered: TownshipTourStop[] = [];
+  let cursor = {lat: home.latitude, lng: home.longitude};
+  while (remaining.length) {
+    remaining.sort((left, right) => distanceMetres(cursor, {lat:left.latitude, lng:left.longitude})
+      - distanceMetres(cursor, {lat:right.latitude, lng:right.longitude}) || left.id.localeCompare(right.id));
+    const next = remaining.shift()!;
+    ordered.push(next);
+    cursor = {lat: next.latitude, lng: next.longitude};
+  }
+  return ordered;
+}
+
+function normalizeStructureName(value: string): string {
+  return value.toLocaleLowerCase('en-IN').replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
 /** Join only explicit identity. Never guess ownership from names or proximity. */

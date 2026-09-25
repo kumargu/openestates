@@ -30,22 +30,17 @@ export function arrivalViewOptions({
 export function arrivalMissingState(
   view: ArrivalView,
   {
-    hasApproachRoad,
     hasBoundary,
     hasEntrance,
-    missingApproachRoadState,
     missingBoundaryState,
     missingEntranceState,
   }: {
-    hasApproachRoad: boolean;
     hasBoundary: boolean;
     hasEntrance: boolean;
-    missingApproachRoadState?: string;
     missingBoundaryState?: string;
     missingEntranceState?: string;
   },
 ): string | null {
-  if (view === "approach") return hasApproachRoad ? null : missingApproachRoadState ?? null;
   if (view !== "society") return null;
   if (!hasBoundary) return missingBoundaryState ?? null;
   if (!hasEntrance) return missingEntranceState ?? null;

@@ -605,7 +605,6 @@
       "enrichment_terms": [
         "traffic",
         "congestion",
-        "narrow road",
         "bad road",
         "approach road"
       ]

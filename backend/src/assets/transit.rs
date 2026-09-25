@@ -206,7 +206,12 @@ pub fn bengaluru_metro_station_facts_input(
 
     let mut watermarks = input.source_watermarks.clone();
     watermarks.push(SourceWatermark {
-        source: "bengaluru_metro_station_count".to_string(),
+        source: if input.stations.is_empty() {
+            "bengaluru_metro_stations_empty"
+        } else {
+            "bengaluru_metro_station_count"
+        }
+        .to_string(),
         high_watermark: input.stations.len().to_string(),
     });
 
@@ -404,11 +409,6 @@ fn validate_input(input: &BengaluruMetroStationsInput) -> Result<(), TransitAsse
     if input.source_url.trim().is_empty() {
         return Err(TransitAssetError::InvalidInput(
             "source_url cannot be empty".to_string(),
-        ));
-    }
-    if input.stations.is_empty() {
-        return Err(TransitAssetError::InvalidInput(
-            "metro station list cannot be empty".to_string(),
         ));
     }
     for station in &input.stations {

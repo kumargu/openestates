@@ -1,4 +1,5 @@
 import type { SceneGeometry } from "../types.ts";
+import policy from "../atlasPolicy.ts";
 
 export type AtlasPoint = { latitude: number; longitude: number };
 export type AtlasRoute = {
@@ -37,19 +38,6 @@ export type AtlasStreetHandoff = {
   heading: number;
 };
 
-export const DEFAULT_ROAD_FLIGHT_TUNING: AtlasRoadFlightTuning = Object.freeze({
-  baseSpeedMps: 12,
-  minimumRate: 0.5,
-  maximumRate: 4,
-  lookBehindM: 25,
-  lookAheadM: 65,
-  altitudeOffsetM: 8,
-  tilt: 67,
-  desktopRangeM: 270,
-  mobileRangeM: 350,
-  mobileBreakpointPx: 700,
-});
-
 export function selectPrimaryAtlasRoute(
   geometries: readonly SceneGeometry[],
   { direction = "as-mapped" }: { direction?: AtlasRoadDirection } = {},
@@ -75,7 +63,7 @@ export function selectPrimaryAtlasRoute(
 
 export function clampRoadPlaybackRate(
   playbackRate: number,
-  tuning: AtlasRoadFlightTuning = DEFAULT_ROAD_FLIGHT_TUNING,
+  tuning: AtlasRoadFlightTuning = policy.road,
 ): number {
   return clamp(playbackRate, tuning.minimumRate, tuning.maximumRate);
 }
@@ -85,7 +73,7 @@ export function advanceRoadDistance(
   currentDistanceM: number,
   elapsedMs: number,
   playbackRate: number,
-  tuning: AtlasRoadFlightTuning = DEFAULT_ROAD_FLIGHT_TUNING,
+  tuning: AtlasRoadFlightTuning = policy.road,
 ): number {
   const elapsedSeconds = Math.max(0, elapsedMs) / 1_000;
   const metres = currentDistanceM
@@ -98,7 +86,7 @@ export function roadFlightCamera(
   distanceAlongM: number,
   groundElevationM: number,
   viewportWidthPx: number,
-  tuning: AtlasRoadFlightTuning = DEFAULT_ROAD_FLIGHT_TUNING,
+  tuning: AtlasRoadFlightTuning = policy.road,
 ): AtlasCameraPose {
   const point = pointAlongRoute(route, distanceAlongM);
   return {

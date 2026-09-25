@@ -82,8 +82,16 @@ test('Home orbit derives its range from mapped geometry and the available deskto
   const context = propertyMapContextFromSurfaceScene(atlasFixtureScene('arrival_story'))!;
   const home = {...resolveHomeAnchor(context)!, name: context.home.name, boundary: context.home.boundary};
   const frame = {width: 1440, height: 1000, left: 32, right: 420, top: 96, bottom: 120};
+  const opening = homeSceneCamera(home, 900, frame);
   const camera = homeOrbitCamera(home, 900, frame);
-  assert.deepEqual(camera, homeSceneCamera(home, 900, frame));
+  assert.deepEqual(camera.center, {...opening.center,
+    altitude: 900 + atlasPolicy.homeOrbit.altitudeOffsetM});
+  assert.equal(camera.range, Math.max(atlasPolicy.homeOrbit.desktopMinimumRangeM,
+    opening.range * atlasPolicy.homeOrbit.rangeScale));
+  assert.equal(camera.tilt, atlasPolicy.homeOrbit.tilt);
+  assert.equal(camera.heading, opening.heading);
+  assert.equal(camera.fov, opening.fov);
+  assert.equal(atlasPolicy.homeOrbit.descentMs, atlasPolicy.road.descentMs);
   assert.equal(atlasPolicy.homeOrbit.cycleMs, 180_000);
 
   const atMetres = (east: number, north: number): [number, number] => [

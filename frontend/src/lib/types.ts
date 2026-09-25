@@ -242,6 +242,7 @@ export type MapOverlayPolygon = {
   holes?: [number, number][][];
   distance_km?: number;
   source_type: string;
+  properties?: Record<string, string>;
 };
 
 export type MapComparisonHome = {

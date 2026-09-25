@@ -8,6 +8,7 @@
   },
   "includes": [
     "asset_registry.json",
+    "catalog_enrichment.json",
     "community_themes.json",
     "concern_taxonomy.json",
     "compaction_policies.json",
@@ -18,6 +19,7 @@
     "google_place_resolution.json",
     "nearby_place_categories.json",
     "osm_access_corridors.json",
+    "osm_society_structures.json",
     "ontology.json",
     "resolution_policies.json",
     "rera_decision_labels.json",

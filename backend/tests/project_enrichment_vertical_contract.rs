@@ -18,11 +18,11 @@ use backend::assets::{
     ExternalListingObservationRecord, ExternalListingsWeeklyInput, GoogleNearbyPlaceRecord,
     GoogleNearbyPlacesWeeklyInput, GooglePlaceSnapshotRecord, GooglePlacesWeeklyInput,
     OsmLocalityBoundariesInput, OsmLocalityBoundaryInput, OsmPowerInfrastructureInput,
-    OsmPowerLineObservationRecord, OsmSocietyAccessInput, ReraProjectPlanFramesInput,
-    ReraProjectSnapshotRecord, ReraRegistryMonthlyInput, SkillFactAnnotationRecord,
-    SkillFactRecord, SocietyGoldManifest, SourceEntitySeed, SourceWatermark,
-    StormwaterDrainObservationRecord, StormwaterDrainRiskInput, BUILDER_RERA_AGGREGATES_ASSET_ID,
-    EXTERNAL_LISTINGS_WEEKLY_ASSET_ID, EXTERNAL_LISTING_FACTS_ASSET_ID,
+    OsmPowerLineObservationRecord, OsmSocietyAccessInput, OsmSocietyStructuresInput,
+    ReraProjectPlanFramesInput, ReraProjectSnapshotRecord, ReraRegistryMonthlyInput,
+    SkillFactAnnotationRecord, SkillFactRecord, SocietyGoldManifest, SourceEntitySeed,
+    SourceWatermark, BUILDER_RERA_AGGREGATES_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
+    EXTERNAL_LISTING_FACTS_ASSET_ID,
 };
 use backend::catalog::CatalogRecords;
 use backend::knowledge::{FactValue, KnowledgeGraph};
@@ -217,7 +217,17 @@ async fn materialized_contract(carpet: bool) -> (tempfile::TempDir, Arc<AppState
         )
         .await
         .unwrap();
-    assert_eq!(report.manifest.status, DagRunStatus::Succeeded);
+    assert_eq!(
+        report.manifest.status,
+        DagRunStatus::Succeeded,
+        "{:?}",
+        report
+            .manifest
+            .steps
+            .iter()
+            .filter(|step| step.error.is_some())
+            .collect::<Vec<_>>()
+    );
     assert_eq!(report.manifest.failed_count, 0);
 
     for asset_id in [
@@ -967,39 +977,6 @@ fn source_inputs(
             fetch_source: "fixture_overpass_power".to_string(),
         })
         .collect();
-    let stormwater_records = projects
-        .iter()
-        .enumerate()
-        .map(|(index, project)| StormwaterDrainObservationRecord {
-            entity_id: canonical_id(project.registration),
-            project_key: Some(project.registration.to_string()),
-            query: format!("stormwater drain around {}", project.name),
-            drain_id: format!("swd/{}", slug(project.name)),
-            name: Some(format!("{} fixture rajakaluve", project.name)),
-            drain_type: "rajakaluve".to_string(),
-            hierarchy: Some("primary_swd".to_string()),
-            distance_meters: 0.0,
-            intersects_property: false,
-            subject_latitude: Some(project.latitude),
-            subject_longitude: Some(project.longitude),
-            latitude: project.latitude,
-            longitude: project.longitude,
-            geometry_geojson: format!(
-                r#"{{"type":"LineString","coordinates":[[{lon1},{lat1}],[{lon2},{lat2}]]}}"#,
-                lon1 = project.longitude - 0.001,
-                lat1 = project.latitude - 0.001,
-                lon2 = project.longitude + 0.001,
-                lat2 = project.latitude + 0.001
-            ),
-            encroachment_record: None,
-            source_tags: BTreeMap::from([("waterway".to_string(), "drain".to_string())]),
-            source_url: Some(format!("https://data.opencity.in/swd/{index}")),
-            source_type: Some("OpenCity".to_string()),
-            confidence: 0.8,
-            fetched_at: observed_at,
-            fetch_source: "fixture_opencity_stormwater".to_string(),
-        })
-        .collect();
     let watermark = vec![SourceWatermark {
         source: "fixture".to_string(),
         high_watermark: observed_at.to_rfc3339(),
@@ -1201,14 +1178,16 @@ fn source_inputs(
                 high_watermark: "records=0".to_string(),
             }],
         }),
+        osm_society_structures: Some(OsmSocietyStructuresInput {
+            snapshot_date: "2026-07-14".to_string(),
+            collection_status: "complete".to_string(),
+            coverage: Vec::new(),
+            records: Vec::new(),
+            source_watermarks: watermark.clone(),
+        }),
         osm_power_infrastructure: Some(OsmPowerInfrastructureInput {
             snapshot_date: "2026-07-14".to_string(),
             records: osm_power_records,
-            source_watermarks: watermark.clone(),
-        }),
-        stormwater_drains: Some(StormwaterDrainRiskInput {
-            snapshot_date: "2026-07-14".to_string(),
-            records: stormwater_records,
             source_watermarks: watermark.clone(),
         }),
         ..AssetSourceInputs::default()

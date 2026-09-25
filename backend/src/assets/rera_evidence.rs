@@ -155,10 +155,7 @@ impl ReraReceiptInput {
         }
         let content_sha256 = sha256_hex(&self.body);
         let receipt_id = format!("rera_receipt:sha256:{content_sha256}");
-        let capture_material = format!(
-            "rera_capture.v1\n{receipt_id}\n{source_url}\n{}",
-            self.captured_at.to_rfc3339()
-        );
+        let capture_material = format!("rera_capture.v2\n{receipt_id}\n{source_url}");
         let capture_id = format!(
             "rera_capture:sha256:{}",
             sha256_hex(capture_material.as_bytes())
@@ -204,6 +201,8 @@ pub struct ReraReceiptsInput {
 /// or relying on a second serialization dependency.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReraReceiptsSourceInput {
+    #[serde(default)]
+    pub search_results: std::collections::BTreeMap<String, serde_json::Value>,
     pub snapshot_date: String,
     #[serde(default)]
     pub receipts: Vec<ReraReceiptSourceRecord>,
@@ -706,7 +705,7 @@ mod tests {
     }
 
     #[test]
-    fn receipt_ids_are_content_addressed_and_captures_preserve_url_observation() {
+    fn receipt_and_source_url_fully_determine_capture_identity() {
         let first = receipt(b"<html>same evidence</html>").to_record().unwrap();
         let mut second_input = receipt(b"<html>same evidence</html>");
         second_input.source_url =
@@ -714,7 +713,7 @@ mod tests {
         second_input.captured_at = Utc.with_ymd_and_hms(2026, 8, 10, 10, 30, 0).unwrap();
         let second = second_input.to_record().unwrap();
         assert_eq!(first.receipt_id, second.receipt_id);
-        assert_ne!(first.capture_id, second.capture_id);
+        assert_eq!(first.capture_id, second.capture_id);
         assert_eq!(
             first.source_url,
             "https://rera.karnataka.gov.in/projectDetails?a=1&b=2"
@@ -724,6 +723,7 @@ mod tests {
     #[test]
     fn source_input_decodes_binary_receipts_without_text_coercion() {
         let input = ReraReceiptsSourceInput {
+            search_results: Default::default(),
             snapshot_date: "2026-08-09".to_string(),
             receipts: vec![ReraReceiptSourceRecord {
                 kind: ReraReceiptKind::Document,

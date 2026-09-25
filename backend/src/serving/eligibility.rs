@@ -889,7 +889,11 @@ mod tests {
     #[test]
     fn missing_related_search_metadata_quarantines_every_affected_society() {
         let (entities, mut facts, mut metadata, edges) = two_society_records(true);
-        let road_fact = fact("road:shared", "road_width", FactValue::Numeric(12.0));
+        let road_fact = fact(
+            "road:shared",
+            "road.corridor_length_m",
+            FactValue::Numeric(120.0),
+        );
         facts.push(road_fact.clone());
         metadata.retain(|row| {
             row.entity_id != road_fact.entity_id || row.fact_key != road_fact.fact_key

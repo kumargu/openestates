@@ -609,8 +609,6 @@ pub struct SourceAttribution {
     pub learned_at: String,
 }
 
-const APPROACH_ROAD_MEDIA_FRAME_LIMIT: usize = 6;
-
 #[derive(schemars::JsonSchema, Serialize, Clone, Debug, PartialEq)]
 pub struct EvidenceMediaStrip {
     pub kind: String,
@@ -632,35 +630,6 @@ pub struct EvidenceMediaFrame {
     pub fov: f64,
     pub capture_date: String,
     pub source_url: String,
-}
-
-#[derive(Deserialize)]
-struct ApproachRoadVisualRecord {
-    provider: String,
-    coverage_quality: String,
-    frames: Vec<ApproachRoadVisualFrameRecord>,
-}
-
-#[derive(Deserialize)]
-struct ApproachRoadVisualFrameRecord {
-    label: String,
-    distance_from_gate_m: u32,
-    #[serde(default)]
-    pano_id: Option<String>,
-    #[serde(default)]
-    latitude: Option<f64>,
-    #[serde(default)]
-    longitude: Option<f64>,
-    #[serde(default)]
-    location_query: Option<String>,
-    #[serde(default)]
-    radius_m: Option<u32>,
-    heading: f64,
-    pitch: f64,
-    fov: f64,
-    capture_date: String,
-    #[serde(default)]
-    image_url: Option<String>,
 }
 
 #[derive(schemars::JsonSchema, Serialize, Clone, Debug)]
@@ -1073,7 +1042,6 @@ fn collect_structured_livability_facts(
     property: &crate::models::Property,
     projection: Option<&SocietyFactProjection<'_>>,
     serving_facts: Option<&ServingFactIndex>,
-    graph_index: Option<&crate::graph::GraphIndex>,
 ) -> Vec<StructuredFactSignal> {
     let society_id = society_node_id(&property.society_id);
     let area_id = property.area_id.clone();
@@ -1093,32 +1061,17 @@ fn collect_structured_livability_facts(
             "area" => area_id.as_str(),
             _ => society_id.as_str(),
         };
-        let has_fact = if fact.scope == "road_segment" {
-            serving_facts.is_some_and(|facts| {
-                road_segment_entity_ids(property, facts, graph_index)
-                    .iter()
-                    .any(|entity_id| {
-                        facts.entity(entity_id).is_some_and(|rows| {
-                            rows.facts.iter().any(|serving_fact| {
-                                serving_fact.fact_key == fact.key
-                                    && eligible_source_observation(serving_fact).is_some()
-                            })
-                        })
+        let has_fact = projection
+            .and_then(|projection| projection.latest_record(&fact.key))
+            .and_then(eligible_source_observation)
+            .is_some()
+            || serving_facts
+                .and_then(|facts| facts.entity(entity_id))
+                .is_some_and(|rows| {
+                    rows.facts.iter().any(|row| {
+                        row.fact_key == fact.key && eligible_source_observation(row).is_some()
                     })
-            })
-        } else {
-            projection
-                .and_then(|projection| projection.latest_record(&fact.key))
-                .and_then(eligible_source_observation)
-                .is_some()
-                || serving_facts
-                    .and_then(|facts| facts.entity(entity_id))
-                    .is_some_and(|rows| {
-                        rows.facts.iter().any(|row| {
-                            row.fact_key == fact.key && eligible_source_observation(row).is_some()
-                        })
-                    })
-        };
+                });
         if has_fact {
             signals.push(StructuredFactSignal {
                 fact_key: fact.key.clone(),
@@ -1144,13 +1097,11 @@ fn livability_lens_from_config(value: &str) -> LivabilityLens {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn build_livability_brief(
     property: &crate::models::Property,
     society_name: &str,
     projection: Option<&SocietyFactProjection<'_>>,
     serving_facts: Option<&ServingFactIndex>,
-    graph_index: Option<&crate::graph::GraphIndex>,
     community_records: &[crate::community::CommunityEvidenceRecord],
     community_pulse: Option<&CommunityPulse>,
 ) -> Option<LivabilityBrief> {
@@ -1165,8 +1116,7 @@ fn build_livability_brief(
         .and_then(|projection| projection.latest_text("home_timeline_state"))
         .map(|fact| fact.value);
     let home_timeline_ref = home_timeline_state.as_deref();
-    let structured_facts =
-        collect_structured_livability_facts(property, projection, serving_facts, graph_index);
+    let structured_facts = collect_structured_livability_facts(property, projection, serving_facts);
     let (community_positives, community_concerns, source_urls) =
         if let Some(pulse) = community_pulse {
             // Brief owns synthesized themes; pulse keeps review receipts only.
@@ -1232,154 +1182,6 @@ fn entity_scope(entity_id: &str) -> &'static str {
     }
 }
 
-fn approach_road_media_for(
-    property: &crate::models::Property,
-    serving_facts: Option<&ServingFactIndex>,
-    graph_index: Option<&crate::graph::GraphIndex>,
-) -> Option<EvidenceMediaStrip> {
-    let api_key = crate::street_view::google_maps_api_key();
-    let facts = serving_facts?;
-    let road_entity_id = resolve_road_segment_entity_id(property, facts, graph_index)?;
-    let fact = facts
-        .entity(&road_entity_id)?
-        .facts
-        .iter()
-        .find(|fact| fact.fact_key == "media.approach_road_frames")?;
-    let payload = match &fact.value {
-        FactValue::Text(text) => text.as_str(),
-        _ => return None,
-    };
-    let record: ApproachRoadVisualRecord = serde_json::from_str(payload).ok()?;
-    if record.coverage_quality == "missing" || record.frames.is_empty() {
-        return None;
-    }
-
-    let frames = record
-        .frames
-        .into_iter()
-        .take(APPROACH_ROAD_MEDIA_FRAME_LIMIT)
-        .filter_map(|frame| approach_road_media_frame(frame, api_key.as_deref()))
-        .collect::<Vec<_>>();
-    if frames.is_empty() {
-        return None;
-    }
-
-    let capture_date_label = capture_date_label(&frames);
-    let caption = format!("Last-lane context · {capture_date_label}");
-    Some(EvidenceMediaStrip {
-        kind: "street_view_strip".to_string(),
-        provider: record.provider,
-        title: "Approach road".to_string(),
-        caption,
-        capture_date_label,
-        coverage_quality: record.coverage_quality,
-        frames,
-    })
-}
-
-fn resolve_road_segment_entity_id(
-    property: &crate::models::Property,
-    serving_facts: &ServingFactIndex,
-    graph_index: Option<&crate::graph::GraphIndex>,
-) -> Option<String> {
-    road_segment_entity_ids(property, serving_facts, graph_index)
-        .into_iter()
-        .find(|entity_id| has_approach_road_frames(serving_facts, entity_id))
-}
-
-fn road_segment_entity_ids(
-    property: &crate::models::Property,
-    serving_facts: &ServingFactIndex,
-    graph_index: Option<&crate::graph::GraphIndex>,
-) -> Vec<String> {
-    let society_id = crate::routes::enrichment::society_node_id(&property.society_id);
-    let mut entity_ids = Vec::new();
-    let mut seen = HashSet::new();
-
-    if let Some(index) = graph_index {
-        let steps = index.walk_out(&society_id, &["served_by_road"], 1);
-        for step in steps {
-            if !step.to_entity_id.starts_with("road_segment:") {
-                continue;
-            }
-            if serving_facts.entity(&step.to_entity_id).is_none() {
-                continue;
-            }
-            if seen.insert(step.to_entity_id.clone()) {
-                entity_ids.push(step.to_entity_id);
-            }
-        }
-    }
-
-    let slug = society_id
-        .strip_prefix("society:")
-        .unwrap_or(society_id.as_str());
-    let fallback = format!("road_segment:{slug}-approach");
-    if serving_facts.entity(&fallback).is_some() && seen.insert(fallback.clone()) {
-        entity_ids.push(fallback);
-    }
-
-    entity_ids
-}
-
-fn has_approach_road_frames(serving_facts: &ServingFactIndex, entity_id: &str) -> bool {
-    serving_facts.entity(entity_id).is_some_and(|rows| {
-        rows.facts
-            .iter()
-            .any(|fact| fact.fact_key == "media.approach_road_frames")
-    })
-}
-
-fn approach_road_media_frame(
-    frame: ApproachRoadVisualFrameRecord,
-    api_key: Option<&str>,
-) -> Option<EvidenceMediaFrame> {
-    let street_input = crate::street_view::StreetViewFrameInput {
-        pano_id: frame.pano_id.clone(),
-        location: match (frame.latitude, frame.longitude) {
-            (Some(latitude), Some(longitude)) => Some(crate::street_view::StreetViewLocation {
-                latitude,
-                longitude,
-            }),
-            _ => None,
-        },
-        location_query: frame.location_query.clone(),
-        radius_m: frame.radius_m,
-        heading: frame.heading,
-        pitch: frame.pitch,
-        fov: frame.fov,
-    };
-    let image_url = frame
-        .image_url
-        .filter(|url| !url.trim().is_empty())
-        .or_else(|| {
-            api_key.and_then(|api_key| {
-                crate::street_view::street_view_static_url(&street_input, api_key)
-            })
-        })?;
-    let source_url = crate::street_view::street_view_pano_url(&street_input)?;
-
-    Some(EvidenceMediaFrame {
-        label: frame.label,
-        distance_from_gate_m: frame.distance_from_gate_m,
-        image_url,
-        heading: frame.heading,
-        pitch: frame.pitch,
-        fov: frame.fov,
-        capture_date: frame.capture_date,
-        source_url,
-    })
-}
-
-fn capture_date_label(frames: &[EvidenceMediaFrame]) -> String {
-    frames
-        .iter()
-        .map(|frame| frame.capture_date.as_str())
-        .max()
-        .map(|date| format!("Street View {date}"))
-        .unwrap_or_else(|| "Street View".to_string())
-}
-
 fn evidence_section_definition(kind: &str) -> Option<&'static EvidenceSectionDefinition> {
     buyer_context_definitions()
         .iter()
@@ -1403,7 +1205,6 @@ fn build_configured_evidence_panels(
     property: &crate::models::Property,
     projection: Option<&SocietyFactProjection<'_>>,
     serving_facts: Option<&ServingFactIndex>,
-    graph_index: Option<&crate::graph::GraphIndex>,
 ) -> Vec<SourcePanel> {
     build_configured_evidence_panels_from_definitions(
         snapshot_identity,
@@ -1411,7 +1212,6 @@ fn build_configured_evidence_panels(
         property,
         projection,
         serving_facts,
-        graph_index,
     )
 }
 
@@ -1421,7 +1221,6 @@ fn build_configured_evidence_panels_from_definitions(
     property: &crate::models::Property,
     projection: Option<&SocietyFactProjection<'_>>,
     serving_facts: Option<&ServingFactIndex>,
-    graph_index: Option<&crate::graph::GraphIndex>,
 ) -> Vec<SourcePanel> {
     definitions
         .iter()
@@ -1434,17 +1233,9 @@ fn build_configured_evidence_panels_from_definitions(
                 property,
                 projection,
                 serving_facts,
-                graph_index,
                 &definition.facts,
             );
-            let media = definition
-                .media
-                .iter()
-                .filter_map(|media_kind| {
-                    context_media_for(media_kind, property, serving_facts, graph_index)
-                })
-                .collect::<Vec<_>>();
-            (!items.is_empty() || !media.is_empty()).then(|| SourcePanel {
+            (!items.is_empty()).then(|| SourcePanel {
                 kind: definition.kind.clone(),
                 title: definition.title.clone(),
                 subtitle: definition.subtitle.clone(),
@@ -1455,7 +1246,7 @@ fn build_configured_evidence_panels_from_definitions(
                 presentation: evidence_presentation_from_definition(definition),
                 items,
                 missing: definition.missing.clone(),
-                media,
+                media: Vec::new(),
                 community_pulse: None,
             })
         })
@@ -1518,7 +1309,6 @@ fn collect_buyer_context_items(
     property: &crate::models::Property,
     projection: Option<&SocietyFactProjection<'_>>,
     serving_facts: Option<&ServingFactIndex>,
-    graph_index: Option<&crate::graph::GraphIndex>,
     facts: &[ContextFactDefinition],
 ) -> Vec<SourceItem> {
     let area_id = property.area_id.clone();
@@ -1543,14 +1333,6 @@ fn collect_buyer_context_items(
                         serving_source_item(snapshot_identity, projection, &fact.key, &fact.label)
                     })
                 }),
-            "road_segment" => serving_road_segment_source_item(
-                snapshot_identity,
-                property,
-                serving_facts,
-                graph_index,
-                &fact.key,
-                &fact.label,
-            ),
             _ => fact
                 .max_values
                 .and_then(|max_values| {
@@ -1581,52 +1363,16 @@ fn collect_buyer_context_items(
     items
 }
 
-fn serving_road_segment_source_item(
-    snapshot_identity: &str,
-    property: &crate::models::Property,
-    serving_facts: Option<&ServingFactIndex>,
-    graph_index: Option<&crate::graph::GraphIndex>,
-    fact_key: &str,
-    label: &str,
-) -> Option<SourceItem> {
-    let facts = serving_facts?;
-    road_segment_entity_ids(property, facts, graph_index)
-        .iter()
-        .find_map(|entity_id| {
-            serving_entity_source_item(
-                snapshot_identity,
-                facts,
-                entity_id,
-                fact_key,
-                fact_key,
-                label,
-            )
-        })
-}
-
 fn with_context_scope(mut item: SourceItem, fact: &ContextFactDefinition) -> SourceItem {
     item.scope = fact.scope.clone();
     item.relationship = Some(fact.relationship.clone());
     item
 }
 
-fn context_media_for(
-    media_kind: &str,
-    property: &crate::models::Property,
-    serving_facts: Option<&ServingFactIndex>,
-    graph_index: Option<&crate::graph::GraphIndex>,
-) -> Option<EvidenceMediaStrip> {
-    match media_kind {
-        "approach_road_visuals" => approach_road_media_for(property, serving_facts, graph_index),
-        _ => None,
-    }
-}
-
 pub(crate) fn build_source_panels(
     snapshot_identity: &str,
     property: &crate::models::Property,
     serving_facts: Option<&ServingFactIndex>,
-    graph_index: Option<&crate::graph::GraphIndex>,
 ) -> Vec<SourcePanel> {
     let projection =
         serving_facts.map(|facts| SocietyFactProjection::from_index(facts, &property.society_id));
@@ -1635,7 +1381,6 @@ pub(crate) fn build_source_panels(
         property,
         projection.as_ref(),
         serving_facts,
-        graph_index,
     );
 
     panels
@@ -1658,7 +1403,6 @@ fn build_property_evidence_response(
         snapshot_identity,
         property,
         serving_bundle.map(|bundle| &bundle.fact_index),
-        serving_bundle.map(|bundle| &bundle.graph_index),
     );
     build_property_evidence_response_from_panels(
         property.id.clone(),
@@ -2294,7 +2038,6 @@ pub async fn get_property(
         snapshot_identity,
         &property,
         serving_bundle.as_ref().map(|bundle| &bundle.fact_index),
-        serving_bundle.as_ref().map(|bundle| &bundle.graph_index),
     );
     let community_pulse = source_panels
         .iter()
@@ -2313,7 +2056,6 @@ pub async fn get_property(
         society_display_name,
         society_projection.as_ref(),
         serving_bundle.as_ref().map(|bundle| &bundle.fact_index),
-        serving_bundle.as_ref().map(|bundle| &bundle.graph_index),
         &community_records,
         community_pulse,
     );
@@ -4164,7 +3906,7 @@ mod serving_state_tests {
             Vec::<ServingSearchMetadataRecord>::new(),
         );
 
-        let panels = build_source_panels("test-snapshot", &property, Some(&serving), None);
+        let panels = build_source_panels("test-snapshot", &property, Some(&serving));
         let keys = panels
             .iter()
             .flat_map(|panel| panel.items.iter().map(|item| item.key.as_str()))
@@ -4197,7 +3939,7 @@ mod serving_state_tests {
         );
         fact.observation = None;
         let serving = ServingFactIndex::from_records(vec![fact], Vec::new());
-        let panels = build_source_panels("test-snapshot", &property(), Some(&serving), None);
+        let panels = build_source_panels("test-snapshot", &property(), Some(&serving));
         assert!(
             panels.iter().all(|panel| panel.items.is_empty()),
             "a source URL alone cannot establish a receipt"
@@ -4224,7 +3966,7 @@ mod serving_state_tests {
             Vec::<ServingSearchMetadataRecord>::new(),
         );
 
-        let panels = build_source_panels("test-snapshot", &property, Some(&serving), None);
+        let panels = build_source_panels("test-snapshot", &property, Some(&serving));
         let nearby = panels
             .iter()
             .find(|panel| panel.kind == "nearby")
@@ -4264,7 +4006,7 @@ mod serving_state_tests {
             Vec::<ServingSearchMetadataRecord>::new(),
         );
 
-        let panels = build_source_panels("test-snapshot", &property, Some(&serving), None);
+        let panels = build_source_panels("test-snapshot", &property, Some(&serving));
         let community = panels
             .iter()
             .find(|panel| panel.kind == "community")
@@ -4311,136 +4053,12 @@ mod serving_state_tests {
             Vec::<ServingSearchMetadataRecord>::new(),
         );
 
-        let panels = build_source_panels("test-snapshot", &property, Some(&serving), None);
+        let panels = build_source_panels("test-snapshot", &property, Some(&serving));
         assert!(panels
             .iter()
             .filter(|panel| panel.kind == "approach_road")
             .flat_map(|panel| panel.items.iter())
             .all(|item| item.key != "approach_road_condition"));
-    }
-
-    #[test]
-    fn source_panels_include_approach_road_fact_from_served_road_segment() {
-        let property = property();
-        let serving = ServingFactIndex::from_records(
-            vec![serving_fact_for_entity(
-                "road_segment:sample-approach",
-                "access_road_quality",
-                FactValue::Text(
-                    "Gate-side approach road identified; visual road-width verification is pending."
-                        .to_string(),
-                ),
-                10,
-            )],
-            Vec::<ServingSearchMetadataRecord>::new(),
-        );
-        let graph_index =
-            crate::graph::GraphIndex::from_serving_edges(&[crate::serving::ServingEdgeRecord {
-                from_entity_id: "society:sample".to_string(),
-                edge_type: "served_by_road".to_string(),
-                to_entity_id: "road_segment:sample-approach".to_string(),
-                confidence: 0.82,
-                source_type: "approach_road".to_string(),
-                derivation: None,
-            }]);
-
-        let panels = build_source_panels(
-            "test-snapshot",
-            &property,
-            Some(&serving),
-            Some(&graph_index),
-        );
-        let approach = panels
-            .iter()
-            .find(|panel| panel.kind == "approach_road")
-            .expect("road-segment facts should produce an approach-road panel");
-        let item = approach
-            .items
-            .iter()
-            .find(|item| item.key == "access_road_quality")
-            .expect("served road segment fact should be surfaced");
-
-        assert_eq!(item.entity_id, "road_segment:sample-approach");
-        assert_eq!(item.scope, "road_segment");
-        assert_eq!(item.relationship.as_deref(), Some("approach road"));
-        assert!(item.value.contains("Gate-side approach road"));
-        assert!(
-            !approach
-                .items
-                .iter()
-                .any(|item| item.key == "approach_road_condition"),
-            "road-segment facts should not require review-snippet phrase matching"
-        );
-    }
-
-    #[test]
-    fn source_panels_expose_six_approach_road_frames() {
-        let property = property();
-        let frames = (0..6)
-            .map(|index| {
-                serde_json::json!({
-                    "label": format!("Frame {}", index + 1),
-                    "distance_from_gate_m": if index < 4 { 0 } else { (index - 3) * 80 },
-                    "latitude": 12.9819914,
-                    "longitude": 77.7421819,
-                    "location_query": null,
-                    "pano_id": null,
-                    "radius_m": 250,
-                    "heading": (index as f64) * 45.0,
-                    "pitch": 0.0,
-                    "fov": 80.0,
-                    "capture_date": "latest available",
-                    "image_url": format!("https://example.com/frame-{index}.jpg")
-                })
-            })
-            .collect::<Vec<_>>();
-        let payload = serde_json::json!({
-            "provider": "Google Street View",
-            "coverage_quality": "usable",
-            "frames": frames
-        })
-        .to_string();
-        let serving = ServingFactIndex::from_records(
-            vec![serving_fact_for_entity(
-                "road_segment:sample-approach",
-                "media.approach_road_frames",
-                FactValue::Text(payload),
-                10,
-            )],
-            Vec::<ServingSearchMetadataRecord>::new(),
-        );
-        let graph_index =
-            crate::graph::GraphIndex::from_serving_edges(&[crate::serving::ServingEdgeRecord {
-                from_entity_id: "society:sample".to_string(),
-                edge_type: "served_by_road".to_string(),
-                to_entity_id: "road_segment:sample-approach".to_string(),
-                confidence: 0.82,
-                source_type: "approach_road".to_string(),
-                derivation: None,
-            }]);
-
-        let panels = build_source_panels(
-            "test-snapshot",
-            &property,
-            Some(&serving),
-            Some(&graph_index),
-        );
-        let approach = panels
-            .iter()
-            .find(|panel| panel.kind == "approach_road")
-            .expect("served media frames should produce an approach-road panel");
-        let strip = approach
-            .media
-            .first()
-            .expect("approach-road panel should include a media strip");
-
-        assert!(
-            approach.items.is_empty(),
-            "visual media must not synthesize buyer claims"
-        );
-        assert_eq!(strip.frames.len(), 6);
-        assert_eq!(strip.frames[4].distance_from_gate_m, 80);
-        assert_eq!(strip.frames[5].distance_from_gate_m, 160);
     }
 
     #[test]
@@ -4468,7 +4086,7 @@ mod serving_state_tests {
             property.id.clone(),
             property.to_card("").kg_entity_refs,
             None,
-            build_source_panels("test-snapshot", &property, Some(&serving), None),
+            build_source_panels("test-snapshot", &property, Some(&serving)),
         );
         assert_eq!(response.property_id, "sample-3bhk");
         assert_eq!(response.entity_refs.society_entity_id, "society:sample");
@@ -4545,7 +4163,6 @@ mod serving_state_tests {
                 density: "compact".to_string(),
                 max_preview_items: 2,
             }),
-            media: Vec::new(),
             missing: Vec::new(),
             facts: vec![ContextFactDefinition {
                 key: "test_config_only_signal".to_string(),
@@ -4564,7 +4181,6 @@ mod serving_state_tests {
             &property,
             Some(&projection),
             Some(&serving),
-            None,
         );
         let response = build_property_evidence_response_from_panels(
             property.id.clone(),
@@ -4603,7 +4219,7 @@ mod serving_state_tests {
             property.id.clone(),
             property.to_card("").kg_entity_refs,
             None,
-            build_source_panels("test-snapshot", &property, Some(&serving), None),
+            build_source_panels("test-snapshot", &property, Some(&serving)),
         );
         let section = response
             .sections
@@ -4654,7 +4270,7 @@ mod serving_state_tests {
             property.id.clone(),
             property.to_card("").kg_entity_refs,
             None,
-            build_source_panels("test-snapshot", &property, Some(&serving), None),
+            build_source_panels("test-snapshot", &property, Some(&serving)),
         );
         let section = response
             .sections
@@ -4738,7 +4354,7 @@ mod serving_state_tests {
             Vec::<ServingSearchMetadataRecord>::new(),
         );
 
-        let market_panel = build_source_panels("test-snapshot", &property, Some(&serving), None)
+        let market_panel = build_source_panels("test-snapshot", &property, Some(&serving))
             .into_iter()
             .find(|panel| panel.kind == "market")
             .expect("Market trail should render when builder or listing facts exist");

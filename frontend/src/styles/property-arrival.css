@@ -619,6 +619,8 @@
 }
 @media (max-height: 620px) and (min-width: 700px) {
   .property-arrival-map--atlas.has-panel .property-atlas__identity { max-width: calc(100% - 420px); }
+  .property-atlas__drawer,
+  .property-atlas__drawer.property-atlas__drawer--nearby { top: 16px; max-height: calc(100% - 32px); }
   .property-atlas__view-tools { bottom: 24px; right: 16px; }
 }
 @media (prefers-reduced-motion: reduce) {

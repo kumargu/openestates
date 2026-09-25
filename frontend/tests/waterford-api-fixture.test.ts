@@ -115,7 +115,8 @@ test("captured home boundary fits desktop chrome and camera altitude follows sup
     top: 226,
     bottom: 32,
   });
-  assert.equal(orbit.center.altitude, 123 + atlasPolicy.cameraFit.homeCenterAltitudeOffsetM);
+  assert.equal(orbit.center.altitude, 123 + atlasPolicy.homeOrbit.altitudeOffsetM);
+  assert.equal(orbit.tilt, atlasPolicy.homeOrbit.tilt);
   assert.equal(orbit.fov, atlasPolicy.cameraFit.homeFieldOfViewDegrees);
 });
 

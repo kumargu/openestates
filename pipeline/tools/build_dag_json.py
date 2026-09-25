@@ -170,7 +170,7 @@ def build_fact_registry() -> Dict[str, Any]:
 
 def leaf_keys_for_surface(surface_id: str, facts: List[Dict[str, Any]]) -> List[str]:
     patterns = {
-        "approach_road": ["approach_road", "road_width", "access_road", "road_segment"],
+        "approach_road": ["approach_road", "access_road", "road_segment"],
         "water_utilities": ["water", "tanker", "bwssb", "borewell", "cauvery"],
         "flooding_drainage": ["waterlogging", "flooding", "drain", "nala", "rajakaluve", "seepage"],
         "litigation_legal": ["litigation", "rera", "legal", "complaint", "oc_"],

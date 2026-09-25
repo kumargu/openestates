@@ -1,0 +1,220 @@
+{
+  "version": 1,
+  "initial_modules": [
+    "location",
+    "legal",
+    "nearby",
+    "images",
+    "listings",
+    "environment"
+  ],
+  "cleanup_enabled": false,
+  "modules": {
+    "location": {
+      "scope": "society",
+      "refresh": [
+        "osm_society_access_facts",
+        "osm_society_structure_facts"
+      ],
+      "ensure": [
+        "google_places_weekly"
+      ]
+    },
+    "legal": {
+      "scope": "society",
+      "refresh": [
+        "rera_receipts",
+        "rera_source_records",
+        "rera_registry_monthly"
+      ],
+      "ensure": []
+    },
+    "nearby": {
+      "scope": "society",
+      "refresh": [
+        "google_nearby_places_weekly"
+      ],
+      "ensure": [
+        "google_places_weekly"
+      ]
+    },
+    "metro": {
+      "scope": "shared",
+      "refresh": [
+        "bengaluru_metro_station_facts"
+      ],
+      "ensure": []
+    },
+    "images": {
+      "scope": "society",
+      "refresh": [
+        "external_images_weekly"
+      ],
+      "ensure": []
+    },
+    "listings": {
+      "scope": "society",
+      "refresh": [
+        "external_listings_weekly"
+      ],
+      "ensure": []
+    },
+    "transmission": {
+      "scope": "society",
+      "refresh": [
+        "osm_power_line_facts"
+      ],
+      "ensure": [
+        "google_places_weekly"
+      ]
+    },
+    "environment": {
+      "scope": "society",
+      "refresh": [
+        "society_groundwater_potential_facts"
+      ],
+      "ensure": [
+        "google_places_weekly",
+        "osm_locality_boundary_facts"
+      ]
+    }
+  },
+  "collectors": {
+    "rera_receipts": {
+      "input_field": "rera_receipts",
+      "scope": "society",
+      "requires": [],
+      "context": []
+    },
+    "rera_source_records": {
+      "input_field": "rera_source_records",
+      "scope": "society",
+      "requires": [
+        "rera_receipts"
+      ],
+      "context": []
+    },
+    "rera_registry_monthly": {
+      "input_field": "rera_registry_monthly",
+      "scope": "society",
+      "requires": [
+        "rera_receipts"
+      ],
+      "context": []
+    },
+    "rera_project_plan_frames": {
+      "input_field": "rera_project_plan_frames",
+      "scope": "society",
+      "requires": [
+        "rera_receipts"
+      ],
+      "context": []
+    },
+    "google_places_weekly": {
+      "input_field": "google_places_weekly",
+      "scope": "society",
+      "requires": [],
+      "context": [
+        "rera_registry_monthly"
+      ]
+    },
+    "google_nearby_places_weekly": {
+      "input_field": "google_nearby_places_weekly",
+      "scope": "society",
+      "requires": [
+        "google_places_weekly"
+      ],
+      "context": []
+    },
+    "external_images_weekly": {
+      "input_field": "external_images_weekly",
+      "scope": "society",
+      "requires": [],
+      "context": [
+        "rera_registry_monthly"
+      ]
+    },
+    "external_listings_weekly": {
+      "input_field": "external_listings_weekly",
+      "scope": "society",
+      "requires": [],
+      "context": [
+        "rera_registry_monthly"
+      ]
+    },
+    "society_groundwater_potential_facts": {
+      "input_field": "environment_groundwater_potential",
+      "scope": "society",
+      "requires": [
+        "google_places_weekly"
+      ],
+      "context": []
+    },
+    "bengaluru_metro_station_facts": {
+      "input_field": "bengaluru_metro_stations",
+      "scope": "shared",
+      "requires": [],
+      "context": []
+    },
+    "osm_locality_boundary_facts": {
+      "input_field": "osm_locality_boundaries",
+      "scope": "shared",
+      "requires": [],
+      "context": []
+    },
+    "osm_society_access_facts": {
+      "input_field": "osm_society_access",
+      "scope": "society",
+      "requires": [
+        "google_places_weekly"
+      ],
+      "context": []
+    },
+    "osm_society_structure_facts": {
+      "input_field": "osm_society_structures",
+      "scope": "society",
+      "requires": [
+        "osm_society_access_facts"
+      ],
+      "context": []
+    },
+    "osm_power_line_facts": {
+      "input_field": "osm_power_infrastructure",
+      "scope": "society",
+      "requires": [
+        "google_places_weekly"
+      ],
+      "context": []
+    }
+  },
+  "required_collectors": [
+    "rera_registry_monthly"
+  ],
+  "collector_options": {
+    "regulatory": false
+  },
+  "origin_collector": "google_places_weekly",
+  "origin_dependents": [
+    "google_nearby_places_weekly",
+    "osm_society_access_facts",
+    "osm_society_structure_facts",
+    "osm_power_line_facts",
+    "society_groundwater_potential_facts"
+  ],
+  "shared_fact_producers": {
+    "bengaluru_metro_station_facts": [
+      "bengaluru_metro_station_facts"
+    ],
+    "osm_locality_boundary_facts": [
+      "osm_locality_boundary_facts"
+    ]
+  },
+  "society_fact_producers": {
+    "osm_society_access_facts": [
+      "osm_society_access_facts"
+    ],
+    "osm_society_structure_facts": [
+      "osm_society_structure_facts"
+    ]
+  }
+}

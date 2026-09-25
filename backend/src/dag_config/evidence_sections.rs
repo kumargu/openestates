@@ -24,8 +24,6 @@ pub struct EvidenceSectionDefinition {
     #[serde(default)]
     pub presentation: Option<EvidenceSectionPresentation>,
     #[serde(default)]
-    pub media: Vec<String>,
-    #[serde(default)]
     pub missing: Vec<String>,
     #[serde(default)]
     pub facts: Vec<ContextFactDefinition>,

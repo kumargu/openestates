@@ -300,22 +300,6 @@
       }
     },
     {
-      "id": "approach_road_graph_facts",
-      "stage": "silver",
-      "description": "Approach-road graph edges and road-segment facts derived from upstream RERA and Google location facts.",
-      "dependencies": [
-        "canonical_society_nodes",
-        "rera_legal_facts",
-        "google_review_facts"
-      ],
-      "refresh": "on_change",
-      "cost_tier": "free",
-      "trust_tier": "support",
-      "partition_policy": {
-        "kind": "global"
-      }
-    },
-    {
       "id": "society_groundwater_potential_facts",
       "stage": "silver",
       "description": "Groundwater potential facts joined offline from society coordinates to OpenCity groundwater zones.",
@@ -357,7 +341,7 @@
     {
       "id": "osm_power_line_facts",
       "stage": "silver",
-      "description": "OpenStreetMap transmission-line proximity facts with geometry for red-flag map overlays.",
+      "description": "Optional OpenStreetMap transmission-line proximity facts with geometry for red-flag map overlays. Source failure records an enrichment gap and does not block society promotion.",
       "dependencies": [
         "canonical_society_nodes"
       ],
@@ -383,11 +367,12 @@
       }
     },
     {
-      "id": "stormwater_drain_facts",
+      "id": "osm_society_structure_facts",
       "stage": "silver",
-      "description": "Stormwater drain and Rajakaluve proximity facts with geometry for red-flag map overlays.",
+      "description": "Optional polygon-scoped OpenStreetMap building footprints and observed structure names for society rendering.",
       "dependencies": [
-        "canonical_society_nodes"
+        "canonical_society_nodes",
+        "osm_society_access_facts"
       ],
       "refresh": "monthly",
       "cost_tier": "free",
@@ -413,8 +398,8 @@
         "bengaluru_metro_station_facts",
         "osm_locality_boundary_facts",
         "osm_society_access_facts",
-        "osm_power_line_facts",
-        "stormwater_drain_facts"
+        "osm_society_structure_facts",
+        "osm_power_line_facts"
       ],
       "refresh": "on_change",
       "cost_tier": "free",
@@ -458,8 +443,7 @@
         "bengaluru_metro_station_facts",
         "osm_locality_boundary_facts",
         "osm_society_access_facts",
-        "osm_power_line_facts",
-        "stormwater_drain_facts"
+        "osm_power_line_facts"
       ]
     },
     {
@@ -468,8 +452,7 @@
       "description": "Immutable society gold snapshot merged by source precedence and fact policy.",
       "dependencies": [
         "canonical_society_nodes",
-        "society_fact_snapshot",
-        "approach_road_graph_facts"
+        "society_fact_snapshot"
       ],
       "refresh": "on_change",
       "cost_tier": "free",
@@ -484,8 +467,7 @@
         ]
       },
       "optional_dependencies": [
-        "society_fact_snapshot",
-        "approach_road_graph_facts"
+        "society_fact_snapshot"
       ]
     }
   ]

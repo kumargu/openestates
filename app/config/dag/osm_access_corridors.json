@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "description": "Society-centric OpenStreetMap boundaries, explicit entrances and sourced public approach corridors.",
   "collector": {
     "source_id": "openstreetmap_society_access",
@@ -11,13 +11,15 @@
     "bbox_padding_meters": 1650.0,
     "max_corridor_meters": 1500.0,
     "min_approach_route_meters": 25.0,
-    "max_route_entrance_snap_meters": 1.0,
     "max_frontage_distance_meters": 120.0,
     "max_entrance_boundary_distance_meters": 35.0,
     "max_entrance_road_distance_meters": 30.0,
     "allow_partial_subject_failures": false,
     "confidence": 0.78,
-    "boundary_landuse_values": ["residential"],
+    "boundary_geometry_tag_keys": ["landuse", "building"],
+    "boundary_name_ignored_tokens": ["phase", "tower", "block", "apartment", "apartments", "u", "c"],
+    "boundary_name_min_shared_tokens": 2,
+    "boundary_name_min_coverage": 0.6,
     "road_suffixes": ["Road", "Street", "Marg"],
     "eligible_highway_values": [
       "motorway", "trunk", "primary", "secondary", "tertiary",

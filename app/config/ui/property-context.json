@@ -19,14 +19,11 @@
         "nearby_fitness",
         "nearby_tech_parks",
         "nearby_public_parks",
-        "nearby_breweries",
         "nearby_graveyards",
         "nearby_lakes",
         "lake_within_250m",
         "high_voltage_transmission_line_nearby",
         "high_voltage_transmission_line_place_entity",
-        "stormwater_drain_nearby",
-        "stormwater_drain_place_entity",
         "environment.groundwater_potential_class"
       ],
       "traversal": [
@@ -253,52 +250,17 @@
             }
           },
           {
-            "id": "breweries",
-            "label": "Breweries",
-            "factKeys": [
-              "nearby_breweries"
-            ],
-            "edgeTypes": [
-              "near_place"
-            ],
-            "family": "access",
-            "relationClass": "access",
-            "renderKind": "pin",
-            "icon": "beer",
-            "sort": "reviews",
-            "maxItems": 5,
-            "expandedMaxItems": 8,
-            "spreadMinDistanceKm": 1.0,
-            "includeNameMarkers": [
-              "brewery",
-              "brewing",
-              "biergarten",
-              "beer garden"
-            ],
-            "enabledByDefault": false,
-            "rank": 8,
-            "tone": "positive",
-            "kind": "place",
-            "metricFactKeys": {
-              "rating": "google_rating",
-              "reviewCount": "google_review_count"
-            }
-          },
-          {
             "id": "red_flags",
             "label": "Red flags",
             "factKeys": [
               "nearby_graveyards",
-              "high_voltage_transmission_line_nearby",
-              "stormwater_drain_nearby"
+              "high_voltage_transmission_line_nearby"
             ],
             "featureLabels": {
-              "high_voltage_transmission_line_nearby": "Transmission line",
-              "stormwater_drain_nearby": "Stormwater drain"
+              "high_voltage_transmission_line_nearby": "Transmission line"
             },
             "linkedEntityFactKeys": [
-              "high_voltage_transmission_line_place_entity",
-              "stormwater_drain_place_entity"
+              "high_voltage_transmission_line_place_entity"
             ],
             "family": "risk",
             "relationClass": "risk_externality",
@@ -306,7 +268,6 @@
             "icon": "flag",
             "sortPriorityFactKeys": [
               "high_voltage_transmission_line_nearby",
-              "stormwater_drain_nearby",
               "nearby_graveyards"
             ],
             "sort": "distance",
@@ -335,7 +296,8 @@
         "approach_road",
         "approach_road_entity",
         "society.entrance_entity",
-        "geo.geometry_geojson"
+        "geo.geometry_geojson",
+        "society.structure_entity"
       ],
       "traversal": [
         "property -> in_society -> society",
@@ -403,6 +365,32 @@
             }
           },
           {
+            "id": "structures",
+            "label": "Buildings",
+            "factKeys": [
+              "society.structure_entity"
+            ],
+            "linkedEntityFactKeys": [
+              "society.structure_entity"
+            ],
+            "family": "context",
+            "relationClass": "context",
+            "renderKind": "structure_footprint",
+            "mapPresentation": "immersive_3d",
+            "featureProperties": {
+              "levels": "structure.observed_levels",
+              "heightM": "structure.observed_height_m",
+              "observedName": "structure.observed_name"
+            },
+            "sort": "distance",
+            "maxItems": 500,
+            "showReviewMetrics": false,
+            "enabledByDefault": true,
+            "rank": 2,
+            "tone": "neutral",
+            "kind": "structure"
+          },
+          {
             "id": "entrance",
             "label": "Entrance",
             "factKeys": [
@@ -454,7 +442,6 @@
             "relationClass": "access",
             "renderKind": "terrain_corridor",
             "mapPresentation": "immersive_3d",
-            "emptyState": "Approach road not mapped",
             "experience": {
               "kind": "street_view_tour",
               "waypointSpacingM": 65,
@@ -717,7 +704,6 @@
       "leaf_keys": [
         "risk.approach_road_waterlogging",
         "risk.basement_seepage",
-        "stormwater_drain_nearby",
         "rajakaluve_nearby",
         "rajakaluve_encroachment_record"
       ],
@@ -775,30 +761,6 @@
             "rank": 2,
             "tone": "risk",
             "kind": "basement_seepage",
-            "metricFactKeys": {
-              "rating": "google_rating",
-              "reviewCount": "google_review_count"
-            }
-          },
-          {
-            "id": "drains",
-            "label": "Drains",
-            "factKeys": [
-              "stormwater_drain_nearby",
-              "rajakaluve_nearby",
-              "rajakaluve_encroachment_record"
-            ],
-            "linkedEntityFactKeys": [
-              "stormwater_drain_place_entity"
-            ],
-            "family": "risk",
-            "relationClass": "risk_externality",
-            "renderKind": "line",
-            "maxItems": 3,
-            "enabledByDefault": true,
-            "rank": 3,
-            "tone": "risk",
-            "kind": "line",
             "metricFactKeys": {
               "rating": "google_rating",
               "reviewCount": "google_review_count"

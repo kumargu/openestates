@@ -29,8 +29,6 @@
       "lake_within_250m",
       "high_voltage_transmission_line_nearby",
       "high_voltage_transmission_line_place_entity",
-      "stormwater_drain_nearby",
-      "stormwater_drain_place_entity",
       "rajakaluve_nearby",
       "rajakaluve_encroachment_record"
     ],
@@ -1034,17 +1032,12 @@
         "parking",
         "visitor parking",
         "road",
-        "lane",
-        "road width",
         "access road",
-        "approach road",
-        "approach lane"
+        "approach road"
       ],
       "fact_keys": [
         "parking_quality",
         "visitor_parking",
-        "road_width",
-        "access_road_quality",
         "approach_road_condition"
       ],
       "source_priority": [
@@ -1153,7 +1146,6 @@
       "intent_terms": [
         "plot",
         "layout",
-        "road width",
         "corner plot",
         "site",
         "villa plot"
@@ -1161,8 +1153,7 @@
       "fact_keys": [
         "rera_project_type",
         "plot_size_sqft",
-        "layout_quality",
-        "road_width"
+        "layout_quality"
       ],
       "source_priority": [
         "rera",
@@ -1560,15 +1551,10 @@
         "rank": 17,
         "patterns": [
           "approach road",
-          "access road",
-          "road width",
-          "wide road",
-          "good road access"
+          "access road"
         ],
         "label": "approach road",
         "expanded_keys": [
-          "access_road_quality",
-          "road_width",
           "approach_road_condition",
           "google_review_snippets",
           "traffic_reality"
@@ -2405,9 +2391,7 @@
         "rank": 6,
         "patterns": [
           "bad road",
-          "narrow road",
           "bad approach road",
-          "narrow approach road",
           "poor access road",
           "isolated project",
           "isolated gated project",
@@ -2418,10 +2402,7 @@
         ],
         "label": "approach road",
         "expanded_keys": [
-          "access_road_quality",
-          "road_width",
           "approach_road_condition",
-          "media.approach_road_frames",
           "risk.approach_road_waterlogging",
           "google_review_snippets",
           "traffic_reality"
@@ -2509,24 +2490,6 @@
         "expanded_keys": [
           "lake_within_250m",
           "nearby_lakes",
-          "surroundings_signal"
-        ],
-        "weight": 1.0
-      },
-      {
-        "rank": 12,
-        "patterns": [
-          "rajakaluve",
-          "stormwater drain",
-          "storm water drain",
-          "swd",
-          "drain encroachment"
-        ],
-        "label": "stormwater drain nearby",
-        "expanded_keys": [
-          "stormwater_drain_nearby",
-          "rajakaluve_nearby",
-          "rajakaluve_encroachment_record",
           "surroundings_signal"
         ],
         "weight": 1.0
@@ -3023,8 +2986,21 @@
       "label": "Listed area",
       "fact_keys": [],
       "measurement_basis": "*",
-      "query_excludes": ["carpet", "usable"],
-      "query_units": [{"unit": "sqft", "aliases": ["sqft", "sq ft", "square feet"], "to_canonical": 1.0}],
+      "query_excludes": [
+        "carpet",
+        "usable"
+      ],
+      "query_units": [
+        {
+          "unit": "sqft",
+          "aliases": [
+            "sqft",
+            "sq ft",
+            "square feet"
+          ],
+          "to_canonical": 1.0
+        }
+      ],
       "proof_sources": [],
       "scoring_method": "inventory-measurement"
     },
@@ -3033,18 +3009,29 @@
       "label": "Carpet area",
       "fact_keys": [],
       "supported": false,
-      "query_requires": ["carpet", "usable"],
+      "query_requires": [
+        "carpet",
+        "usable"
+      ],
       "measurement_basis": "carpet",
       "query_units": [
         {
           "unit": "sqft",
-          "aliases": ["sqft", "sq ft", "square feet"],
+          "aliases": [
+            "sqft",
+            "sq ft",
+            "square feet"
+          ],
           "to_canonical": 1.0
         }
       ],
       "qualitative_bounds": [
         {
-          "patterns": ["high carpet area", "large carpet area", "large usable area"],
+          "patterns": [
+            "high carpet area",
+            "large carpet area",
+            "large usable area"
+          ],
           "operator": "min",
           "value": 2000.0,
           "unit": "sqft"
@@ -3056,11 +3043,18 @@
     {
       "dimension": "lake_distance",
       "label": "Nearest observed lake",
-      "fact_keys": ["nearby_lakes"],
+      "fact_keys": [
+        "nearby_lakes"
+      ],
       "query_units": [
         {
           "unit": "km",
-          "aliases": ["km", "kms", "kilometer", "kilometers"],
+          "aliases": [
+            "km",
+            "kms",
+            "kilometer",
+            "kilometers"
+          ],
           "to_canonical": 1.0
         }
       ],
@@ -3081,7 +3075,9 @@
       ],
       "value_kind": "numeric",
       "aggregation": "minimum",
-      "proof_sources": ["Google"],
+      "proof_sources": [
+        "Google"
+      ],
       "scoring_method": "serving-nearby-distance"
     },
     {
@@ -3127,7 +3123,11 @@
       ],
       "qualitative_bounds": [
         {
-          "patterns": ["large open space", "high open area", "lots of open space"],
+          "patterns": [
+            "large open space",
+            "high open area",
+            "lots of open space"
+          ],
           "operator": "min",
           "value": 60.0,
           "unit": "percent"
@@ -3787,21 +3787,15 @@
       "aliases": [
         "approach road",
         "access road",
-        "road width",
-        "road access",
-        "lane",
-        "approach lane"
+        "road access"
       ],
       "fact_keys": [
-        "access_road_quality",
-        "road_width",
         "approach_road_condition",
         "google_review_snippets",
         "traffic_reality",
         "commute_reality"
       ],
       "positive_terms": [
-        "wide road",
         "good road",
         "good access road",
         "easy access",
@@ -3809,14 +3803,12 @@
         "well connected"
       ],
       "negative_terms": [
-        "narrow road",
         "bad road",
         "poor road",
         "poor access",
         "approach road is bad",
         "road digging",
-        "broken road",
-        "single lane"
+        "broken road"
       ],
       "display_label": "Approach road signal",
       "score_delta": 0.8
@@ -4988,12 +4980,10 @@
       ],
       "enrichment_terms": [
         "rajakaluve",
-        "storm drain",
-        "stormwater drain"
+        "storm drain"
       ],
       "answers_preferences": [
-        "rajakaluve",
-        "stormwater"
+        "rajakaluve"
       ],
       "never_default": true,
       "source_types": [
@@ -6008,7 +5998,6 @@
       "enrichment_terms": [
         "traffic",
         "congestion",
-        "narrow road",
         "bad road",
         "approach road"
       ],
@@ -7032,13 +7021,27 @@
       "label": "entrance status",
       "lens": "proof",
       "polarity": "neutral",
-      "scopes": ["place"],
-      "enrichment_terms": ["entrance", "main gate"],
-      "answers_preferences": ["entrance", "main gate"],
+      "scopes": [
+        "place"
+      ],
+      "enrichment_terms": [
+        "entrance",
+        "main gate"
+      ],
+      "answers_preferences": [
+        "entrance",
+        "main gate"
+      ],
       "never_default": true,
-      "source_types": ["OpenStreetMap", "Official"],
+      "source_types": [
+        "OpenStreetMap",
+        "Official"
+      ],
       "display_template": "entrance status: {value}",
-      "scoring_hint": {"direction": "text_match", "weight": 0.0}
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.0
+      }
     },
     {
       "fact_key": "entrance.association_method",
@@ -7046,13 +7049,21 @@
       "label": "entrance association",
       "lens": "proof",
       "polarity": "neutral",
-      "scopes": ["place"],
+      "scopes": [
+        "place"
+      ],
       "enrichment_terms": [],
       "answers_preferences": [],
       "never_default": true,
-      "source_types": ["OpenStreetMap", "Official"],
+      "source_types": [
+        "OpenStreetMap",
+        "Official"
+      ],
       "display_template": "entrance association: {value}",
-      "scoring_hint": {"direction": "text_match", "weight": 0.0}
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.0
+      }
     },
     {
       "fact_key": "road.direction",
@@ -7060,13 +7071,20 @@
       "label": "road direction",
       "lens": "proof",
       "polarity": "neutral",
-      "scopes": ["place"],
+      "scopes": [
+        "place"
+      ],
       "enrichment_terms": [],
       "answers_preferences": [],
       "never_default": true,
-      "source_types": ["OpenStreetMap"],
+      "source_types": [
+        "OpenStreetMap"
+      ],
       "display_template": "road direction: {value}",
-      "scoring_hint": {"direction": "text_match", "weight": 0.0}
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.0
+      }
     },
     {
       "fact_key": "road.association_method",
@@ -7074,13 +7092,20 @@
       "label": "road association",
       "lens": "proof",
       "polarity": "neutral",
-      "scopes": ["place"],
+      "scopes": [
+        "place"
+      ],
       "enrichment_terms": [],
       "answers_preferences": [],
       "never_default": true,
-      "source_types": ["OpenStreetMap"],
+      "source_types": [
+        "OpenStreetMap"
+      ],
       "display_template": "road association: {value}",
-      "scoring_hint": {"direction": "text_match", "weight": 0.0}
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.0
+      }
     },
     {
       "fact_key": "road.source_geometry_geojson",
@@ -7088,13 +7113,20 @@
       "label": "road source geometry",
       "lens": "proof",
       "polarity": "neutral",
-      "scopes": ["place"],
+      "scopes": [
+        "place"
+      ],
       "enrichment_terms": [],
       "answers_preferences": [],
       "never_default": true,
-      "source_types": ["OpenStreetMap"],
+      "source_types": [
+        "OpenStreetMap"
+      ],
       "display_template": "road source geometry: {value}",
-      "scoring_hint": {"direction": "text_match", "weight": 0.0}
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.0
+      }
     },
     {
       "fact_key": "road.corridor_length_m",
@@ -7232,66 +7264,6 @@
       }
     },
     {
-      "fact_key": "stormwater_drain_nearby",
-      "bucket": "externalities",
-      "label": "stormwater drain nearby",
-      "lens": "risk",
-      "polarity": "concern",
-      "scopes": [
-        "society"
-      ],
-      "enrichment_terms": [
-        "stormwater drain",
-        "storm water drain",
-        "swd"
-      ],
-      "answers_preferences": [
-        "stormwater drain",
-        "swd",
-        "flooding risk",
-        "red flag"
-      ],
-      "never_default": true,
-      "source_types": [
-        "OpenCity",
-        "Manual"
-      ],
-      "display_template": "stormwater drain nearby: {value}",
-      "scoring_hint": {
-        "direction": "text_match",
-        "weight": 1.2
-      }
-    },
-    {
-      "fact_key": "stormwater_drain_place_entity",
-      "bucket": "externalities",
-      "label": "stormwater drain map entity",
-      "lens": "proof",
-      "polarity": "neutral",
-      "scopes": [
-        "society"
-      ],
-      "enrichment_terms": [
-        "stormwater drain",
-        "map overlay"
-      ],
-      "answers_preferences": [
-        "map overlay",
-        "geometry",
-        "red flag"
-      ],
-      "never_default": true,
-      "source_types": [
-        "OpenCity",
-        "Manual"
-      ],
-      "display_template": "stormwater drain map entity: {value}",
-      "scoring_hint": {
-        "direction": "text_match",
-        "weight": 0.0
-      }
-    },
-    {
       "fact_key": "rajakaluve_nearby",
       "bucket": "externalities",
       "label": "Rajakaluve nearby",
@@ -7301,12 +7273,10 @@
         "society"
       ],
       "enrichment_terms": [
-        "rajakaluve",
-        "stormwater drain"
+        "rajakaluve"
       ],
       "answers_preferences": [
         "rajakaluve",
-        "stormwater drain",
         "red flag"
       ],
       "never_default": true,
@@ -8150,12 +8120,102 @@
         "direction": "text_match",
         "weight": 1.2
       }
+    },
+    {
+      "fact_key": "society.structure_entity",
+      "bucket": "geo",
+      "label": "mapped society structure",
+      "lens": "proof",
+      "polarity": "neutral",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [],
+      "answers_preferences": [],
+      "never_default": true,
+      "source_types": [
+        "OpenStreetMap"
+      ],
+      "display_template": null,
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.0
+      }
+    },
+    {
+      "fact_key": "structure.observed_name",
+      "bucket": "geo",
+      "label": "observed structure name",
+      "lens": "proof",
+      "polarity": "neutral",
+      "scopes": [
+        "place"
+      ],
+      "enrichment_terms": [],
+      "answers_preferences": [],
+      "never_default": true,
+      "source_types": [
+        "OpenStreetMap"
+      ],
+      "display_template": null,
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.0
+      }
+    },
+    {
+      "fact_key": "structure.observed_levels",
+      "bucket": "geo",
+      "label": "observed building levels",
+      "lens": "proof",
+      "polarity": "neutral",
+      "scopes": [
+        "place"
+      ],
+      "enrichment_terms": [],
+      "answers_preferences": [],
+      "never_default": true,
+      "source_types": [
+        "OpenStreetMap"
+      ],
+      "display_template": null,
+      "scoring_hint": {
+        "direction": "numeric",
+        "numeric_direction": "HigherIsBetter",
+        "weight": 0.0
+      }
+    },
+    {
+      "fact_key": "structure.observed_height_m",
+      "bucket": "geo",
+      "label": "observed building height",
+      "lens": "proof",
+      "polarity": "neutral",
+      "scopes": [
+        "place"
+      ],
+      "enrichment_terms": [],
+      "answers_preferences": [],
+      "never_default": true,
+      "source_types": [
+        "OpenStreetMap"
+      ],
+      "display_template": null,
+      "scoring_hint": {
+        "direction": "numeric",
+        "numeric_direction": "HigherIsBetter",
+        "weight": 0.0
+      }
     }
   ],
-  "fact_count": 142,
+  "fact_count": 143,
   "excluded_search_fact_keys": [
     "google_review_cards",
-    "google_review_snippets"
+    "google_review_snippets",
+    "society.structure_entity",
+    "structure.observed_name",
+    "structure.observed_levels",
+    "structure.observed_height_m"
   ],
   "property_context": {
     "maximum_features": 512,
@@ -8198,28 +8258,15 @@
         "linked_entity_fact_keys": [],
         "attribute_fact_keys": []
       },
-      "nearby_breweries": {
-        "linked_entity_fact_keys": [],
-        "attribute_fact_keys": []
-      },
       "nearby_graveyards": {
         "linked_entity_fact_keys": [
-          "high_voltage_transmission_line_place_entity",
-          "stormwater_drain_place_entity"
+          "high_voltage_transmission_line_place_entity"
         ],
         "attribute_fact_keys": []
       },
       "high_voltage_transmission_line_nearby": {
         "linked_entity_fact_keys": [
-          "high_voltage_transmission_line_place_entity",
-          "stormwater_drain_place_entity"
-        ],
-        "attribute_fact_keys": []
-      },
-      "stormwater_drain_nearby": {
-        "linked_entity_fact_keys": [
-          "high_voltage_transmission_line_place_entity",
-          "stormwater_drain_place_entity"
+          "high_voltage_transmission_line_place_entity"
         ],
         "attribute_fact_keys": []
       },
@@ -8230,6 +8277,16 @@
         "attribute_fact_keys": [
           "entrance.association_method",
           "entrance.status"
+        ]
+      },
+      "society.structure_entity": {
+        "linked_entity_fact_keys": [
+          "society.structure_entity"
+        ],
+        "attribute_fact_keys": [
+          "structure.observed_name",
+          "structure.observed_levels",
+          "structure.observed_height_m"
         ]
       },
       "approach_road": {
@@ -8266,15 +8323,11 @@
         "attribute_fact_keys": []
       },
       "rajakaluve_nearby": {
-        "linked_entity_fact_keys": [
-          "stormwater_drain_place_entity"
-        ],
+        "linked_entity_fact_keys": [],
         "attribute_fact_keys": []
       },
       "rajakaluve_encroachment_record": {
-        "linked_entity_fact_keys": [
-          "stormwater_drain_place_entity"
-        ],
+        "linked_entity_fact_keys": [],
         "attribute_fact_keys": []
       }
     }

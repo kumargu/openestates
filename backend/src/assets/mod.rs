@@ -8,7 +8,6 @@
 //! is reserved for small control-plane files such as manifests, schema
 //! descriptors, and current pointers. The catalog compiles gold into serving.
 
-pub mod approach_road;
 pub mod canonical_nodes;
 pub mod compaction;
 pub mod environment;
@@ -22,6 +21,7 @@ pub mod materialization;
 pub mod media;
 pub mod osm_access;
 pub mod osm_power;
+pub mod osm_structures;
 pub mod paths;
 pub mod planner;
 pub mod project_enrichment;
@@ -38,14 +38,9 @@ pub mod society_gold;
 pub mod source_inputs;
 pub mod source_provider;
 mod source_resolution;
-pub mod stormwater;
 pub mod transit;
 pub mod types;
 
-pub use approach_road::{
-    read_approach_road_graph_rows, ApproachRoadGraphError, ApproachRoadGraphMaterialization,
-    ApproachRoadGraphMaterializer, ApproachRoadGraphRows, APPROACH_ROAD_GRAPH_FACTS_ASSET_ID,
-};
 pub use canonical_nodes::{read_canonical_node_rows, CanonicalNodeRows, CanonicalNodesError};
 pub use compaction::{
     SocietyFactSnapshotError, SocietyFactSnapshotMaterialization, SocietyFactSnapshotMaterializer,
@@ -94,6 +89,11 @@ pub use osm_access::{
 pub use osm_power::{
     canonicalize_osm_power_infrastructure_input, osm_power_line_facts_input, OsmPowerAssetError,
     OsmPowerInfrastructureInput, OsmPowerLineObservationRecord, OSM_POWER_LINE_FACTS_ASSET_ID,
+};
+pub use osm_structures::{
+    canonicalize_osm_society_structures_input, osm_society_structure_facts_input,
+    OsmSocietyStructureRecord, OsmSocietyStructuresAssetError, OsmSocietyStructuresInput,
+    OSM_SOCIETY_STRUCTURE_FACTS_ASSET_ID,
 };
 pub use paths::AssetPathBuilder;
 pub use planner::{
@@ -174,10 +174,6 @@ pub use source_provider::{
 };
 pub use source_resolution::{
     SourceEntityResolutionError, SourceEntityResolutionScope, SourceEntityResolver,
-};
-pub use stormwater::{
-    canonicalize_stormwater_drain_input, stormwater_drain_facts_input, StormwaterAssetError,
-    StormwaterDrainObservationRecord, StormwaterDrainRiskInput, STORMWATER_DRAIN_FACTS_ASSET_ID,
 };
 pub use transit::{
     bengaluru_metro_station_facts_input, BengaluruMetroStationInput, BengaluruMetroStationsInput,

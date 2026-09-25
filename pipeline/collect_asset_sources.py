@@ -20,7 +20,6 @@ from html import unescape
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from urllib.parse import urlencode
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from pipeline.skills.fetch_rera import (
@@ -50,6 +49,11 @@ from pipeline.skills.rera_document_intelligence import (
     canonical_rera_society_entity_id,
 )
 from pipeline.sources.osm_access_corridors import collect_society_access_records
+from pipeline.sources.osm_society_structures import collect_society_structures
+from pipeline.sources.overpass_transport import (
+    OverpassTransport,
+    fetch_overpass_json_once as fetch_overpass_json,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -156,12 +160,12 @@ BENGALURU_METRO_STATION_FACTS = "bengaluru_metro_station_facts"
 OSM_LOCALITY_BOUNDARY_FACTS = "osm_locality_boundary_facts"
 OSM_POWER_LINE_FACTS = "osm_power_line_facts"
 OSM_SOCIETY_ACCESS_FACTS = "osm_society_access_facts"
-STORMWATER_DRAIN_FACTS = "stormwater_drain_facts"
+OSM_SOCIETY_STRUCTURE_FACTS = "osm_society_structure_facts"
 RERA_DETAIL_RECEIPT_CACHE_DIR = PROJECT_ROOT / "data" / "cache" / "skills" / "rera_detail_receipts"
 RERA_REGULATORY_CACHE_DIR = PROJECT_ROOT / "data" / "cache" / "skills" / "rera_regulatory_records"
 RERA_REGULATORY_LIST_CACHE_DIR = PROJECT_ROOT / "data" / "cache" / "skills" / "rera_regulatory_lists"
 RERA_REGULATORY_DOCUMENT_CACHE_DIR = PROJECT_ROOT / "data" / "cache" / "skills" / "rera_regulatory_documents"
-RERA_REGULATORY_CACHE_VERSION = "rera_regulatory_cache.v1"
+RERA_REGULATORY_CACHE_VERSION = "rera_regulatory_cache.v2"
 GROUNDWATER_KML_URL = (
     "https://data.opencity.in/dataset/035c1d40-8f4e-4780-90c5-ff1ce2281849/"
     "resource/d3ae3603-d786-4782-ae71-a034ad4ebc0b/download/"
@@ -187,8 +191,8 @@ SUPPORTED_ASSETS = frozenset(
         BENGALURU_METRO_STATION_FACTS,
         OSM_LOCALITY_BOUNDARY_FACTS,
         OSM_SOCIETY_ACCESS_FACTS,
+        OSM_SOCIETY_STRUCTURE_FACTS,
         OSM_POWER_LINE_FACTS,
-        STORMWATER_DRAIN_FACTS,
     )
 )
 
@@ -202,7 +206,7 @@ def collect_asset_sources(
     if unsupported:
         raise ValueError("unsupported source assets: {}".format(", ".join(unsupported)))
 
-    output = {}  # type: Dict[str, Any]
+    output = dict(request.get("dependency_inputs") or {})
     source_failures = {}  # type: Dict[str, str]
     planned_at = normalized_planned_at(request)
     partition = partition_values(request)
@@ -233,8 +237,6 @@ def collect_asset_sources(
     )
     if google_requested:
         google_address_input = output.get(RERA_REGISTRY_MONTHLY)
-        if not google_address_input:
-            google_address_input = rera_address_input_for_request(request)
     if GOOGLE_PLACES_WEEKLY in requested:
         try:
             google_inputs = google_society_inputs(request, google_address_input)
@@ -305,10 +307,11 @@ def collect_asset_sources(
         try:
             from pipeline.sources.osm_locality_boundaries import collect_locality_boundaries
 
+            overpass = OverpassTransport(fetch_overpass_json)
             output["osm_locality_boundaries"] = collect_locality_boundaries(
                 snapshot_date,
                 os.environ.get("OPENESTATES_OVERPASS_API_URL") or OVERPASS_API_URL,
-                fetch_overpass_json,
+                overpass.request,
             )
         except Exception as error:
             record_source_failure(source_failures, [OSM_LOCALITY_BOUNDARY_FACTS], error)
@@ -323,6 +326,16 @@ def collect_asset_sources(
             record_source_failure(
                 source_failures, [OSM_SOCIETY_ACCESS_FACTS], error
             )
+    if OSM_SOCIETY_STRUCTURE_FACTS in requested:
+        try:
+            output["osm_society_structures"] = collect_osm_society_structures(
+                request,
+                output.get("osm_society_access"),
+            )
+        except Exception as error:
+            record_source_failure(
+                source_failures, [OSM_SOCIETY_STRUCTURE_FACTS], error
+            )
     if OSM_POWER_LINE_FACTS in requested:
         try:
             output["osm_power_infrastructure"] = collect_osm_power_infrastructure(
@@ -332,15 +345,6 @@ def collect_asset_sources(
             )
         except Exception as error:
             record_source_failure(source_failures, [OSM_POWER_LINE_FACTS], error)
-    if STORMWATER_DRAIN_FACTS in requested:
-        try:
-            output["stormwater_drains"] = collect_stormwater_drains(
-                request,
-                output.get(RERA_REGISTRY_MONTHLY),
-                output.get(GOOGLE_PLACES_WEEKLY),
-            )
-        except Exception as error:
-            record_source_failure(source_failures, [STORMWATER_DRAIN_FACTS], error)
     if source_failures:
         output["source_failures"] = source_failures
     return output
@@ -392,7 +396,9 @@ def collect_bengaluru_metro_stations(
         os.environ.get("OPENESTATES_BENGALURU_METRO_OVERPASS_QUERY")
         or BENGALURU_METRO_OVERPASS_QUERY
     )
-    payload = (fetch or fetch_overpass_json)(source_url, query)
+    payload = OverpassTransport(fetch or fetch_overpass_json).request(
+        source_url, query
+    )
     stations = bengaluru_metro_stations_from_overpass(payload)
     if not stations:
         raise ValueError("Overpass payload produced zero usable Bengaluru metro stations")
@@ -413,30 +419,6 @@ def collect_bengaluru_metro_stations(
             },
         ],
     }
-
-
-def fetch_overpass_json(url: str, query: str) -> Dict[str, Any]:
-    for attempt in range(1, 4):
-        request = Request(
-            url,
-            data=urlencode({"data": query}).encode("utf-8"),
-            headers={
-                "Content-Type": "application/x-www-form-urlencoded; charset=utf-8",
-                "User-Agent": "OpenEstates DAG source collector",
-            },
-            method="POST",
-        )
-        try:
-            with urlopen(request, timeout=45) as response:
-                return json.loads(response.read().decode("utf-8"))
-        except HTTPError as error:
-            if attempt >= 3 or error.code not in (429, 500, 502, 503, 504):
-                raise
-        except URLError:
-            if attempt >= 3:
-                raise
-        time.sleep(float(attempt * 2))
-    raise RuntimeError("Overpass request exhausted retries")
 
 
 def collect_osm_power_infrastructure(
@@ -487,88 +469,6 @@ def collect_osm_power_infrastructure(
     }
 
 
-def collect_stormwater_drains(
-    request: Dict[str, Any],
-    rera_input: Dict[str, Any] = None,
-    google_places_input: Dict[str, Any] = None,
-    fetch: Callable[[str, str], Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    planned_at = normalized_planned_at(request)
-    snapshot_date = partition_values(request).get("dt") or planned_at[:10]
-    config = load_dag_config("stormwater_drain_risk.json")
-    policy = config.get("drains") or {}
-    collector = config.get("collector") or {}
-    subjects = geospatial_society_inputs(request, rera_input, google_places_input)
-    if not subjects:
-        raise ValueError("stormwater drain collection requires society coordinates")
-
-    max_distance = float(policy.get("max_distance_meters") or 250.0)
-    source_url = collector_url(collector)
-    records = []
-    query_hashes = []
-    overpass_failures = []
-    waterway_values = optional_string_list(collector.get("waterway_values")) or [
-        "drain",
-        "ditch",
-        "canal",
-    ]
-    for subject in subjects:
-        bbox = padded_bbox(
-            [subject],
-            max_distance + float(collector.get("bbox_padding_meters") or 0.0),
-        )
-        query = stormwater_overpass_query(
-            bbox,
-            waterway_values,
-            int(collector.get("query_timeout_seconds") or 60),
-        )
-        query_hashes.append(hashlib.sha256(query.encode("utf-8")).hexdigest())
-        try:
-            payload = (fetch or fetch_overpass_json)(source_url, query)
-            records.extend(
-                stormwater_records_from_overpass(
-                    payload,
-                    [subject],
-                    max_distance,
-                    query,
-                    collector,
-                    planned_at,
-                )
-            )
-        except Exception as error:
-            overpass_failures.append("{}: {}".format(subject["entity_id"], error))
-            logger.warning(
-                "Stormwater Overpass collection failed for %s: %s",
-                subject["entity_id"],
-                error,
-            )
-    if overpass_failures:
-        raise ValueError(
-            "stormwater Overpass was unavailable for {} of {} subjects: {}".format(
-                len(overpass_failures), len(subjects), "; ".join(overpass_failures[:5])
-            )
-        )
-    records = dedupe_spatial_records(records, "drain_id")
-    watermark_source = str(collector.get("source_id") or "openstreetmap_stormwater")
-    if not records:
-        watermark_source = "{}_empty".format(watermark_source)
-    watermarks = [
-        {
-            "source": watermark_source,
-            "high_watermark": "query_sha256:{};records={}".format(
-                hashlib.sha256(";".join(query_hashes).encode("utf-8")).hexdigest(),
-                len(records),
-            ),
-        }
-    ]
-    return {
-        "snapshot_date": snapshot_date,
-        "collection_status": "complete" if records else "complete_empty",
-        "records": records,
-        "source_watermarks": watermarks,
-    }
-
-
 def collect_osm_society_access(
     request: Dict[str, Any],
     rera_input: Dict[str, Any] = None,
@@ -615,6 +515,63 @@ def collect_osm_society_access(
     }
 
 
+def collect_osm_society_structures(
+    request: Dict[str, Any],
+    access_input: Dict[str, Any] = None,
+) -> Dict[str, Any]:
+    """Collect exact building footprints inside pinned OSM society boundaries."""
+    planned_at = normalized_planned_at(request)
+    snapshot_date = partition_values(request).get("dt") or planned_at[:10]
+    access_records = (access_input or {}).get("records") or []
+    boundaries = [
+        record
+        for record in access_records
+        if record.get("entity_id")
+        and record.get("boundary_way_id")
+        and record.get("boundary_geometry_geojson")
+    ]
+    if not boundaries:
+        raise ValueError(
+            "OSM society structure collection requires a pinned OSM boundary"
+        )
+
+    records = []
+    coverage = []
+    source_watermarks = []
+    incomplete_tiles = []
+    for boundary in boundaries:
+        result = collect_society_structures(
+            society_entity_id=str(boundary["entity_id"]),
+            boundary_osm_id=str(boundary["boundary_way_id"]),
+            boundary_geometry_geojson=str(boundary["boundary_geometry_geojson"]),
+            planned_at=planned_at,
+            fetch=fetch_overpass_json,
+        )
+        records.extend(result.get("records") or [])
+        coverage.extend(result.get("coverage") or [])
+        source_watermarks.extend(result.get("source_watermarks") or [])
+        incomplete_tiles.extend(
+            row.get("tile_id")
+            for row in result.get("coverage") or []
+            if not str(row.get("status") or "").startswith("complete")
+            and row.get("status") != "split_after_failure"
+        )
+    if incomplete_tiles:
+        raise ValueError(
+            "OSM society structure coverage incomplete for tiles: {}".format(
+                ", ".join(sorted(str(tile) for tile in incomplete_tiles if tile))
+            )
+        )
+    records.sort(key=lambda record: (record["society_entity_id"], record["osm_id"]))
+    return {
+        "snapshot_date": snapshot_date,
+        "collection_status": "complete",
+        "coverage": coverage,
+        "records": records,
+        "source_watermarks": source_watermarks,
+    }
+
+
 def load_dag_config(filename: str) -> Dict[str, Any]:
     return json.loads((DAG_ROOT / filename).read_text(encoding="utf-8"))
 
@@ -648,8 +605,9 @@ def collect_osm_power_records_from_overpass(
         query_timeout,
     )
     query_hashes.append(hashlib.sha256(combined_query.encode("utf-8")).hexdigest())
+    transport = OverpassTransport(fetch, collector.get("transport_policy"))
     try:
-        payload = fetch(source_url, combined_query)
+        payload = transport.request(source_url, combined_query)
         records = osm_power_records_from_overpass(
             payload,
             subjects,
@@ -666,6 +624,7 @@ def collect_osm_power_records_from_overpass(
 
     records = []
     failures = []
+    tasks = []
     for subject in subjects:
         query = osm_power_overpass_query(
             padded_bbox([subject], max_distance_meters + bbox_padding),
@@ -674,11 +633,16 @@ def collect_osm_power_records_from_overpass(
             query_timeout,
         )
         query_hashes.append(hashlib.sha256(query.encode("utf-8")).hexdigest())
+        tasks.append((subject, query))
+
+    outcomes = transport.map_requests(source_url, [query for _, query in tasks])
+    for (subject, query), outcome in zip(tasks, outcomes):
         try:
-            payload = fetch_overpass_with_retries(fetch, source_url, query, collector)
+            if outcome.error is not None:
+                raise outcome.error
             records.extend(
                 osm_power_records_from_overpass(
-                    payload,
+                    outcome.value or {},
                     [subject],
                     max_distance_meters,
                     query,
@@ -707,51 +671,6 @@ def collect_osm_power_records_from_overpass(
     return dedupe_spatial_records(records, "osm_id"), query_hashes
 
 
-def fetch_overpass_with_retries(
-    fetch: Callable[[str, str], Dict[str, Any]],
-    source_url: str,
-    query: str,
-    collector: Dict[str, Any],
-) -> Dict[str, Any]:
-    retry_count = max(0, int(collector.get("subject_query_retry_count") or 0))
-    retry_delay_seconds = max(0.0, float(collector.get("subject_query_retry_delay_seconds") or 0.0))
-    retry_status_codes = {
-        int(code)
-        for code in (collector.get("retry_status_codes") or [])
-        if str(code).strip().isdigit()
-    }
-    attempt = 0
-    while True:
-        try:
-            return fetch(source_url, query)
-        except Exception as error:
-            if attempt >= retry_count or not overpass_error_is_retryable(error, retry_status_codes):
-                raise
-            attempt += 1
-            delay = retry_after_seconds(error) or retry_delay_seconds
-            if delay > 0.0:
-                time.sleep(delay)
-
-
-def overpass_error_is_retryable(error: Exception, retry_status_codes: set) -> bool:
-    if isinstance(error, HTTPError):
-        return error.code in retry_status_codes
-    return False
-
-
-def retry_after_seconds(error: Exception) -> Optional[float]:
-    if not isinstance(error, HTTPError):
-        return None
-    header = error.headers.get("Retry-After") if error.headers else None
-    try:
-        value = float(header) if header else None
-    except ValueError:
-        return None
-    if value is None or value < 0.0:
-        return None
-    return value
-
-
 def osm_power_overpass_query(
     bbox: Tuple[float, float, float, float],
     accepted_power_values: List[str],
@@ -776,29 +695,6 @@ out tags geom;
         timeout=timeout_seconds,
         pattern=pattern or "line",
         voltage_filter=voltage_filter,
-        south=south,
-        west=west,
-        north=north,
-        east=east,
-    ).strip()
-
-
-def stormwater_overpass_query(
-    bbox: Tuple[float, float, float, float],
-    waterway_values: List[str],
-    timeout_seconds: int,
-) -> str:
-    pattern = "|".join(sorted({value for value in waterway_values if value}))
-    south, west, north, east = bbox
-    return """
-[out:json][timeout:{timeout}];
-(
-  way["waterway"~"^({pattern})$"]({south:.7f},{west:.7f},{north:.7f},{east:.7f});
-);
-out tags geom;
-""".format(
-        timeout=timeout_seconds,
-        pattern=pattern or "drain|ditch|canal",
         south=south,
         west=west,
         north=north,
@@ -850,55 +746,6 @@ def osm_power_records_from_overpass(
                 }
             )
     return dedupe_spatial_records(records, "osm_id")
-
-
-def stormwater_records_from_overpass(
-    payload: Dict[str, Any],
-    subjects: List[Dict[str, Any]],
-    max_distance_meters: float,
-    query: str,
-    collector: Dict[str, Any],
-    planned_at: str,
-) -> List[Dict[str, Any]]:
-    records = []
-    for element in overpass_way_elements(payload):
-        tags = element_tags(element)
-        points = element_geometry_points(element)
-        if len(points) < 2:
-            continue
-        drain_type = stormwater_drain_type(tags, collector)
-        geometry_geojson = line_geojson(points)
-        drain_id = osm_element_id(element)
-        for subject in subjects:
-            distance_meters, closest = distance_from_subject_to_line(subject, points)
-            if distance_meters > max_distance_meters:
-                continue
-            records.append(
-                {
-                    "entity_id": subject["entity_id"],
-                    "project_key": optional_string(subject.get("project_key")),
-                    "query": subject_query(subject, "stormwater drain"),
-                    "drain_id": drain_id,
-                    "name": optional_string(tags.get("name") or tags.get("waterway")),
-                    "drain_type": drain_type,
-                    "hierarchy": stormwater_hierarchy(tags, collector),
-                    "distance_meters": distance_meters,
-                    "intersects_property": distance_meters <= 1.0,
-                    "subject_latitude": subject["latitude"],
-                    "subject_longitude": subject["longitude"],
-                    "latitude": closest["latitude"],
-                    "longitude": closest["longitude"],
-                    "geometry_geojson": geometry_geojson,
-                    "encroachment_record": optional_string(tags.get("encroachment")),
-                    "source_tags": tags,
-                    "source_url": osm_source_url(element),
-                    "source_type": str(collector.get("source_type") or "OpenStreetMap"),
-                    "confidence": float(collector.get("confidence") or 0.74),
-                    "fetched_at": planned_at,
-                    "fetch_source": str(collector.get("fetch_source") or "overpass_stormwater_snapshot"),
-                }
-            )
-    return dedupe_spatial_records(records, "drain_id")
 
 
 def geospatial_society_inputs(
@@ -1115,36 +962,6 @@ def voltage_kv_from_tag(value: Any) -> Optional[float]:
             voltage /= 1000.0
         voltages.append(voltage)
     return max(voltages) if voltages else None
-
-
-def stormwater_drain_type(tags: Dict[str, str], collector: Dict[str, Any]) -> str:
-    text = " ".join(
-        optional_string(tags.get(key)) or ""
-        for key in ("name", "waterway", "description", "local_name")
-    ).lower()
-    if any(marker in text for marker in optional_string_list(collector.get("rajakaluve_name_markers"))):
-        return "rajakaluve"
-    waterway = (optional_string(tags.get("waterway")) or "").lower()
-    if waterway in ("drain", "ditch"):
-        return "stormwater_drain"
-    if waterway == "canal":
-        return "primary_swd"
-    return "stormwater_drain"
-
-
-def stormwater_hierarchy(tags: Dict[str, str], collector: Dict[str, Any]) -> Optional[str]:
-    text = " ".join(
-        optional_string(tags.get(key)) or ""
-        for key in ("name", "description", "local_name")
-    ).lower()
-    for rule in collector.get("hierarchy_name_markers") or []:
-        if not isinstance(rule, dict):
-            continue
-        hierarchy = optional_string(rule.get("hierarchy"))
-        markers = optional_string_list(rule.get("markers"))
-        if hierarchy and any(marker in text for marker in markers):
-            return hierarchy
-    return None
 
 
 def padded_bbox(
@@ -1758,19 +1575,13 @@ def collect_google_nearby_places(
     fetch = nearby_fetch or fetch_google_places_nearby_text
     records = []  # type: List[Dict[str, Any]]
     categories = google_nearby_collection_categories()
-
     for slug, input_data in sorted(inputs.items()):
         for category in categories:
             query = nearby_query(input_data, category)
             try:
                 nearby_places = fetch(input_data, category)
-            except ValueError as exc:
-                if str(exc) == "Google nearby collection requires an accepted origin coordinate pair":
-                    logger.warning(
-                        "Skipping Google nearby collection for %s: missing accepted origin coordinates",
-                        slug,
-                    )
-                    break
+            except ValueError:
+                # Incomplete coverage cannot replace an accepted prior observation.
                 raise
             for place in nearby_places:
                 name = optional_string(place.get("place_name") or place.get("name"))
@@ -1899,26 +1710,8 @@ def google_society_inputs(
     "Godrej Air". RERA project address is used only as resolver evidence; RERA
     coordinates are intentionally not copied into Google inputs.
     """
-    address_input = rera_input or rera_address_input_for_request(request)
+    address_input = rera_input or (request.get("dependency_inputs") or {}).get(RERA_REGISTRY_MONTHLY)
     return source_society_inputs(request, address_input)
-
-
-def rera_address_input_for_request(request: Dict[str, Any]) -> Dict[str, Any]:
-    """Hydrate RERA address facts for Google-only scoped source collection."""
-    if not needs_rera_address_hydration(request):
-        return {}
-    detail_facts, _annotations, _watermark = collect_rera_project_details(request)
-    if not detail_facts:
-        return {}
-    return {"detail_facts": detail_facts}
-
-
-def needs_rera_address_hydration(request: Dict[str, Any]) -> bool:
-    """Return true when scoped Google inputs lack address evidence."""
-    return any(
-        isinstance(seed, dict) and not optional_string(seed.get("address"))
-        for seed in request.get("source_entities", [])
-    )
 
 
 def reddit_society_inputs(
@@ -2109,7 +1902,18 @@ def collect_rera_registry(
     rera_fetch: Callable[[], Any] = None,
     detail_skill: Any = None,
 ) -> Dict[str, Any]:
-    entries, observed_at = (rera_fetch or fetch_rera_listing_snapshot)()
+    pinned = (request.get("dependency_inputs") or {}).get(RERA_RECEIPTS)
+    if pinned:
+        from pipeline.skills.fetch_rera import ReraListingEntry
+        listing = next(row for row in pinned["receipts"] if row["kind"] == "registry_listing")
+        raw = bytes.fromhex(listing["body_hex"]).decode("utf-8", errors="replace")
+        arrays = [re.findall(r"applicationNameList{}\s*\.push\('([^']*)'\)".format(suffix), raw) for suffix in ("", "2", "3", "4")]
+        if not arrays[0] or len({len(values) for values in arrays}) != 1:
+            raise ValueError("pinned RERA listing arrays are incomplete")
+        entries = [ReraListingEntry(*values) for values in zip(*arrays)]
+        observed_at = listing["captured_at"]
+    else:
+        entries, observed_at = (rera_fetch or fetch_rera_listing_snapshot)()
     entries = list(entries)
     selected_keys, selected_names = rera_project_selectors(request)
     projects = []  # type: List[Dict[str, Any]]
@@ -2238,14 +2042,21 @@ def collect_rera_project_details(
         )
         facts.extend(profile_facts)
         annotations.extend(profile_annotations)
-        try:
+        pinned = (request.get("dependency_inputs") or {}).get(RERA_RECEIPTS)
+        if pinned:
+            from pipeline.skills.fetch_rera import ReraSearchResult, parse_rera_detail, rera_detail_to_facts
+            from pipeline.skills.base import SkillResult
+            registration = normalized_registration_number(input_data.get("project_key") or "")
+            receipt = next((row for row in pinned["receipts"] if row["kind"] == "project_detail" and normalized_registration_number(row.get("registration_number") or "") == registration), None)
+            search_result = pinned.get("search_results", {}).get(registration)
+            if receipt is None or search_result is None:
+                raise ValueError("pinned RERA detail/search evidence missing for {}".format(registration))
+            detail = parse_rera_detail(bytes.fromhex(receipt["body_hex"]).decode("utf-8", errors="replace"), ReraSearchResult(**search_result))
+            result = SkillResult(facts=rera_detail_to_facts(detail), confidence=1.0)
+        else:
             result = skill.run(input_data, force=force_refresh)
-        except Exception as error:
-            logger.error("RERA detail collection failed for %s: %s", project_name, error)
-            continue
         if not result.facts:
-            logger.warning("RERA detail collection returned no facts for %s", project_name)
-            continue
+            raise ValueError("RERA detail collection returned no evidence for {}".format(project_name))
 
         result_facts, result_annotations = skill_result_rows(
             entity_id,
@@ -2442,6 +2253,8 @@ def collect_rera_receipts(request: Dict[str, Any]) -> Dict[str, Any]:
     else:
         try:
             detail_snapshots = load_scoped_rera_detail_receipts(request)
+            if (request.get("dependency_inputs") or {}).get("catalog_options") is not None and any(not row.get("search_result") for row in detail_snapshots):
+                raise ValueError("saved detail capture lacks search evidence required by this producer")
         except ValueError:
             detail_snapshots = capture_scoped_rera_detail_receipts(
                 request, listing_receipt_id
@@ -2460,7 +2273,9 @@ def collect_rera_receipts(request: Dict[str, Any]) -> Dict[str, Any]:
             }
         )
     try:
-        if force_refresh and scoped_rera_entities(request):
+        if (request.get("dependency_inputs") or {}).get("catalog_options", {}).get("regulatory", True) is False:
+            regulatory_payloads = []
+        elif force_refresh and scoped_rera_entities(request):
             regulatory_payloads = capture_scoped_rera_regulatory_payloads(request)
         else:
             regulatory_payloads = load_scoped_rera_regulatory_payloads(request)
@@ -2468,27 +2283,24 @@ def collect_rera_receipts(request: Dict[str, Any]) -> Dict[str, Any]:
                 regulatory_payloads = capture_scoped_rera_regulatory_payloads(request)
     except RegulatoryIntelligenceError as error:
         logger.warning(
-            "K-RERA regulatory lists unavailable; leaving regulatory coverage empty: %s",
+            "K-RERA regulatory lists unavailable; reusing valid cached coverage when available: %s",
             error,
         )
-        regulatory_payloads = []
+        regulatory_payloads = load_scoped_rera_regulatory_payloads(request)
     regulatory_receipt_keys = set()
     for payload in regulatory_payloads:
         for receipt in payload["receipts"]:
             body = bytes.fromhex(str(receipt.get("body_hex") or ""))
             key = (
                 rera_receipt_id(body),
-                rera_capture_id(
-                    rera_receipt_id(body),
-                    str(receipt.get("source_url") or ""),
-                    str(receipt.get("captured_at") or ""),
-                ),
+                rera_capture_id(rera_receipt_id(body), str(receipt.get("source_url") or "")),
             )
             if key in regulatory_receipt_keys:
                 continue
             regulatory_receipt_keys.add(key)
             receipts.append(receipt)
     return {
+        "search_results": {snapshot["registration_number"]: snapshot["search_result"] for snapshot in detail_snapshots if snapshot.get("search_result")},
         "snapshot_date": observed_at[:10],
         "receipts": receipts,
         "source_watermarks": [
@@ -2511,30 +2323,30 @@ def collect_rera_receipts(request: Dict[str, Any]) -> Dict[str, Any]:
 
 def collect_rera_source_records(request: Dict[str, Any]) -> Dict[str, Any]:
     """Normalize L0 listing and scoped project-detail receipts into L1 rows."""
-    if not LISTING_RAW_CACHE_PATH.exists():
-        scrape_rera_listing(force=True)
-    if not LISTING_RAW_CACHE_PATH.exists():
-        raise ValueError("K-RERA listing raw receipt was not captured")
+    pinned = (request.get("dependency_inputs") or {}).get(RERA_RECEIPTS)
+    if pinned:
+        listing = next(row for row in pinned["receipts"] if row["kind"] == "registry_listing")
+        body = bytes.fromhex(listing["body_hex"])
+        observed_at = listing["captured_at"]
+    else:
+        if not LISTING_RAW_CACHE_PATH.exists():
+            scrape_rera_listing(force=True)
+        if not LISTING_RAW_CACHE_PATH.exists():
+            raise ValueError("K-RERA listing raw receipt was not captured")
 
-    observed_at = datetime.now(timezone.utc).isoformat()
-    if LISTING_CACHE_PATH.exists():
-        try:
-            cached = json.loads(LISTING_CACHE_PATH.read_text())
-            observed_at = str(cached.get("cached_at") or observed_at)
-        except (OSError, ValueError, TypeError):
-            logger.warning("Could not read K-RERA listing source-record timestamp")
-    body = LISTING_RAW_CACHE_PATH.read_bytes()
-    if not body:
-        raise ValueError("K-RERA listing raw receipt is empty")
+        observed_at = datetime.now(timezone.utc).isoformat()
+        if LISTING_CACHE_PATH.exists():
+            try:
+                cached = json.loads(LISTING_CACHE_PATH.read_text())
+                observed_at = str(cached.get("cached_at") or observed_at)
+            except (OSError, ValueError, TypeError):
+                logger.warning("Could not read K-RERA listing source-record timestamp")
+        body = LISTING_RAW_CACHE_PATH.read_bytes()
+        if not body:
+            raise ValueError("K-RERA listing raw receipt is empty")
 
     receipt_id = "rera_receipt:sha256:{}".format(hashlib.sha256(body).hexdigest())
-    capture_observed_at = observed_at[:-1] + "+00:00" if observed_at.endswith("Z") else observed_at
-    capture_material = "rera_capture.v1\n{}\n{}\n{}".format(
-        receipt_id, LISTING_URL, capture_observed_at
-    )
-    capture_id = "rera_capture:sha256:{}".format(
-        hashlib.sha256(capture_material.encode("utf-8")).hexdigest()
-    )
+    capture_id = rera_capture_id(receipt_id, LISTING_URL)
     listing_text = body.decode("utf-8", errors="replace")
     arrays = {}
     for suffix in ("", "2", "3", "4"):
@@ -2614,10 +2426,10 @@ def collect_rera_source_records(request: Dict[str, Any]) -> Dict[str, Any]:
                     ", ".join(missing_registrations)
                 )
             )
-    detail_snapshots = load_scoped_rera_detail_receipts(request)
+    detail_snapshots = [row for row in pinned["receipts"] if row["kind"] == "project_detail"] if pinned else load_scoped_rera_detail_receipts(request)
     for snapshot in detail_snapshots:
         records.extend(rera_project_detail_source_records(snapshot))
-    regulatory_payloads = load_scoped_rera_regulatory_payloads(request)
+    regulatory_payloads = [] if pinned else load_scoped_rera_regulatory_payloads(request)
     for payload in regulatory_payloads:
         records.extend(payload["records"])
     return {
@@ -2649,9 +2461,8 @@ def rera_receipt_id(body: bytes) -> str:
     return "rera_receipt:sha256:{}".format(hashlib.sha256(body).hexdigest())
 
 
-def rera_capture_id(receipt_id: str, source_url: str, captured_at: str) -> str:
-    timestamp = captured_at[:-1] + "+00:00" if captured_at.endswith("Z") else captured_at
-    material = "rera_capture.v1\n{}\n{}\n{}".format(receipt_id, source_url, timestamp)
+def rera_capture_id(receipt_id: str, source_url: str) -> str:
+    material = "rera_capture.v2\n{}\n{}".format(receipt_id, source_url)
     return "rera_capture:sha256:{}".format(
         hashlib.sha256(material.encode("utf-8")).hexdigest()
     )
@@ -2969,7 +2780,7 @@ def capture_scoped_rera_regulatory_payloads(
         )
         compressed_body = gzip.compress(body, compresslevel=9, mtime=0)
         receipt_id = rera_receipt_id(compressed_body)
-        capture_id = rera_capture_id(receipt_id, source_url, checked_at)
+        capture_id = rera_capture_id(receipt_id, source_url)
         captures.append(
             {
                 "config": list_config,
@@ -3043,11 +2854,7 @@ def capture_scoped_rera_regulatory_payloads(
                 )
                 downloaded_documents[candidate.document_url] = document_body
             document_receipt_id = rera_receipt_id(document_body)
-            document_capture_id = rera_capture_id(
-                document_receipt_id,
-                candidate.document_url,
-                checked_at,
-            )
+            document_capture_id = rera_capture_id(document_receipt_id, candidate.document_url)
             parent_capture = next(
                 capture
                 for capture in captures
@@ -3173,11 +2980,7 @@ def load_scoped_rera_regulatory_payloads(request: Dict[str, Any]) -> List[Dict[s
             receipt_keys.add(
                 (
                     receipt_id,
-                    rera_capture_id(
-                        receipt_id,
-                        str(receipt.get("source_url") or ""),
-                        str(receipt.get("captured_at") or ""),
-                    ),
+                    rera_capture_id(receipt_id, str(receipt.get("source_url") or "")),
                 )
             )
             normalized_receipts.append(receipt)
@@ -3233,7 +3036,9 @@ def capture_scoped_rera_detail_receipts(
             )
         captured_at = datetime.now(timezone.utc).isoformat()
         source_url = "{}?action={}".format(DETAIL_URL, search_result.numeric_id)
+        from dataclasses import asdict
         snapshot = {
+            "search_result": asdict(search_result),
             "registration_number": entity["registration_number"],
             "source_url": source_url,
             "captured_at": captured_at,
@@ -3383,7 +3188,7 @@ def rera_square_metres(value: str) -> Optional[float]:
 def project_detail_receipt_ids(snapshot: Dict[str, Any]) -> Tuple[str, str]:
     body = bytes.fromhex(snapshot["body_hex"])
     receipt_id = rera_receipt_id(body)
-    return receipt_id, rera_capture_id(receipt_id, snapshot["source_url"], snapshot["captured_at"])
+    return receipt_id, rera_capture_id(receipt_id, snapshot["source_url"])
 
 
 def rera_declared_inventory_rows(detail_html: str) -> List[Dict[str, Any]]:

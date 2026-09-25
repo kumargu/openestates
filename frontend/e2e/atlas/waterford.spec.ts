@@ -39,7 +39,7 @@ test("captured facts, reviews and photos remain accessible without Google", asyn
   await expect(canvas.getByRole("button", { name: "Photos", exact: true })).toBeFocused();
 });
 
-test("missing mapped road is explicit and never creates a synthetic tour", async ({ page }) => {
+test("missing entrance and road never creates an arrival surface", async ({ page }) => {
   // Remove geometry from the existing contract fixture, without inventing a second society.
   await page.route("**/api/properties/*/context", async route => {
     const response = await route.fetch();
@@ -52,11 +52,7 @@ test("missing mapped road is explicit and never creates a synthetic tour", async
   });
   await page.route("https://maps.googleapis.com/**", route => route.abort());
   await page.goto("/property/discovered-prestige-waterford-3bhk");
-  const canvas = page.locator(".property-arrival-map--atlas");
-  await expect(canvas.getByRole("button", { name: "Site outline", exact: true })).toBeDisabled();
-  await canvas.getByRole("button", { name: "Approach road", exact: true }).click();
-  await expect(canvas.getByRole("status").filter({ hasText: "Approach road not mapped" })).toBeVisible();
-  await expect(canvas.getByLabel("Road tour speed")).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "The way in." })).toHaveCount(0);
 });
 
 test('Street View keeps the complete home arrival regardless of aerial progress', async ({page}) => {

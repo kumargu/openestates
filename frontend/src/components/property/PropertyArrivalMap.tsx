@@ -26,6 +26,7 @@ import type {
 import type {
   ArrivalSearchSociety,
   MapOverlayLine,
+  MapOverlayPolygon,
   MapPlacePin,
   PropertyMapContext,
 } from "../../lib/types.ts";
@@ -73,6 +74,7 @@ type Props = {
 
 const SOCIETY_VIEW_RADIUS_KM = 0.8;
 const EMPTY_ARRIVAL_LINES: MapOverlayLine[] = [];
+const EMPTY_MAP_POLYGONS: MapOverlayPolygon[] = [];
 const EMPTY_MAP_PLACES: MapPlacePin[] = [];
 
 function compactPrice(price: number | undefined): string | null {
@@ -166,8 +168,10 @@ export function PropertyArrivalMap({
   const home = useMemo(() => resolveHomeAnchor(normalizedContext), [normalizedContext]);
   const roadLayer = context.layers?.find((layer) => layer.renderKind === "terrain_corridor");
   const entranceLayer = context.layers?.find((layer) => layer.renderKind === "arrival_marker");
+  const structureLayer = context.layers?.find((layer) => layer.renderKind === "structure_footprint");
   const nearbyLayers = useMemo(() => (context.layers ?? []).filter(layer => layer.id !== 'metro'
     && layer.renderKind !== 'arrival_marker' && layer.renderKind !== 'terrain_corridor'
+    && layer.renderKind !== 'structure_footprint'
     && places.some(place => place.layer === layer.id)), [context.layers, places]);
   const [nearbyLayerId, setNearbyLayerId] = useState<string | null>(null);
   const currentNearbyLayer = nearbyLayers.find(layer => layer.id === nearbyLayerId) ?? nearbyLayers[0];
@@ -183,8 +187,17 @@ export function PropertyArrivalMap({
   const roadExperience = roadLayer?.experience?.kind === "street_view_tour"
     ? roadLayer.experience
     : undefined;
-  const hasApproachLayer = Boolean(roadLayer);
-  const approachLabel = roadLayer?.label;
+  const structurePolygons = useMemo(
+    () => (context.layer_polygons?.[structureLayer?.id ?? ''] ?? EMPTY_MAP_POLYGONS)
+      .filter((polygon) => Boolean(polygon.properties?.observedName)),
+    [context.layer_polygons, structureLayer?.id],
+  );
+  const entrancePlaces = useMemo(
+    () => arrivalMarkerPlaces(normalizedContext, entranceLayer),
+    [normalizedContext, entranceLayer],
+  );
+  const hasApproachLayer = roadLines.length > 0 || entrancePlaces.length > 0;
+  const approachLabel = roadLines.length > 0 ? roadLayer?.label : entranceLayer?.label;
   const metroLabel = metroLayer?.label;
   const metroPlaces = useMemo(() => nearbyPlacesByDistance(
     places.filter(place => place.layer === (metroLayer?.id ?? 'metro')), home),
@@ -192,10 +205,6 @@ export function PropertyArrivalMap({
   const metroSourceLines = useMemo(
     () => context.layer_lines?.[metroLayer?.id ?? 'metro'] ?? context.metro_lines ?? [],
     [context.layer_lines, context.metro_lines, metroLayer?.id],
-  );
-  const entrancePlaces = useMemo(
-    () => arrivalMarkerPlaces(normalizedContext, entranceLayer),
-    [normalizedContext, entranceLayer],
   );
   const views = useMemo(() => [...arrivalViewOptions({
     approachLabel,
@@ -300,10 +309,8 @@ export function PropertyArrivalMap({
     candidate.societyId === selectedSearchSocietyId) ?? null;
   const arrivalExperience = context.arrivalExperience;
   const missingArrivalState = arrivalMissingState(activeView, {
-    hasApproachRoad: roadLines.length > 0,
     hasBoundary: Boolean(context.home.boundary),
     hasEntrance: entrancePlaces.length > 0,
-    missingApproachRoadState: roadLayer?.emptyState,
     missingBoundaryState: arrivalExperience?.missingBoundaryState,
     missingEntranceState: entranceLayer?.emptyState,
   });
@@ -529,6 +536,8 @@ export function PropertyArrivalMap({
     ? currentNearbyLayer?.label
     : activeView === "metro"
     ? metroLabel ?? "Metro"
+    : activeView === "approach"
+    ? approachLabel ?? "Entrance"
     : "Society";
   const tourPlaces = () => {
     if (playbackState === 'playing') { playbackController.pause(); return; }
@@ -551,6 +560,8 @@ export function PropertyArrivalMap({
   const visibleRoadLines = activeView === "approach" ? roadLines : EMPTY_ARRIVAL_LINES;
   const viewport = activeView === "metro" || activeView === 'nearby'
     ? arrivalEvidenceViewport(home, mapPlaces, visibleMetroLines)
+    : activeView === "approach"
+    ? arrivalEvidenceViewport(home, entrancePlaces, roadLines)
     : {
       center: home,
       radiusKm: SOCIETY_VIEW_RADIUS_KM,
@@ -585,6 +596,7 @@ export function PropertyArrivalMap({
           quiet={presentation === "atlas" ? atlasQuiet : quiet}
           showBoundary={showBoundary}
           polygons={activeView === 'nearby' ? browseGeometry.polygons : undefined}
+          structurePolygons={structurePolygons}
           contextLines={activeView === 'nearby' ? browseGeometry.lines : undefined}
           selectedPlaceId={selectedPlaceId}
           nearbySelectionVersion={nearbySelectionVersion}

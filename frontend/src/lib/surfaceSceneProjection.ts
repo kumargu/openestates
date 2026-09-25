@@ -69,6 +69,7 @@ export function propertyMapContextFromSurfaceScene(
       ...polygons.filter(rings => rings[0]?.length >= 4).map((rings, index) => ({
         id: `${feature.id}:${index}`, entity_id: feature.entityId, name: feature.label, kind: feature.kind, coordinates: rings[0], holes: rings.slice(1),
         source_type: feature.receiptIds.map(id => receiptsById.get(id)?.sourceType).find(Boolean) ?? '',
+        properties: feature.properties,
       }))];
   }
 

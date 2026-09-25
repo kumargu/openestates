@@ -202,13 +202,24 @@ test("the arrival tile owns society and guided-road 3D evidence", () => {
   assert.equal(hasAroundThisHomePlate(context), false);
 });
 
-test("arrival keeps real imagery when the map has only society coordinates", () => {
+test("arrival stays hidden when the map has only society geometry", () => {
   assert.equal(hasArrivalMap({
     ...emptyMapContext,
     home: {
       ...emptyMapContext.home,
       latitude: 12.98,
       longitude: 77.74,
+      boundary: {
+        id: "society-boundary",
+        name: "Society boundary",
+        coordinates: [
+          [77.739, 12.979],
+          [77.741, 12.979],
+          [77.741, 12.981],
+          [77.739, 12.979],
+        ],
+        source_type: "OpenStreetMap",
+      },
     },
   }), false);
 });

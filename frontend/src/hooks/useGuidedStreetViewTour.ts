@@ -12,6 +12,9 @@ import type {
 } from "../lib/arrivalPlayback.ts";
 import type { MapLayerExperience } from "../lib/types.ts";
 import type { CorridorTourWaypoint } from "../lib/arrivalMapProjection.ts";
+import { distanceMetres } from "../lib/atlas/geometry.ts";
+import type { AtlasPoint } from "../lib/atlas/journey.ts";
+import policy from "../lib/atlasPolicy.ts";
 import {
   buildStreetViewSchedule,
   easedHeadingSteps,
@@ -297,6 +300,7 @@ async function loadResolutions(
 
 type GuidedStreetViewTourOptions = {
   active: boolean;
+  startPosition?: AtlasPoint | null;
   anchor?: { latitude: number; longitude: number } | null;
   autoPlay: boolean;
   containerRef: RefObject<HTMLDivElement | null>;
@@ -317,6 +321,7 @@ export type GuidedStreetViewTour = {
 
 export function useGuidedStreetViewTour({
   active,
+  startPosition,
   anchor,
   autoPlay,
   containerRef,
@@ -355,7 +360,7 @@ export function useGuidedStreetViewTour({
     let unregisterStopper = () => {};
     let unregisterResumer = () => {};
     const cancel = () => {
-      playbackController.cancel("settled");
+      playbackController.pause();
       onPlaybackCancelled?.();
     };
     const visibilityChanged = () => {
@@ -369,7 +374,14 @@ export function useGuidedStreetViewTour({
     void loadGoogleStreetViewLibrary()
       .then(async (loaded) => {
         const library = loaded as StreetViewLibrary;
-        const resolutions = await loadResolutions(library, waypoints);
+        // Start near the aerial tour position instead of replaying the approach.
+        const metresFromStart = (point: AtlasPoint) => startPosition
+          ? distanceMetres({lat: startPosition.latitude, lng: startPosition.longitude},
+            {lat: point.latitude, lng: point.longitude})
+          : 0;
+        const startIndex = startPosition ? waypoints.reduce((nearest, point, index) =>
+          metresFromStart(point) < metresFromStart(waypoints[nearest]) ? index : nearest, 0) : 0;
+        const resolutions = await loadResolutions(library, waypoints.slice(startIndex));
         if (disposed || !run.isCurrent()) return;
         const sequence = resolveStreetViewSequence(
           resolutions,
@@ -377,7 +389,7 @@ export function useGuidedStreetViewTour({
         );
         const schedule = buildStreetViewSchedule(sequence.frames, experience, anchor);
         const first = schedule.entries[0]?.frame;
-        if (!first) {
+        if (!first || (startPosition && metresFromStart(first.panoramaPosition) > policy.road.handoffMaximumDistanceM)) {
           setStatus(experience.unavailableState ?? null);
           run.unavailable();
           return;
@@ -509,6 +521,7 @@ export function useGuidedStreetViewTour({
     };
   }, [
     active,
+    startPosition,
     anchor,
     containerRef,
     experience,

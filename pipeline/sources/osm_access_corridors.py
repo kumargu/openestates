@@ -9,6 +9,8 @@ import math
 import re
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
+from pipeline.sources.overpass_transport import OverpassTransport
+
 Coordinate = Tuple[float, float]
 
 
@@ -26,19 +28,29 @@ def collect_society_access_records(
     padding_meters = float(collector.get("bbox_padding_meters") or 1_650.0)
     timeout_seconds = int(collector.get("query_timeout_seconds") or 60)
     highway_values = _string_list(collector.get("eligible_highway_values"))
-    boundary_landuse_values = _string_list(collector.get("boundary_landuse_values"))
+    boundary_geometry_tag_keys = _string_list(
+        collector.get("boundary_geometry_tag_keys")
+    )
+    tasks = []
     for subject in subjects:
         query = society_access_overpass_query(
             _padded_bbox([subject], padding_meters),
             highway_values,
-            boundary_landuse_values,
+            boundary_geometry_tag_keys,
             timeout_seconds,
         )
         query_hashes.append(hashlib.sha256(query.encode("utf-8")).hexdigest())
+        tasks.append((subject, query))
+
+    transport = OverpassTransport(fetch, collector.get("transport_policy"))
+    outcomes = transport.map_requests(source_url, [query for _, query in tasks])
+    for (subject, query), outcome in zip(tasks, outcomes):
         try:
+            if outcome.error is not None:
+                raise outcome.error
             record = society_access_record(
                 subject,
-                fetch(source_url, query),
+                outcome.value or {},
                 query,
                 collector,
                 planned_at,
@@ -62,7 +74,7 @@ def collect_society_access_records(
 def society_access_overpass_query(
     bbox: Tuple[float, float, float, float],
     highway_values: List[str],
-    boundary_landuse_values: List[str],
+    boundary_geometry_tag_keys: List[str],
     timeout_seconds: int,
 ) -> str:
     """Build one local query whose result families do not depend on each other."""
@@ -70,14 +82,14 @@ def society_access_overpass_query(
         "motorway|trunk|primary|secondary|tertiary|unclassified|residential|"
         "service|living_street"
     )
-    boundary_pattern = "|".join(sorted(set(boundary_landuse_values)))
+    boundary_tag_keys = sorted(set(boundary_geometry_tag_keys))
     south, west, north, east = bbox
-    boundary_query = (
-        f'  way["landuse"~"^({boundary_pattern})$"]["name"]'
+    boundary_query = "".join(
+        f'  way["name"]["{tag_key}"]'
         f"({south:.7f},{west:.7f},{north:.7f},{east:.7f});\n"
-        f'  relation["type"="multipolygon"]["landuse"~"^({boundary_pattern})$"]["name"]'
+        f'  relation["type"="multipolygon"]["name"]["{tag_key}"]'
         f"({south:.7f},{west:.7f},{north:.7f},{east:.7f});\n"
-        if boundary_pattern else ""
+        for tag_key in boundary_tag_keys
     )
     return (
         f"[out:json][timeout:{timeout_seconds}];\n(\n"
@@ -100,7 +112,12 @@ def society_access_record(
 ) -> Optional[Dict[str, Any]]:
     """Project only source geometry; absent evidence remains absent."""
     origin = (float(subject["latitude"]), float(subject["longitude"]))
-    boundary = _society_boundary(payload, str(subject.get("name") or ""), origin)
+    boundary = _society_boundary(
+        payload,
+        str(subject.get("name") or ""),
+        origin,
+        collector,
+    )
     boundary_points = boundary[3] if boundary else []
     roads = _eligible_roads(payload, collector)
     road = _select_frontage_road(subject, roads, boundary_points, origin, collector)
@@ -205,10 +222,10 @@ def _select_frontage_road(
     for road in roads:
         distance = _polylines_distance_m(road["points"], reference)
         matched = bool(address_road and _road_names_match(address_road, road["name"]))
-        candidates.append((not matched, distance, road["name"], road))
+        candidates.append((not matched, distance, road["name"], road["id"], road))
     if not candidates:
         return None
-    not_address_match, distance, _name, selected = min(candidates)
+    not_address_match, distance, _name, _road_id, selected = min(candidates)
     if distance > float(collector.get("max_frontage_distance_meters") or 120.0):
         return None
     selected = dict(selected)
@@ -279,9 +296,10 @@ def _society_boundary(
     payload: Dict[str, Any],
     subject_name: str,
     origin: Coordinate,
+    collector: Dict[str, Any],
 ) -> Optional[Tuple[str, str, str, List[Coordinate]]]:
-    normalized_subject = _normalized_name(subject_name)
-    if not normalized_subject:
+    subject_tokens = _identity_name_tokens(subject_name, collector)
+    if not subject_tokens:
         return None
     candidates = []
     for element in payload.get("elements") or []:
@@ -289,7 +307,8 @@ def _society_boundary(
             continue
         tags = element.get("tags") if isinstance(element.get("tags"), dict) else {}
         name = _optional_string(tags.get("name"))
-        if not name or _normalized_name(name) != normalized_subject:
+        name_score = _boundary_name_score(subject_tokens, name or "", collector)
+        if not name or name_score is None:
             continue
         if element.get("type") == "way":
             points = _valid_ring(_element_points(element), outer=True)
@@ -300,6 +319,7 @@ def _society_boundary(
                 "coordinates": [[[lon, lat] for lat, lon in points]],
             }
             candidates.append((
+                name_score,
                 _point_in_ring(origin, points),
                 -_point_to_line_m(origin, points),
                 0,
@@ -309,7 +329,7 @@ def _society_boundary(
                 points,
             ))
             continue
-        polygons = _relation_polygons(element)
+        polygons = relation_polygons(element)
         if not polygons:
             continue
         geometry_value = (
@@ -329,6 +349,7 @@ def _society_boundary(
             ),
         )
         candidates.append((
+            name_score,
             _point_in_ring(origin, reference),
             -_point_to_line_m(origin, reference),
             1,
@@ -339,9 +360,11 @@ def _society_boundary(
         ))
     if not candidates:
         return None
-    _contains_origin, _distance, _priority, osm_ref, name, geometry_value, reference = max(
+    _name_score, _contains_origin, _distance, _priority, osm_ref, name, geometry_value, reference = max(
         candidates,
-        key=lambda candidate: (candidate[0], candidate[1], candidate[2], candidate[3]),
+        key=lambda candidate: (
+            candidate[0], candidate[1], candidate[2], candidate[3], candidate[4]
+        ),
     )
     return (
         osm_ref,
@@ -351,7 +374,45 @@ def _society_boundary(
     )
 
 
-def _relation_polygons(element: Dict[str, Any]) -> List[List[List[List[float]]]]:
+def _identity_name_tokens(value: str, collector: Dict[str, Any]) -> List[str]:
+    ignored = set(_string_list(collector.get("boundary_name_ignored_tokens")))
+    return [
+        token
+        for token in re.findall(r"[a-z0-9]+", value.lower())
+        if token not in ignored
+        and not token.isdigit()
+        and not re.fullmatch(r"[ivx]+", token)
+    ]
+
+
+def _boundary_name_score(
+    subject_tokens: List[str],
+    candidate_name: str,
+    collector: Dict[str, Any],
+) -> Optional[float]:
+    candidate_tokens = _identity_name_tokens(candidate_name, collector)
+    if not candidate_tokens:
+        return None
+    if candidate_tokens == subject_tokens:
+        return 1.0
+    minimum_shared = int(collector.get("boundary_name_min_shared_tokens") or 2)
+    minimum_coverage = float(collector.get("boundary_name_min_coverage") or 0.6)
+    if (
+        len(candidate_tokens) >= minimum_shared
+        and subject_tokens[:len(candidate_tokens)] == candidate_tokens
+    ):
+        coverage = len(candidate_tokens) / len(subject_tokens)
+        return 0.9 + coverage / 100.0 if coverage >= minimum_coverage else None
+    if (
+        len(subject_tokens) >= minimum_shared
+        and candidate_tokens[-len(subject_tokens):] == subject_tokens
+    ):
+        coverage = len(subject_tokens) / len(candidate_tokens)
+        return 0.8 + coverage / 100.0 if coverage >= minimum_coverage else None
+    return None
+
+
+def relation_polygons(element: Dict[str, Any]) -> List[List[List[List[float]]]]:
     """Assemble closed multipolygon member ways without treating exteriors as holes."""
     role_paths: Dict[str, List[List[Coordinate]]] = {"outer": [], "inner": []}
     for member in element.get("members") or []:
@@ -457,13 +518,13 @@ def _entrance_bound_route(
     entrance: Dict[str, Any],
     collector: Dict[str, Any],
 ) -> Optional[Tuple[List[Coordinate], str]]:
-    """Return a legal connected public-road path whose final point is the entrance."""
+    """Return a legal public-road path ending at the sourced point nearest the entrance."""
     entrance_coordinate = entrance["coordinate"]
-    snap_limit = float(collector.get("max_route_entrance_snap_meters") or 1.0)
+    road_limit = float(collector.get("max_entrance_road_distance_meters") or 30.0)
     cap_meters = float(collector.get("max_corridor_meters") or 1_500.0)
     minimum_meters = float(collector.get("min_approach_route_meters") or 25.0)
     snapped = _nearest_segment_projection(frontage["points"], entrance_coordinate)
-    if snapped is None or snapped[0] > snap_limit:
+    if snapped is None or snapped[0] > road_limit:
         return None
     _snap_distance, segment_index, projection, ratio = snapped
     direction = _road_direction(frontage["tags"])
@@ -482,7 +543,10 @@ def _entrance_bound_route(
             if road_direction in {"two_way", "oneway_reverse"}:
                 incoming.setdefault(start, []).append((end, length))
 
-    entrance_tail = [entrance_coordinate]
+    # Keep the flight on OSM road geometry. A nearby gate may be separated
+    # from the mapped carriageway by a short driveway or pavement that OSM
+    # does not contain; never synthesize that connector.
+    entrance_tail = [projection]
     initial: List[Tuple[Coordinate, float]] = []
     if direction in {"two_way", "oneway_forward"} and ratio > 1e-6:
         initial.append((left, _distance_m(left, projection)))
@@ -506,7 +570,7 @@ def _entrance_bound_route(
     suffixes: Dict[Coordinate, List[Coordinate]] = {}
     queue: List[Tuple[float, Coordinate]] = []
     for node, distance in initial:
-        total = distance + _distance_m(projection, entrance_coordinate)
+        total = distance
         if total > cap_meters or total >= distances.get(node, math.inf):
             continue
         distances[node] = total

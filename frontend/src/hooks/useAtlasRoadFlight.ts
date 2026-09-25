@@ -4,6 +4,8 @@ import {
   advanceRoadDistance,
   dampHeading,
   roadFlightCamera,
+  projectPointOntoRoute,
+  type AtlasPoint,
   type AtlasCameraPose,
   type AtlasRoute,
 } from "../lib/atlas/journey.ts";
@@ -13,6 +15,7 @@ import policy from "../lib/atlasPolicy.ts";
 export function useAtlasRoadFlight({
   active,
   route,
+  entrance,
   controller,
   elevation,
   width,
@@ -24,6 +27,7 @@ export function useAtlasRoadFlight({
 }: {
   active: boolean;
   route: AtlasRoute | null;
+  entrance: AtlasPoint | null;
   controller: ArrivalPlaybackController;
   elevation: number;
   width: number;
@@ -31,12 +35,13 @@ export function useAtlasRoadFlight({
   fly: (camera: AtlasCameraPose, durationMs: number) => void;
   autoPlay: boolean;
   onProgress?: (distanceM: number, routeLengthM: number, heading: number) => void;
-  onPhase?: (phase: "context" | "descent" | "flight" | "settled") => void;
+  onPhase?: (phase: "context" | "descent" | "flight" | "entrance" | "settled") => void;
 }) {
   const [rate, setRate] = useState(policy.road.defaultRate);
   const [version, setVersion] = useState(0);
   const distance = useRef(0);
-  const handoffHeading = useRef<number | null>(null);
+  const handoffPending = useRef(false);
+  const entranceVisited = useRef(false);
   const rateRef = useRef(rate);
   const autoPlayRef = useRef(autoPlay);
   useEffect(() => {
@@ -47,6 +52,8 @@ export function useAtlasRoadFlight({
   }, [autoPlay]);
   useEffect(() => {
     distance.current = 0;
+    handoffPending.current = false;
+    entranceVisited.current = false;
   }, [route]);
   useEffect(() => {
     if (!active || !route) return;
@@ -55,6 +62,8 @@ export function useAtlasRoadFlight({
     let flying = false;
     let introTarget: AtlasCameraPose | null = null;
     let smoothedHeading: number | null = null;
+    const entranceDistance = entrance ? projectPointOntoRoute(route, entrance).distanceAlongM : null;
+    if (entranceDistance !== null && distance.current > entranceDistance) entranceVisited.current = true;
     const run = controller.begin("playing");
     const pose = (elapsedSeconds = 0) => {
       const camera = roadFlightCamera(
@@ -64,7 +73,7 @@ export function useAtlasRoadFlight({
         width,
         policy.road,
       );
-      const targetHeading = handoffHeading.current ?? camera.heading;
+      const targetHeading = camera.heading;
       if (smoothedHeading === null) smoothedHeading = targetHeading;
       else smoothedHeading = dampHeading(
         smoothedHeading,
@@ -72,7 +81,6 @@ export function useAtlasRoadFlight({
         policy.road.headingDamping,
         elapsedSeconds,
       );
-      handoffHeading.current = null;
       return { ...camera, heading: smoothedHeading };
     };
     const stop = controller.registerStopper(() => {
@@ -82,18 +90,38 @@ export function useAtlasRoadFlight({
     const tick = (now: number) => {
       if (!run.isCurrent() || controller.snapshot() !== "playing") return;
       const elapsedMs = previous === null ? 0 : now - previous;
+      const remainingToEntrance = entranceDistance === null ? Infinity : Math.abs(entranceDistance - distance.current);
+      const approach = Math.min(1, remainingToEntrance / policy.road.entranceSlowRadiusM);
+      const speedScale = policy.road.entranceSpeedScale
+        + (1 - policy.road.entranceSpeedScale) * approach * approach * (3 - 2 * approach);
       if (previous !== null)
         distance.current = advanceRoadDistance(
           route,
           distance.current,
           elapsedMs,
           rateRef.current,
-          policy.road,
+          {...policy.road, baseSpeedMps: policy.road.baseSpeedMps * speedScale},
         );
+      const stopAtEntrance = entranceDistance !== null && !entranceVisited.current
+        && distance.current >= entranceDistance;
+      if (stopAtEntrance) distance.current = entranceDistance;
       previous = now;
       const camera = pose(elapsedMs / 1_000);
       render(camera);
       onProgress?.(distance.current, route.lengthM, camera.heading);
+      if (stopAtEntrance) {
+        entranceVisited.current = true;
+        flying = false;
+        onPhase?.("entrance");
+        void run.wait(policy.road.entranceDwellMs).then(completed => {
+          if (!completed || !run.isCurrent()) return;
+          previous = null;
+          flying = true;
+          onPhase?.("flight");
+          frame = requestAnimationFrame(tick);
+        });
+        return;
+      }
       if (distance.current >= route.lengthM) {
         onPhase?.("settled");
         run.settle();
@@ -109,9 +137,10 @@ export function useAtlasRoadFlight({
     const reducedMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     ).matches;
+    const resumingFromStreet = handoffPending.current;
+    handoffPending.current = false;
     if (
       reducedMotion ||
-      handoffHeading.current !== null ||
       (!autoPlayRef.current && version === 0)
     ) {
       const camera = pose();
@@ -119,12 +148,20 @@ export function useAtlasRoadFlight({
       onProgress?.(distance.current, route.lengthM, camera.heading);
       onPhase?.("settled");
       run.settle();
+    } else if (resumingFromStreet) {
+      run.activate();
+      const camera = pose();
+      render(camera);
+      onProgress?.(distance.current, route.lengthM, camera.heading);
+      flying = true;
+      onPhase?.("flight");
+      frame = requestAnimationFrame(tick);
     } else {
       run.activate();
       const roadPose = pose();
       const contextPose = {
         ...roadPose,
-        range: policy.road.contextRangeM,
+        range: Math.max(policy.road.contextRangeM, roadPose.range),
         tilt: policy.road.contextTilt,
       };
       introTarget = contextPose;
@@ -134,6 +171,7 @@ export function useAtlasRoadFlight({
         if (!(await run.wait(policy.road.contextMoveMs)) || !run.isCurrent())
           return;
         render(contextPose);
+        introTarget = null;
         if (
           !(await run.wait(policy.road.orientationDwellMs)) ||
           !run.isCurrent()
@@ -157,10 +195,10 @@ export function useAtlasRoadFlight({
       resume();
       if (run.isCurrent()) controller.cancel("settled");
     };
-  }, [active, route, controller, elevation, width, render, fly, onPhase, onProgress, version]);
-  const seek = useCallback((metres: number, heading: number) => {
+  }, [active, route, entrance, controller, elevation, width, render, fly, onPhase, onProgress, version]);
+  const seek = useCallback((metres: number) => {
     distance.current = metres;
-    handoffHeading.current = heading;
+    handoffPending.current = true;
   }, []);
   const position = useCallback(() => distance.current, []);
   return {
@@ -170,7 +208,8 @@ export function useAtlasRoadFlight({
     position,
     replay: () => {
       distance.current = 0;
-      handoffHeading.current = null;
+      handoffPending.current = false;
+      entranceVisited.current = false;
       setVersion((v) => v + 1);
     },
   };

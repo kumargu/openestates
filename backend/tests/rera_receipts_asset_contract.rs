@@ -19,6 +19,7 @@ async fn forced_rera_receipt_backfill_materializes_only_the_parallel_raw_asset()
     let receipt_asset = AssetId::new(RERA_RECEIPTS_ASSET_ID).unwrap();
     let source_inputs = AssetSourceInputs {
         rera_receipts: Some(ReraReceiptsSourceInput {
+            search_results: Default::default(),
             snapshot_date: "2026-08-09".to_string(),
             receipts: vec![ReraReceiptSourceRecord {
                 kind: ReraReceiptKind::ProjectDetail,
@@ -77,6 +78,7 @@ async fn source_records_can_only_materialize_from_the_receipt_backfill() {
     let claims_asset = AssetId::new(RERA_CLAIMS_ASSET_ID).unwrap();
     let receipt_inputs = AssetSourceInputs {
         rera_receipts: Some(ReraReceiptsSourceInput {
+            search_results: Default::default(),
             snapshot_date: "2026-08-09".to_string(),
             receipts: vec![ReraReceiptSourceRecord {
                 kind: ReraReceiptKind::ProjectDetail,

@@ -1809,7 +1809,7 @@ mod tests {
 
     #[test]
     fn positive_relation_clause_does_not_swallow_away_from_risk_clause() {
-        let plan = compile_query_plan("3BHK near Marathahalli but away from a stormwater drain");
+        let plan = compile_query_plan("3BHK near Marathahalli but away from a transmission line");
 
         assert_eq!(plan.clauses.len(), 1);
         assert_eq!(plan.clauses[0].target_text, "marathahalli");

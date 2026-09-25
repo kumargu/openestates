@@ -279,12 +279,10 @@
           ],
           "terms": [
             "rajakaluve",
-            "storm drain",
-            "stormwater drain"
+            "storm drain"
           ],
           "preferences": [
-            "rajakaluve",
-            "stormwater"
+            "rajakaluve"
           ]
         }
       ]
@@ -998,7 +996,6 @@
           "terms": [
             "traffic",
             "congestion",
-            "narrow road",
             "bad road",
             "approach road"
           ],

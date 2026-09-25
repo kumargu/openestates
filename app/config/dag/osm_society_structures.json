@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "description": "Polygon-scoped OpenStreetMap building footprints for society structure rendering.",
+  "facts": {
+    "linked_entity_fact_key": "society.structure_entity",
+    "observed_levels_fact_key": "structure.observed_levels",
+    "observed_height_fact_key": "structure.observed_height_m"
+  },
+  "collector": {
+    "source_id": "openstreetmap_society_structures",
+    "source_type": "OpenStreetMap",
+    "fetch_source": "overpass_society_structure_snapshot",
+    "overpass_url_env": "OPENESTATES_OVERPASS_API_URL",
+    "default_overpass_url": "https://overpass-api.de/api/interpreter",
+    "query_timeout_seconds": 45,
+    "tile_size_meters": 450.0,
+    "minimum_split_tile_meters": 150.0,
+    "max_split_depth": 2,
+    "tile_overlap_meters": 20.0,
+    "max_tiles_per_society": 64,
+    "max_consecutive_failed_tiles": 2,
+    "confidence": 0.8,
+    "structure_tag_keys": [
+      "building",
+      "building:part",
+      "building:levels",
+      "height",
+      "name",
+      "ref"
+    ],
+    "transport_policy": {
+      "request_timeout_seconds": 75.0,
+      "max_attempts": 4,
+      "initial_backoff_seconds": 30.0,
+      "backoff_multiplier": 2.0,
+      "max_backoff_seconds": 120.0,
+      "jitter_ratio": 0.15,
+      "max_retry_after_seconds": 300.0,
+      "retry_status_codes": [429, 500, 502, 503, 504],
+      "max_concurrency": 1,
+      "queue_capacity": 2,
+      "min_request_interval_seconds": 30.0
+    }
+  }
+}

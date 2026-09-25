@@ -126,36 +126,6 @@
           "scoring_weight": 0.7
         }
       ]
-    },
-    {
-      "fact_key": "stormwater_drain_nearby",
-      "category_aliases": ["stormwater_drain", "stormwater_drains", "storm_drain", "storm_drains", "swd", "rajakaluve"],
-      "collection_sources": ["openstreetmap"],
-      "spatial_role": "route",
-      "display_label": "Nearby stormwater drains",
-      "answers_preferences": ["stormwater drain", "rajakaluve", "swd", "flooding risk", "red flag"],
-      "relation_class": "risk_externality",
-      "chainable": false,
-      "max_distance_km": 0.25,
-      "allow_missing_place_types": false,
-      "accepted_place_types": ["stormwater_drain", "rajakaluve", "primary_swd", "secondary_swd", "tertiary_swd"],
-      "name_markers": ["stormwater drain", "storm water drain", "storm drain", "rajakaluve", "swd"]
-    },
-    {
-      "fact_key": "nearby_breweries",
-      "category_aliases": ["brewery", "breweries", "brewpub", "biergarten", "beer_garden"],
-      "collection_sources": ["google"],
-      "spatial_role": "destination",
-      "display_label": "Nearby breweries",
-      "answers_preferences": ["nearby", "brewery", "breweries", "beer"],
-      "relation_class": "access",
-      "chainable": true,
-      "max_distance_km": 5.0,
-      "allow_missing_place_types": false,
-      "accepted_place_types": ["bar", "restaurant"],
-      "require_name_marker": true,
-      "name_markers": ["brewery", "brewing", "biergarten", "beer garden"],
-      "name_block_markers": ["wine shop", "liquor store", "restaurant only"]
     }
   ]
 }

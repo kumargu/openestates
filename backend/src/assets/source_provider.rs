@@ -22,6 +22,8 @@ const DEFAULT_MAX_STDOUT_BYTES: usize = 16 * 1024 * 1024;
 /// Typed control-plane request sent to an external source collector.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SourceInputRequest {
+    #[serde(default)]
+    pub dependency_inputs: serde_json::Value,
     pub project_root: PathBuf,
     pub partition: AssetPartition,
     pub planned_at: DateTime<Utc>,

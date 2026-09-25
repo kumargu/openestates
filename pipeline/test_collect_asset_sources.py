@@ -19,7 +19,6 @@ from pipeline.collect_asset_sources import (
     collect_google_nearby_places,
     collect_google_places,
     collect_osm_power_infrastructure,
-    collect_stormwater_drains,
     capture_scoped_rera_regulatory_payloads,
     geospatial_society_inputs,
     google_nearby_collection_categories,
@@ -41,6 +40,7 @@ from pipeline.skills.fetch_google_review_links import (
     FetchGoogleReviewLinksSkill,
     fetch_google_places_nearby_text,
 )
+from pipeline.skills.rera_regulatory_intelligence import RegulatoryIntelligenceError
 from pipeline.skills.search_reddit import (
     RedditSourceBlocked,
     RedditSourceInvalidResponse,
@@ -383,6 +383,58 @@ class CollectAssetSourcesTest(unittest.TestCase):
         load_cached.assert_not_called()
         capture.assert_called_once()
 
+    def test_rera_receipts_reuse_valid_regulatory_cache_when_refresh_fails(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            listing_cache = root / "listing.json"
+            listing_raw = root / "listing.html"
+            listing_cache.write_text(
+                json.dumps({"cached_at": "2026-08-09T10:30:00Z"}),
+                encoding="utf-8",
+            )
+            listing_raw.write_bytes(b"<html>official receipt</html>")
+            cached_receipt = {
+                "kind": "regulatory_list",
+                "source_url": "https://rera.karnataka.gov.in/projectList",
+                "content_type": "application/gzip",
+                "body_hex": b"cached regulatory receipt".hex(),
+                "captured_at": "2026-08-09T10:00:00Z",
+                "parent_receipt_id": None,
+                "crawl_run_id": "rera-regulatory-lists-2026-08-09",
+            }
+            cached_payload = {
+                "registration_number": "PRM/KA/RERA/1251/446/PR/300924/007105",
+                "checked_at": "2026-08-09T10:00:00Z",
+                "receipts": [cached_receipt],
+                "records": [],
+            }
+            request = {
+                "force_refresh_assets": ["rera_receipts"],
+                "source_entities": [
+                    {
+                        "entity_id": "society:fixture",
+                        "name": "Fixture",
+                        "project_key": "PRM/KA/RERA/1251/446/PR/300924/007105",
+                    }
+                ],
+            }
+            with patch("pipeline.collect_asset_sources.LISTING_CACHE_PATH", listing_cache), patch(
+                "pipeline.collect_asset_sources.LISTING_RAW_CACHE_PATH", listing_raw
+            ), patch(
+                "pipeline.collect_asset_sources.capture_scoped_rera_detail_receipts",
+                return_value=[],
+            ), patch(
+                "pipeline.collect_asset_sources.capture_scoped_rera_regulatory_payloads",
+                side_effect=RegulatoryIntelligenceError("temporarily unavailable"),
+            ), patch(
+                "pipeline.collect_asset_sources.load_scoped_rera_regulatory_payloads",
+                return_value=[cached_payload],
+            ) as load_cached:
+                payload = collect_rera_receipts(request)
+
+        load_cached.assert_called_once_with(request)
+        self.assertIn(cached_receipt, payload["receipts"])
+
     def test_rera_source_records_parse_the_raw_listing_with_receipt_lineage(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -410,13 +462,27 @@ class CollectAssetSourcesTest(unittest.TestCase):
         self.assertTrue(row["receipt_id"].startswith("rera_receipt:sha256:"))
         receipt_id = row["receipt_id"]
         expected_capture = hashlib.sha256(
-            "rera_capture.v1\n{}\n{}\n2026-08-09T10:30:00+00:00".format(
+            "rera_capture.v2\n{}\n{}".format(
                 receipt_id, "https://rera.karnataka.gov.in/viewAllProjects?language=en"
             ).encode("utf-8")
         ).hexdigest()
         self.assertEqual(row["capture_id"], "rera_capture:sha256:{}".format(expected_capture))
         self.assertEqual(
             json.loads(row["raw_value"])["project_name"], "Fixture Project"
+        )
+
+    def test_rera_capture_id_does_not_depend_on_observation_time(self):
+        receipt_id = "rera_receipt:sha256:fixture"
+        source_url = "https://rera.karnataka.gov.in/projectDetails?action=952"
+        from pipeline.collect_asset_sources import rera_capture_id
+
+        expected = hashlib.sha256(
+            "rera_capture.v2\n{}\n{}".format(receipt_id, source_url).encode("utf-8")
+        ).hexdigest()
+
+        self.assertEqual(
+            rera_capture_id(receipt_id, source_url),
+            "rera_capture:sha256:{}".format(expected),
         )
 
     def test_rera_source_records_scoped_run_ignores_unrelated_malformed_listing_rows(self):
@@ -1247,7 +1313,7 @@ class CollectAssetSourcesTest(unittest.TestCase):
         def fetch(_url, query):
             calls.append(query)
             if len(calls) == 1:
-                raise TimeoutError("combined query timed out")
+                raise ValueError("combined query was too broad")
             return overpass
 
         output = collect_osm_power_infrastructure(
@@ -1280,7 +1346,7 @@ class CollectAssetSourcesTest(unittest.TestCase):
 
         def fetch(_url, _query):
             calls.append(True)
-            raise TimeoutError("overpass unavailable")
+            raise ValueError("overpass response was unusable")
 
         with self.assertRaisesRegex(ValueError, "failed for 2 of 2 subjects"):
             collect_osm_power_infrastructure(
@@ -1290,170 +1356,6 @@ class CollectAssetSourcesTest(unittest.TestCase):
             )
 
         self.assertEqual(len(calls), 3)
-
-    def test_collect_stormwater_drains_emits_rajakaluve_rows(self):
-        request = {
-            "partition": {"parts": [["dt", "2026-07-27"]]},
-            "planned_at": "2026-07-27T09:00:00Z",
-            "source_entities": [
-                {
-                    "entity_id": "society:whitefield-test",
-                    "name": "Whitefield Test",
-                    "area": "Whitefield",
-                    "city": "Bengaluru",
-                    "project_key": "PRM-WF",
-                }
-            ],
-        }
-        google_places = {
-            "records": [
-                {
-                    "entity_id": "society:whitefield-test",
-                    "latitude": 12.9700,
-                    "longitude": 77.7500,
-                }
-            ]
-        }
-        overpass = {
-            "elements": [
-                {
-                    "type": "way",
-                    "id": 987,
-                    "tags": {
-                        "waterway": "drain",
-                        "name": "Whitefield Rajakaluve",
-                    },
-                    "geometry": [
-                        {"lat": 12.9695, "lon": 77.7495},
-                        {"lat": 12.9705, "lon": 77.7505},
-                    ],
-                }
-            ]
-        }
-
-        output = collect_stormwater_drains(
-            request,
-            google_places_input=google_places,
-            fetch=lambda _url, _query: overpass,
-        )
-
-        self.assertEqual(output["snapshot_date"], "2026-07-27")
-        self.assertEqual(len(output["records"]), 1)
-        record = output["records"][0]
-        self.assertEqual(record["entity_id"], "society:whitefield-test")
-        self.assertEqual(record["drain_id"], "way/987")
-        self.assertEqual(record["drain_type"], "rajakaluve")
-        self.assertEqual(record["hierarchy"], "primary_swd")
-        self.assertLess(record["distance_meters"], 5.0)
-        self.assertIn("LineString", record["geometry_geojson"])
-
-    def test_collect_stormwater_drains_rejects_partial_subject_failure(self):
-        request = {
-            "partition": {"parts": [["dt", "2026-07-27"]]},
-            "planned_at": "2026-07-27T09:00:00Z",
-            "source_entities": [
-                {
-                    "entity_id": "society:overpass-fails",
-                    "name": "Overpass Fails",
-                    "area": "Whitefield",
-                    "city": "Bengaluru",
-                    "project_key": "PRM-FAIL",
-                },
-                {
-                    "entity_id": "society:overpass-succeeds",
-                    "name": "Overpass Succeeds",
-                    "area": "Whitefield",
-                    "city": "Bengaluru",
-                    "project_key": "PRM-OK",
-                },
-            ],
-        }
-        google_places = {
-            "records": [
-                {
-                    "entity_id": "society:overpass-fails",
-                    "latitude": 12.9700,
-                    "longitude": 77.7500,
-                },
-                {
-                    "entity_id": "society:overpass-succeeds",
-                    "latitude": 12.9800,
-                    "longitude": 77.7600,
-                },
-            ]
-        }
-        overpass = {
-            "elements": [
-                {
-                    "type": "way",
-                    "id": 654,
-                    "tags": {"waterway": "drain", "name": "Whitefield Rajakaluve"},
-                    "geometry": [
-                        {"lat": 12.9795, "lon": 77.7595},
-                        {"lat": 12.9805, "lon": 77.7605},
-                    ],
-                }
-            ]
-        }
-        calls = []
-
-        def fetch(_url, _query):
-            calls.append(_query)
-            if len(calls) == 1:
-                raise HTTPError("https://overpass.example", 504, "timeout", None, None)
-            return overpass
-
-        with self.assertRaisesRegex(ValueError, "unavailable for 1 of 2 subjects"):
-            collect_stormwater_drains(
-                request,
-                google_places_input=google_places,
-                fetch=fetch,
-            )
-
-    def test_collect_stormwater_drains_never_promotes_partial_rows(self):
-        request = {
-            "partition": {"parts": [["dt", "2026-07-27"]]},
-            "planned_at": "2026-07-27T09:00:00Z",
-            "source_entities": [
-                {
-                    "entity_id": "society:overpass-fails",
-                    "name": "Overpass Fails",
-                    "city": "Bengaluru",
-                    "latitude": 12.9700,
-                    "longitude": 77.7500,
-                },
-                {
-                    "entity_id": "society:overpass-succeeds",
-                    "name": "Overpass Succeeds",
-                    "city": "Bengaluru",
-                    "latitude": 12.9800,
-                    "longitude": 77.7600,
-                },
-            ],
-        }
-        overpass = {
-            "elements": [
-                {
-                    "type": "way",
-                    "id": 654,
-                    "tags": {"waterway": "drain", "name": "Whitefield Rajakaluve"},
-                    "geometry": [
-                        {"lat": 12.9795, "lon": 77.7595},
-                        {"lat": 12.9805, "lon": 77.7605},
-                    ],
-                }
-            ]
-        }
-        calls = []
-
-        def fetch(_url, _query):
-            calls.append(_query)
-            if len(calls) == 1:
-                raise HTTPError("https://overpass.example", 504, "timeout", None, None)
-            return overpass
-
-        with self.assertRaisesRegex(ValueError, "unavailable for 1 of 2 subjects"):
-            collect_stormwater_drains(request, fetch=fetch)
 
     def test_reddit_transient_failure_retries_before_returning_empty(self):
         unavailable = RedditSourceUnavailable("temporary failure")
@@ -1535,7 +1437,7 @@ class CollectAssetSourcesTest(unittest.TestCase):
             inputs["society:rera-canonical"]["society_name"], "Canonical Green"
         )
 
-    def test_google_inputs_hydrate_rera_address_when_rera_input_missing(self):
+    def test_google_inputs_reuse_explicit_rera_address_without_collection(self):
         with patch(
             "pipeline.collect_asset_sources.collect_rera_project_details",
             return_value=(
@@ -1557,6 +1459,7 @@ class CollectAssetSourcesTest(unittest.TestCase):
         ) as collect_details:
             inputs = google_society_inputs(
                 {
+                    "dependency_inputs": {"rera_registry_monthly": {"detail_facts": collect_details.return_value[0]}},
                     "source_entities": [
                         {
                             "entity_id": "society:rera-godrej-air",
@@ -1570,13 +1473,13 @@ class CollectAssetSourcesTest(unittest.TestCase):
                 }
             )
 
-        collect_details.assert_called_once()
+        collect_details.assert_not_called()
         self.assertEqual(
             inputs["society:rera-godrej-air"]["address"],
             "Khatha No. 365, Hoodi Village, K.R. Puram Hobli",
         )
 
-    def test_google_source_collection_shares_rera_address_hydration(self):
+    def test_google_source_collection_shares_pinned_rera_address(self):
         captured_inputs = []
 
         def capture_places(_request, society_inputs=None):
@@ -1620,7 +1523,8 @@ class CollectAssetSourcesTest(unittest.TestCase):
                                 "google_places_weekly",
                                 "google_nearby_places_weekly",
                             ],
-                            "source_entities": [
+                            "dependency_inputs": {"rera_registry_monthly": {"detail_facts": collect_details.return_value[0]}},
+                    "source_entities": [
                                 {
                                     "entity_id": "society:rera-godrej-air",
                                     "name": "Godrej Air",
@@ -1632,7 +1536,7 @@ class CollectAssetSourcesTest(unittest.TestCase):
                         }
                     )
 
-        collect_details.assert_called_once()
+        collect_details.assert_not_called()
         self.assertEqual(len(captured_inputs), 2)
         for inputs in captured_inputs:
             self.assertEqual(
@@ -3030,7 +2934,6 @@ class CollectAssetSourcesTest(unittest.TestCase):
         self.assertEqual(record["fetch_source"], "google_places_text_search")
 
     def test_google_nearby_collection_emits_raw_category_rows(self):
-        self.assertNotIn("stormwater_drain", google_nearby_collection_categories())
         output = collect_google_nearby_places(
             {
                 "partition": {"parts": [["dt", "2026-07-14"]]},
@@ -3081,56 +2984,29 @@ class CollectAssetSourcesTest(unittest.TestCase):
         self.assertEqual(school["place_types"], ["school"])
         self.assertEqual(school["fetch_source"], "fixture_nearby")
 
-    def test_google_nearby_collection_skips_societies_without_coordinates(self):
-        calls = []
+    def test_google_nearby_missing_origin_is_failure_not_empty_coverage(self):
+        with self.assertRaisesRegex(ValueError, "accepted origin coordinate pair"):
+            collect_google_nearby_places(
+                {"planned_at": "2026-07-14T09:30:00Z"},
+                society_inputs={"missing": {"entity_id": "society:missing", "society_name": "Missing Coordinates"}},
+                nearby_fetch=lambda *_: (_ for _ in ()).throw(ValueError("Google nearby collection requires an accepted origin coordinate pair")),
+            )
 
-        def fake_nearby_fetch(input_data, category):
-            calls.append((input_data["society_name"], category))
-            if input_data["society_name"] == "Missing Coordinates":
-                raise ValueError(
-                    "Google nearby collection requires an accepted origin coordinate pair"
-                )
-            return [
-                {
-                    "place_name": "Example {}".format(category),
-                    "place_url": "https://maps.google.com/{}".format(category),
-                }
-            ]
-
-        output = collect_google_nearby_places(
-            {
-                "partition": {"parts": [["dt", "2026-07-14"]]},
-                "planned_at": "2026-07-14T09:30:00Z",
-            },
-            society_inputs={
-                "missing": {
-                    "entity_id": "society:rera-missing",
-                    "society_name": "Missing Coordinates",
-                    "area": "Whitefield",
-                    "city": "Bengaluru",
-                },
-                "valid": {
-                    "entity_id": "society:rera-valid",
-                    "society_name": "Valid Coordinates",
-                    "area": "Whitefield",
-                    "city": "Bengaluru",
-                },
-            },
-            nearby_fetch=fake_nearby_fetch,
-        )
-
-        self.assertEqual(len(output["records"]), len(google_nearby_collection_categories()))
-        self.assertEqual(
-            calls,
-            [("Missing Coordinates", "school")]
-            + [
-                ("Valid Coordinates", category)
-                for category in google_nearby_collection_categories()
-            ],
-        )
-        self.assertTrue(
-            all(record["entity_id"] == "society:rera-valid" for record in output["records"])
-        )
+    def test_osm_only_collection_reuses_explicit_google_input(self):
+        google = {"records": [{"entity_id": "society:fixture", "latitude": 12.9, "longitude": 77.7}]}
+        request = {
+            "planned_at": "2026-09-20T00:00:00Z",
+            "requested_assets": ["osm_society_access_facts"],
+            "source_entities": [{"entity_id": "society:fixture", "name": "Fixture"}],
+            "dependency_inputs": {"google_places_weekly": google},
+        }
+        with patch("pipeline.collect_asset_sources.collect_osm_society_access", return_value={"records": [], "collection_status": "complete_empty"}) as osm, patch("pipeline.collect_asset_sources.collect_google_places") as google_call, patch("pipeline.collect_asset_sources.collect_rera_registry") as rera, patch("pipeline.collect_asset_sources.collect_rera_project_details") as details:
+            output = collect_asset_sources(request)
+        osm.assert_called_once_with(request, None, google)
+        google_call.assert_not_called()
+        rera.assert_not_called()
+        details.assert_not_called()
+        self.assertEqual(output["osm_society_access"]["collection_status"], "complete_empty")
 
     def test_google_nearby_collection_uses_places_api_by_default(self):
         requests = []

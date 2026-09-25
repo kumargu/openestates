@@ -690,14 +690,8 @@ function PropertyPageBody({
 
             <PropertyArrivalFilm
               propertyId={p.id}
-              title={story.identity.title}
-              frames={story.arrival.frames}
               mapContext={arrivalContext}
               searchContextSocieties={searchContextSocieties}
-              playback={{
-                playing: storyPlaying,
-                onPlayingChange: setStoryPlaying,
-              }}
             />
 
             <PropertyReviewsDeck

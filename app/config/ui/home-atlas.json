@@ -7,9 +7,14 @@
     "lookBehindM": 25,
     "lookAheadM": 65,
     "altitudeOffsetM": 8,
+    "fieldOfViewDegrees": 60,
     "tilt": 67,
     "desktopRangeM": 270,
     "mobileRangeM": 350,
+    "entranceSlowRadiusM": 60,
+    "entranceSpeedScale": 0.4,
+    "entranceDwellMs": 2600,
+    "handoffMaximumDistanceM": 50,
     "mobileBreakpointPx": 700,
     "contextRangeM": 720,
     "contextTilt": 48,
@@ -33,7 +38,20 @@
   },
   "homeOrbit": {
     "openingHoldMs": 1200,
-    "cycleMs": 180000
+    "descentMs": 3200,
+    "cycleMs": 180000,
+    "altitudeOffsetM": 8,
+    "tilt": 67,
+    "rangeScale": 0.72,
+    "desktopMinimumRangeM": 270,
+    "mobileMinimumRangeM": 350,
+    "mobileBreakpointPx": 700,
+    "tourMinimumStops": 2,
+    "tourTransitionMs": 4800,
+    "tourDwellMs": 2400,
+    "tourRangeM": 260,
+    "tourAltitudeOffsetM": 18,
+    "tourTilt": 65
   },
   "metro": {
     "strokeColor": "#d5a7ff",
@@ -108,6 +126,7 @@
   "geometryStyles": {
     "lake": { "fill": "#7dd8f426", "stroke": "#7dd8f4cc" },
     "road": { "fill": "#f4c17618", "stroke": "#f4c176dd" },
+    "society_structure": { "fill": "#d9f6ad14", "stroke": "#d9f6ad99", "strokeWidth": 1 },
     "metro": { "fill": "#d5a7ff18", "stroke": "#d5a7ffdd" }
   }
 }
