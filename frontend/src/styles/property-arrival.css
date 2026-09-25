@@ -666,22 +666,3 @@
 .property-atlas-reviews:focus, .property-arrival-map--atlas:focus { outline: none; }
 
 .property-atlas__status { position: absolute; z-index: 5; left: 32px; bottom: 80px; max-width: calc(100% - 144px); margin: 0; color: #eef5ef; text-shadow: 0 1px 4px #000; font-size: 14px; }
-.property-atlas-facts { padding: clamp(56px, 7vw, 88px) clamp(24px, 5vw, 80px) clamp(64px, 8vw, 104px); background: #eef2ed; color: #243638; }
-.property-atlas-facts > header { display: flex; align-items: baseline; justify-content: space-between; gap: 24px; margin-bottom: clamp(28px, 4vw, 44px); }
-.property-atlas-facts h2 { margin: 0; font-size: clamp(24px, 2.4vw, 34px); font-weight: 550; letter-spacing: -0.035em; }
-.property-atlas-facts nav { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 18px; }
-.property-atlas-facts nav a { color: #3e6450; font-size: 13px; text-underline-offset: 4px; }
-.property-atlas-facts dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 clamp(32px, 6vw, 88px); margin: 0; scroll-margin-top: 24px; }
-.property-atlas-facts dl > div { display: grid; grid-template-columns: minmax(112px, 0.8fr) minmax(0, 1.4fr); gap: 20px; padding: 18px 0; border-top: 1px solid #24363820; }
-.property-atlas-facts dt { color: #526760; font-size: 12px; line-height: 1.5; }
-.property-atlas-facts dd { margin: 0; font-size: 14px; font-weight: 520; line-height: 1.55; overflow-wrap: anywhere; }
-.property-atlas-facts dd a { display: inline-grid; place-items: center; width: 28px; height: 28px; margin: -6px 0 -6px 8px; border-radius: 999px; color: #3e6450; font-size: 13px; text-decoration: none; }
-.property-atlas-facts dd a:hover { background: #2436380c; }
-.property-atlas-facts :is(a, dl):focus-visible { outline: 2px solid #257b7a; outline-offset: 4px; }
-
-@media (max-width: 720px) {
-  .property-atlas-facts > header { align-items: flex-start; flex-direction: column; gap: 12px; }
-  .property-atlas-facts nav { justify-content: flex-start; }
-  .property-atlas-facts dl { grid-template-columns: 1fr; }
-  .property-atlas-facts dl > div { grid-template-columns: minmax(96px, 0.75fr) minmax(0, 1.5fr); gap: 16px; }
-}

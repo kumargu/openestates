@@ -2,6 +2,25 @@
 
 ## Current decision: integrate with the real property page
 
+Follow-up cleanup: removed Market trail entirely from the property page, including
+its report shelf, formatting helpers and CSS. RERA remains in the existing property
+navigation; backend facts and search receipts are unchanged. The atlas contract now
+asserts the retired section is absent and the RERA link survives. Its old assertions
+about the shelf heading, disclosures and duplicate report links are retired with
+that surface, rather than copied into another section.
+
+Removed the full-width design-preview/scenario toolbar after buyer feedback.
+Scenarios now use developer URLs, e.g. `?scenario=uncertain`. The existing price
+label says “Example asking price”; the receipt footer retains the mock-data notice.
+No new interaction is introduced, so no additional ThreeUI pattern is needed.
+UI-critic/React review favored deleting the extra chrome and its height offsets.
+The nine inventory browser journeys, updated RERA/reviews/photos atlas contract,
+307 frontend tests, lint, production/prototype builds and diff check pass for this
+cleanup. Updated resting/panel screenshots below show the toolbar removal;
+[desktop page ending](assets/inventory-truth/integrated-desktop-bottom.png) and
+[mobile page ending](assets/inventory-truth/integrated-mobile-bottom.png) show
+reviews without a Market trail shelf underneath.
+
 The first standalone prototype made the evidence legible, but did not prove its
 place among the property's controls. Following buyer feedback, the primary preview
 now uses the actual PropertyPage, WorkspaceFrame, Google atlas, photos, reviews,

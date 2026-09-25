@@ -1,21 +1,15 @@
 import { expect, test } from "@playwright/test";
 
 // Archived renderer fixture. Source admission and receipt completeness use the materialized API journey.
-test("captured facts, reviews and photos remain accessible without Google", async ({ page }, testInfo) => {
+test("reviews, photos and RERA remain accessible without Google or Market trail", async ({ page }) => {
   await page.route("https://maps.googleapis.com/**", route => route.abort());
   await page.goto("/property/discovered-prestige-waterford-3bhk");
   const canvas = page.locator(".property-arrival-map--atlas");
   await expect(canvas.getByRole("button", { name: "Retry map" })).toBeVisible();
-  const facts = page.getByRole("region", { name: "Property information", exact: true });
-  await expect(facts.getByRole("heading", { name: "Market trail", exact: true })).toBeVisible();
-  await expect(facts.getByRole("link", { name: "Official record", exact: true }))
+  await expect(page.getByRole("heading", { name: "Market trail", exact: true })).toHaveCount(0);
+  await expect(page.locator(".property-atlas-facts, #property-topic-market")).toHaveCount(0);
+  await expect(page.getByRole("navigation", { name: "Property navigation" }).getByRole("link", { name: "RERA", exact: true }))
     .toHaveAttribute("href", "/property/discovered-prestige-waterford-3bhk/rera");
-  await expect(facts.locator("summary")).toHaveCount(0);
-  await facts.screenshot({ path: testInfo.outputPath("market-trail.png") });
-  const recordLinks = await facts.getByRole("navigation", { name: "Property reports" })
-    .locator("a").evaluateAll(links => links.map(link => link.getAttribute("href")));
-  expect(recordLinks.length).toBeGreaterThan(0);
-  expect(new Set(recordLinks).size).toBe(recordLinks.length);
 
   await canvas.getByRole("button", { name: "Reviews", exact: true }).click();
   const reviews = page.locator("#resident-voice");

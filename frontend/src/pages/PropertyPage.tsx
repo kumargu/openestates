@@ -32,7 +32,7 @@ import { SaveHeartButton } from "../components/SaveHeartButton.tsx";
 import { PUBLIC_BRAND_NAME } from "../lib/brand.ts";
 import { PropertyArrivalFilm } from "../components/property/PropertyArrivalFilm.tsx";
 import { PropertyArrivalMap } from "../components/property/PropertyArrivalMap.tsx";
-import { PropertyAtlasFacts, PropertyAtlasPhotos } from "../components/property/PropertyAtlasContent.tsx";
+import { PropertyAtlasPhotos } from "../components/property/PropertyAtlasContent.tsx";
 import { GoogleReviewsSection } from "../components/property/GoogleReviewsSection.tsx";
 import { AtlasIcon } from "../components/property/AtlasIcon.tsx";
 import { PropertyReviewsDeck } from "../components/property/PropertyReviewsDeck.tsx";
@@ -611,7 +611,6 @@ function PropertyPageBody({
           <GoogleReviewsSection reviews={data.external_reviews} expandable />
         </section>}
         <PropertySearchMatch data={data} focus={proofFocus} />
-        <PropertyAtlasFacts data={data} story={story} focus={proofFocus} />
       </div>
     );
   }

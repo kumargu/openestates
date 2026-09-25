@@ -1,6 +1,8 @@
 {
   "version": 1,
   "integrated": {
+    "exampleAsk": "Example asking price",
+    "exampleUnavailable": "Example · no active asking price",
     "compare": "Compare {count} asking prices",
     "single": "View price & advertisement",
     "inactive": "Check advertisement availability",

@@ -9,6 +9,9 @@ test("real property page shares one panel across price, photos, places and notes
   page.on("pageerror", error => errors.push(error.message));
   await page.goto(`${property}?scenario=four-ads`);
   await expect(price(page)).toHaveText("Compare 4 asking prices↗");
+  await expect(page.locator(".inventory-preview-bar, .property-atlas-facts")).toHaveCount(0);
+  await expect(page.getByRole("combobox", { name: "Scenario" })).toHaveCount(0);
+  await expect(page.locator(".inventory-integrated__ask")).toContainText("Example asking price");
   await expect(page.locator(".workspace-sidebar")).toBeVisible();
   await expect(page.locator(".property-atlas__identity")).toContainText("Floor 14");
   await expect(page.locator(".property-atlas__identity")).not.toContainText("₹3.45");
@@ -91,11 +94,9 @@ test("mobile receipts fit above navigation with independent scroll and focus ret
   }
 });
 
-test("integrated scenario switching retains exclusions, same-ad history and missing asks", async ({ page }, info) => {
-  await page.goto(property);
-  await expect(price(page)).toBeVisible();
+test("developer scenario URLs retain exclusions, same-ad history and missing asks", async ({ page }, info) => {
   for (const scenario of ["uncertain", "reduction", "withdrawn", "long-source", "comparables", "one-active", "single", "sparse", "owner-broker"]) {
-    await page.getByRole("combobox", { name: "Scenario" }).selectOption(scenario);
+    await page.goto(`${property}?scenario=${scenario}`);
     await expect(page).toHaveURL(new RegExp(`scenario=${scenario}`));
     await expect(price(page)).toBeVisible();
     if (scenario === "reduction") await expect(price(page)).toContainText("₹7 L lower");

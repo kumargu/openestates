@@ -3,7 +3,7 @@
 The primary preview now runs inside the **actual PropertyPage and WorkspaceFrame**:
 the atlas, photos, reviews, Save, Note and sidebar are the existing components.
 An explicit dev-only adapter binds one example unit to the archived Waterford
-property context. The scenario picker switches alternative evidence states;
+property context. A developer-only `?scenario=` URL selects alternative evidence states;
 these are **not** ten real homes. Neither unit identity nor price is inferred
 from the society's name, measurements or project price range.
 
@@ -17,7 +17,9 @@ npm run dev:inventory
 ```
 
 Open http://127.0.0.1:5192/property/discovered-prestige-waterford-3bhk.
-Use the scenario selector for all ten states. This uses the normal property Save
+Use `?scenario=uncertain`, `?scenario=reduction`, or another scenario ID to test
+different states. There is no development toolbar on the property page; the
+price itself is marked as an example. This uses the normal property Save
 and Note controls on the preview origin; they refer to the fixture property, not
 to a newly promoted canonical unit. They do not modify storage on another origin.
 

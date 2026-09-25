@@ -1,14 +1,10 @@
 .inventory-integrated {
-  --inventory-preview-height: 44px;
   --inventory-ink: #243638;
   --inventory-muted: #626c63;
   --inventory-rule: #263b3129;
   color: var(--inventory-ink);
 }
-.inventory-integrated .property-arrival-map--atlas { height: calc(100dvh - var(--inventory-preview-height)); }
 .inventory-integrated :is(button, summary, a, select):focus-visible { outline: 2px solid #a45137; outline-offset: 3px; }
-.inventory-integrated .inventory-preview-bar { padding-inline: 32px; }
-.inventory-integrated .inventory-preview-bar select { min-height: 36px; }
 .inventory-integrated__ask { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 12px; }
 .inventory-integrated__ask > span { font-size: 11px; color: var(--inventory-muted); }
 .inventory-integrated__ask > strong { font-size: clamp(23px, 2.4vw, 30px); font-weight: 550; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
@@ -27,16 +23,7 @@
 .inventory-integrated .property-atlas__drawer--detail h2 { font-size: 18px; }
 .inventory-integrated .property-atlas__drawer--detail .inventory-evidence__body { overflow: visible; padding-inline: 24px; }
 .inventory-integrated .inventory-evidence__footer { margin-top: 16px; }
-@media (max-width: 860px) {
-  .workspace-shell:not(.workspace-shell--plain) .inventory-integrated .property-arrival-map--atlas { height: calc(100dvh - 4.35rem - env(safe-area-inset-bottom) - var(--inventory-preview-height)); }
-}
-@media (max-width: 760px) {
-  .inventory-integrated { --inventory-preview-height: 64px; }
-}
 @media (max-width: 560px) {
-  .inventory-integrated .inventory-preview-bar { padding-inline: 20px; }
-  .inventory-integrated .inventory-preview-bar label { gap: 4px; }
-  .inventory-integrated .inventory-preview-bar select { max-width: 230px; }
   .inventory-integrated__ask > strong { font-size: 25px; }
   .inventory-integrated .property-atlas__drawer--detail { width: auto; }
 }
