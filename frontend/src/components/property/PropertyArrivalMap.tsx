@@ -56,6 +56,13 @@ const GoogleArrivalMap = lazy(async () => {
   return { default: module.PropertyArrivalGoogle3DMap };
 });
 
+export type PropertyIdentityDetail = {
+  summary: ReactNode;
+  label: string;
+  title: string;
+  content: ReactNode;
+};
+
 type Props = {
   context: PropertyMapContext;
   searchContextSocieties?: ArrivalSearchSociety[];
@@ -68,7 +75,8 @@ type Props = {
     location: string;
     title: string;
     facts: string[];
-    actions?: ReactNode;
+    detail?: PropertyIdentityDetail;
+    actions?: ReactNode | ((onOpenOverlay: () => void) => ReactNode);
   };
 };
 
@@ -139,6 +147,32 @@ export function PropertyArrivalMap({
   const [selectedSearchSocietyId, setSelectedSearchSocietyId] = useState<string | null>(null);
   const [mapStatus, setMapStatus] = useState<"loading" | "ready" | "unavailable">("loading");
   const atlasRef = useRef<HTMLElement>(null);
+  const hasIdentity = Boolean(identity);
+  // Chrome owns its geometry even when the map renderer is unavailable. The
+  // renderer consumes these positions for camera fitting, never positions UI.
+  useLayoutEffect(() => {
+    const shell = atlasRef.current;
+    if (!shell) return;
+    const heading = shell.querySelector<HTMLElement>('.property-atlas__identity');
+    const actions = shell.querySelector<HTMLElement>('.property-atlas__actions');
+    const dock = shell.querySelector<HTMLElement>('.property-atlas__dock');
+    const measure = () => {
+      const bounds = shell.getBoundingClientRect();
+      const set = (name: string, value: number) => {
+        const pixels = `${Math.ceil(value)}px`;
+        if (shell.style.getPropertyValue(name) !== pixels) shell.style.setProperty(name, pixels);
+      };
+      const headingBottom = (heading?.getBoundingClientRect().bottom ?? bounds.top) - bounds.top;
+      set('--atlas-actions-top', headingBottom + 16);
+      const actionsBottom = (actions?.getBoundingClientRect().bottom ?? bounds.top) - bounds.top;
+      set('--atlas-navigation-top', Math.max(headingBottom, actionsBottom) + 20);
+      set('--atlas-drawer-top', (dock?.getBoundingClientRect().bottom ?? bounds.top) - bounds.top + 20);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    for (const element of [shell, heading, actions, dock]) if (element) observer.observe(element);
+    return () => observer.disconnect();
+  }, [presentation, hasIdentity]);
   const atlasVisibleRef = useRef(true);
   const handleMapReady = useCallback(() => {
     setMapStatus("ready");
@@ -232,10 +266,11 @@ export function PropertyArrivalMap({
   const [tourScope, setTourScope] = useState<'category' | 'neighborhood'>('category');
   const [browsePosition, setBrowsePosition] = useState({category: '', start: 0});
   const browseInterrupted = useRef(false);
-  const [panel, setPanel] = useState<"nearby" | "photos" | null>(null);
+  const [panel, setPanel] = useState<"nearby" | "photos" | "detail" | null>(null);
   const atlasDrawerOpen = panel !== null;
   const panelRef = useRef<HTMLElement>(null);
   const panelTriggerRef = useRef<HTMLElement | null>(null);
+  const returnPanelFocus = useRef(false);
   const [cameraRequest, setCameraRequest] = useState<AtlasCameraRequest | null>(null);
   const appliedProofRef = useRef<string | null>(null);
   useEffect(() => {
@@ -257,9 +292,16 @@ export function PropertyArrivalMap({
     setPanel(next);
   }, []);
   const closePanel = useCallback(() => {
+    returnPanelFocus.current = true;
     setPanel(null);
-    panelTriggerRef.current?.focus({ preventScroll: true });
   }, []);
+
+  useLayoutEffect(() => {
+    if (!panel && returnPanelFocus.current) {
+      returnPanelFocus.current = false;
+      panelTriggerRef.current?.focus({ preventScroll: true });
+    }
+  }, [panel]);
 
   useEffect(() => {
     if (!panel) return;
@@ -645,7 +687,7 @@ export function PropertyArrivalMap({
       setCameraRequest((current) => ({ action, id: (current?.id ?? 0) + 1 }));
     };
     return (
-      <section id="property-atlas" ref={atlasRef} tabIndex={-1} className={`property-arrival-map property-arrival-map--atlas${panel ? " has-panel" : ""}`} aria-label="Property atlas">
+      <section id="property-atlas" ref={atlasRef} tabIndex={-1} className={`property-arrival-map property-arrival-map--atlas${panel ? " has-panel" : ""}${identity?.detail ? " has-identity-detail" : ""}`} aria-label="Property atlas">
         {mapSurface}
         <div className="property-atlas__shade" aria-hidden="true" />
         {activeView === "approach" && missingArrivalState && (
@@ -656,27 +698,39 @@ export function PropertyArrivalMap({
             <span>{identity.location}</span>
             <h1>{identity.title}</h1>
             <p>{identity.facts.join(" · ")}</p>
+            {identity.detail && <div className="property-atlas__identity-detail">
+              {identity.detail.summary}
+              <button type="button" aria-expanded={panel === "detail"} aria-controls="property-atlas-panel" onClick={() => {
+                playbackController.pause();
+                if (panel === "detail") closePanel();
+                else openPanel("detail");
+              }}>{identity.detail.label}<span aria-hidden="true">↗</span></button>
+            </div>}
           </header>
         )}
         <div className="property-atlas__actions" aria-label="Property actions">
           {photos && <button type="button" aria-expanded={panel === "photos"} aria-controls="property-atlas-panel" onClick={() => panel === "photos" ? closePanel() : openPanel("photos")}><AtlasIcon name="photos" />Photos</button>}
           {reviewsTargetId && <button type="button" aria-controls={reviewsTargetId} onClick={() => {
             playbackController.pause();
+            setPanel(null);
             const target = document.getElementById(reviewsTargetId);
             target?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "start" });
             target?.focus({ preventScroll: true });
           }}><AtlasIcon name="reviews" />Reviews</button>}
-          {identity?.actions}
+          {typeof identity?.actions === "function" ? identity.actions(() => {
+            playbackController.pause();
+            setPanel(null);
+          }) : identity?.actions}
         </div>
 
         {panel && (
-          <aside id="property-atlas-panel" ref={panelRef} tabIndex={-1} className={`property-atlas__drawer property-atlas__drawer--${panel}`} aria-label={panel === "nearby" ? "Nearby places" : "Photos"}>
+          <aside id="property-atlas-panel" ref={panelRef} tabIndex={-1} className={`property-atlas__drawer property-atlas__drawer--${panel}`} aria-label={panel === "nearby" ? "Nearby places" : panel === "detail" ? identity?.detail?.title : "Photos"}>
             <header>
-              <h2>{panel === "nearby" ? activeAtlasCategoryLabel : "Photos"}</h2>
+              <h2>{panel === "nearby" ? activeAtlasCategoryLabel : panel === "detail" ? identity?.detail?.title : "Photos"}</h2>
               <button type="button" aria-label="Close panel" onClick={closePanel}><AtlasIcon name="close" /></button>
             </header>
             <div className="property-atlas__panel-body">
-            {panel === "photos" ? photos : (
+            {panel === "photos" ? photos : panel === "detail" ? identity?.detail?.content : (
               <>
                 <div className="property-atlas__drawer-summary">
                   <span>Straight-line distances</span>

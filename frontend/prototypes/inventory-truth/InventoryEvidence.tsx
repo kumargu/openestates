@@ -82,8 +82,9 @@ export function InventoryEvidence({ detail }: { detail: InventoryDetail }) {
     window.scrollTo({ top: originScroll.current, behavior: "instant" });
   }
 
-  const identity = [...new Map([...detail.advertisements, ...detail.candidates].flatMap(ad => ad.identity).map(signal => [JSON.stringify([signal.label, signal.value, signal.disagrees]), signal])).values()];
   const hasDetails = detail.advertisements.length + detail.candidates.length + detail.comparables.length + detail.registrations.length > 0;
+
+  const receipts = <InventoryReceipts detail={detail} question={question} />;
 
   return <div className="inventory-price">
     <span className="inventory-price__label">{summary.ask ? "Asking price" : "No active asking price"}</span>
@@ -101,6 +102,16 @@ export function InventoryEvidence({ detail }: { detail: InventoryDetail }) {
       <header className="inventory-evidence__header"><h2>{question === "identity" ? "Are these the same home?" : "This home’s asking prices"}</h2>
         <button ref={closeButton} type="button" onClick={close} aria-label="Close asking price details">×</button>
       </header>
+      {receipts}
+    </div>
+  </div>;
+}
+
+export function InventoryReceipts({ detail, question = detail.summary.conflicts.length ? "identity" : "asks" }: { detail: InventoryDetail; question?: "asks" | "identity" }) {
+  const id = useId();
+  const { summary } = detail;
+  const identity = [...new Map([...detail.advertisements, ...detail.candidates].flatMap(ad => ad.identity).map(signal => [JSON.stringify([signal.label, signal.value, signal.disagrees]), signal])).values()];
+  return <>
       <div className="inventory-evidence__body">
         {question === "identity" && summary.conflicts.map(signal => <p key={signal.id} className="inventory-evidence__answer">{signal.value}</p>)}
         {question === "asks" && summary.ask && summary.ask.min_inr !== summary.ask.max_inr && <p className="inventory-evidence__answer">Different advertisers, different asks. These are not price changes.</p>}
@@ -131,6 +142,5 @@ export function InventoryEvidence({ detail }: { detail: InventoryDetail }) {
         </details>}
       </div>
       <footer className="inventory-evidence__footer">Example observations · design preview</footer>
-    </div>
-  </div>;
+  </>;
 }

@@ -532,16 +532,7 @@ export function PropertyArrivalGoogle3DMap(props: ArrivalGoogle3DMapProps) {
       const rect = (selector: string) => shell.querySelector(selector)?.getBoundingClientRect();
       const identity = rect('.property-atlas__identity');
       const actions = rect('.property-atlas__actions');
-      const setInset = (name: string, value: number) => {
-        const pixels = `${Math.ceil(value)}px`;
-        if (shell.style.getPropertyValue(name) !== pixels) shell.style.setProperty(name, pixels);
-      };
-      setInset('--atlas-navigation-top', Math.max(
-        (identity?.bottom ?? mapRect.top) - mapRect.top,
-        (actions?.bottom ?? mapRect.top) - mapRect.top,
-      ) + 24);
       const dock = rect('.property-atlas__dock');
-      setInset('--atlas-drawer-top', (dock?.bottom ?? mapRect.top) - mapRect.top + 24);
       const drawer = drawerOpen ? rect('.property-atlas__drawer') : undefined;
       const tools = rect('.property-atlas__view-tools');
       const sidebar = document.querySelector('.workspace-sidebar')?.getBoundingClientRect();

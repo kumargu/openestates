@@ -1,5 +1,13 @@
 {
   "version": 1,
+  "integrated": {
+    "compare": "Compare {count} asking prices",
+    "single": "View price & advertisement",
+    "inactive": "Check advertisement availability",
+    "partial": "{active} of {count} advertisements active",
+    "uncertain": "Compare prices · check home details",
+    "title": "This home’s asking prices"
+  },
   "availability": {
     "active": "Advertised",
     "disappeared": "No longer listed",

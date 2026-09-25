@@ -21,6 +21,7 @@ export type { StoryPlaybackSpeed, StoryScenePlayback };
 type Props = {
   story: PropertyStoryModel;
   actions?: ReactNode;
+  identityDetails?: ReactNode;
   playback?: StoryScenePlayback;
   sectionId?: string;
   showIdentity?: boolean;
@@ -90,6 +91,7 @@ function sameIds(left: string[], right: string[]): boolean {
 export function PropertySceneCard({
   story,
   actions,
+  identityDetails,
   playback,
   sectionId,
   showIdentity = true,
@@ -153,7 +155,7 @@ export function PropertySceneCard({
       aria-labelledby="property-scene-title"
     >
       {showIdentity && !overlayIdentity && (
-        <PropertySceneIdentity story={story} actions={actions} />
+        <><PropertySceneIdentity story={story} actions={actions} />{identityDetails}</>
       )}
 
       {hasImages && (
@@ -171,7 +173,7 @@ export function PropertySceneCard({
           onOpenGallery={usableGalleryUrls.length > 0 ? openGallery : undefined}
           onUsableFramesChange={syncUsableFrames}
           stageOverlay={overlayIdentity ? (
-            <PropertySceneIdentity story={story} actions={actions} />
+            <><PropertySceneIdentity story={story} actions={actions} />{identityDetails}</>
           ) : undefined}
         />
       )}

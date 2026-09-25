@@ -102,7 +102,7 @@ function waterfordApiFixturePlugin(mode: string): Plugin {
   return {
     name: 'waterford-api-fixture',
     configureServer(server) {
-      if (mode !== 'waterford') return
+      if (mode !== 'waterford' && mode !== 'inventory') return
 
       const fixtureRoot = resolve(frontendRoot, 'fixtures/prestige-waterford-api')
       const manifest = JSON.parse(
@@ -149,6 +149,7 @@ export default defineConfig(({ command, mode }) => {
         allow: [resolve(frontendRoot, '..')],
       },
       proxy: {
+        ...(mode === 'inventory' ? { '/api/inventory': 'http://127.0.0.1:4019' } : {}),
         '/api': 'http://127.0.0.1:4000',
         '/media': 'http://127.0.0.1:4000',
       },

@@ -1,9 +1,11 @@
 # Inventory Truth preview (#148)
 
-A fixture-driven search → property → evidence → saved-home journey. It reuses the
-real `PropertySceneCard`, photo viewer, `PropertySearchStrip`, brand and design
-tokens. Its entry point is separate from the production app. The scenario picker
-switches alternative data states; those scenarios are **not** ten real homes.
+The primary preview now runs inside the **actual PropertyPage and WorkspaceFrame**:
+the atlas, photos, reviews, Save, Note and sidebar are the existing components.
+An explicit dev-only adapter binds one example unit to the archived Waterford
+property context. The scenario picker switches alternative evidence states;
+these are **not** ten real homes. Neither unit identity nor price is inferred
+from the society's name, measurements or project price range.
 
 ## Run
 
@@ -14,10 +16,27 @@ npm run dev:inventory-api
 npm run dev:inventory
 ```
 
-Open http://127.0.0.1:5191/ or
-http://127.0.0.1:5191/property/four-ads?context=inventory-preview&qf=q148.
-Use the scenario selector for all ten states. Save/unsave uses a separate,
-versioned preview storage key and never changes production saved homes.
+Open http://127.0.0.1:5192/property/discovered-prestige-waterford-3bhk.
+Use the scenario selector for all ten states. This uses the normal property Save
+and Note controls on the preview origin; they refer to the fixture property, not
+to a newly promoted canonical unit. They do not modify storage on another origin.
+
+The integrated mode is not a production feature flag. A normal production build
+does not contain the mock API client, schemas, adapter or preview styles. Before
+production wiring, the property-bound identity view must come from #144's promoted
+unit contract. The society's old price and size are replaced in the preview
+identity, and its old price is not emitted in page metadata or JSON-LD.
+
+Google rendering requires the existing `VITE_GOOGLE_MAPS_API_KEY` in local Vite
+configuration. Without a key the real map-unavailable state remains; prices,
+photos, reviews and notes still work. Do not commit credentials. The captured
+context is an archived renderer fixture, not a production evidence-admission claim.
+
+The earlier isolated search/saved-unit scenario harness remains available with
+`npm run dev:inventory-scenarios` at http://127.0.0.1:5191/. It exercises the
+future canonical-unit search/save contract with separate versioned storage.
+It is no longer the primary property-design preview. Both hosts share the same
+API, receipt renderer and scenario definitions.
 
 The Rust service binds **loopback only**, port 4019. The launch command compiles
 the isolated crate, materializes a fresh temporary Parquet snapshot, prints its
@@ -74,7 +93,7 @@ CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git cargo test --manifest-path ../backend/pr
 git diff --check
 ```
 
-Browser tests start the two preview servers if needed. Install Playwright Chromium
+Browser tests start the API and both preview servers if needed. Install Playwright Chromium
 or set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to an installed Chrome executable.
 The browser suite uses the real Parquet API; only its failure tests intercept
 responses. Screenshots are written to `frontend/test-results/inventory`.
@@ -88,7 +107,7 @@ entering UI state. No production wire DTO is changed.
 This is a design and aggregation contract, not production identity resolution.
 Bindings, current markers, comparable eligibility and registration reliability
 are explicit mock assertions. A fixed carried search sentence exercises layout;
-this preview does not claim that a live search engine proved the hospital match.
+that harness does not claim that a live search engine proved the hospital match.
 Saved homes retain IDs only; no invented “since saved” deltas are shown.
 
 #144 still owns collectors, source adjudication, real canonical-home matching,

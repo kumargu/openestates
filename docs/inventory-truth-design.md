@@ -1,5 +1,56 @@
 # Inventory Truth — issue #148
 
+## Current decision: integrate with the real property page
+
+The first standalone prototype made the evidence legible, but did not prove its
+place among the property's controls. Following buyer feedback, the primary preview
+now uses the actual PropertyPage, WorkspaceFrame, Google atlas, photos, reviews,
+Save and Note. Open `/property/discovered-prestige-waterford-3bhk` on port 5192.
+
+The title owns configuration, measured area and floor. Directly below, one asking
+range and an explicit **Compare 4 asking prices** action make the feature findable
+without adding another toolbar item. Uncertain identity changes that action to
+**Compare prices · check home details**. No active ask means no invented number.
+The previous society price and measurement are not repeated alongside the unit.
+
+Price receipts, photos and nearby places use **one existing atlas panel**, not
+stacked popovers. Switching panels leaves route, search context and scroll intact.
+Opening Note or visiting Reviews closes the panel. Save retains the normal page
+behavior. Escape/Close restores the exact opener after it becomes visible again.
+The photographic fallback renders the same receipt content beneath identity and
+before media, using an inline disclosure.
+
+Desktop retains the map beside the panel. On narrow screens the panel replaces
+the action and exploration controls temporarily, leaves the home identity above,
+and ends above bottom navigation. Its contents scroll independently. There is no
+swipe-only interaction, dimming, tutorial caption, default raw receipt ID or
+decorative chart. Closing restores the controls without changing page position.
+
+The component hosting the controls now measures their actual height, including
+wrapped titles. Google consumes those measured positions for camera fitting;
+it no longer owns UI placement. This also prevents overlapping controls when
+Google is unavailable. The old renderer-owned positioning writer was removed.
+
+### Interaction note
+
+ThreeUI's anchored-disclosure research below remains relevant to the price entry
+and viewport containment. Full-page inspection changed the container choice:
+reuse the atlas tray rather than introduce a second floating layer. Rest: one
+price and named action. Hover: ink/underline change. Focus: visible outline and
+focus return. Touch: 44px actions and explicit close. Reduced motion: no panel
+animation. No shaders, hover-only previews, new modal system or decorative motion
+were borrowed.
+
+### Data and production boundary
+
+The Parquet → Rust aggregation → snapshot-pinned API contract is unchanged.
+The dev-only adapter explicitly binds the archived property context to the
+selected mock unit; no production ID matching or fact promotion is claimed.
+Normal production bundles exclude the adapter and inventory-preview data code.
+The integrated Save/Note controls retain the fixture property ID; unit-level
+saved-home identity still belongs to #144. The isolated search/saved-unit harness
+remains a separate contract check, not the primary UI proposal.
+
 ## Buyer footsteps, before components
 
 Search carries “3 BHK in Whitefield near Manipal Hospital”. The result represents
@@ -51,7 +102,10 @@ Facts       clue >    Facts    | asks            Facts    | receipt
 [     home photo ]    [ photo ]|                 [ photo ]|
 ```
 
-## Choice: B, a footnote attached to the price
+## Initial isolated spike: B, a footnote attached to the price
+
+This section records the first prototype. The integrated decision above supersedes
+its placement: the price entry remains, but receipts use the existing atlas tray.
 
 The first question is “Why are the prices different?”, not “Show me a market
 dashboard”. A small anchored layer answers directly while leaving the title,
@@ -118,27 +172,37 @@ domain/matching/persistence workstream.
 
 ## Verification record
 
-The implemented preview reuses the existing photographic PropertySceneCard and
-PropertySearchStrip, rather than the unavailable Google renderer. It is a separate
-entry point; the production property route and backend are unchanged. The shared
-photo component, facts, search context and save journey establish the integration
-seam. A future atlas integration can supply the same InventoryEvidence component
-at its identity/price location without introducing a second projection.
+The integrated route uses the actual property page and existing archived society
+context. Captures below use the real Google renderer and real property photos;
+only the unit/advertisement facts are synthetic. Google-unavailable behavior is
+also covered by the existing atlas browser contracts. The shared receipt content
+is reused by the atlas panel, photographic fallback and original scenario harness.
 
 ### Screenshots
 
 | Desktop | Mobile |
 |---|---|
-| ![Resting property](assets/inventory-truth/desktop-rest.png) | ![Resting mobile property](assets/inventory-truth/mobile-rest.png) |
-| ![Asking prices opened beside the home](assets/inventory-truth/desktop-evidence.png) | ![Mobile evidence with property identity retained](assets/inventory-truth/mobile-evidence.png) |
-| ![Individual source receipt](assets/inventory-truth/desktop-receipt.png) | ![Conflicting floor visible before and during inspection](assets/inventory-truth/mobile-conflict.png) |
+| ![Actual property and atlas](assets/inventory-truth/integrated-desktop-rest.png) | ![Actual mobile property](assets/inventory-truth/integrated-mobile-rest.png) |
+| ![Prices in the shared atlas panel](assets/inventory-truth/integrated-desktop-evidence.png) | ![Mobile prices above bottom navigation](assets/inventory-truth/integrated-mobile-evidence.png) |
+| ![Photos in the same panel](assets/inventory-truth/integrated-desktop-photos.png) | ![Mobile photos](assets/inventory-truth/integrated-mobile-photos.png) |
+
+[Opened source receipt](assets/inventory-truth/integrated-desktop-receipt.png).
 
 Additional captures of every fixture state, 320px layout, price history and long
 source labels are generated under `frontend/test-results/inventory`.
 
 ### UI critic — property and evidence
 
-Blockers: none remaining in the inspected 1440px, 390px and 320px views.
+Blockers: none remaining in the inspected 1440px, 768px, 390px and 320px views.
+
+Integration fixes: price is now a named action at the title, not a quiet clue in
+a disconnected photo mock. Actual-height positioning prevents toolbar collisions.
+The mobile panel no longer extends behind workspace navigation. It replaces
+competing controls while open. A real browser regression caught focus return to
+the temporarily hidden Photos button; focus restoration now happens after the
+closing render. Notes gained Escape and focus return. Duplicate-copy review found
+and removed the society price/measurements from the example unit's identity and
+the old price from metadata. Observation dates remain inside receipts here.
 
 Fixed: the reused search strip was hidden on desktop and inherited a pill shell
 on mobile; the preview now renders it as plain contextual text. The existing
@@ -158,6 +222,31 @@ independently, leaves the property identity visible and requires no gesture.
 The React best-practices review kept the bundle isolated from production, made
 scroll listeners passive, versioned preview storage, and retained cancellation
 and runtime schema checks at the API boundary.
+
+### Integration validation (25 September)
+
+- Nine inventory browser journeys: real-page panel switching, Save/Note/Reviews,
+  keyboard focus, 320×667/390×844/768×1024 layouts, all ten scenarios, API recovery,
+  photographic fallback, plus the retained search/saved-unit journeys.
+- 307 frontend contracts, lint, prototype build, production build and diff check.
+  Production build requires explicit deployment origins; local validation used
+  `https://api.openestates.example` and `https://openestates.example`, not a deploy.
+- Existing atlas contracts for photos/reviews with Google unavailable and missing
+  entrance geometry both pass.
+- Actual Google 3D rendering was checked with the existing locally configured key;
+  screenshots contain real terrain and property photography, not a renderer mock.
+- The broader `immersive.spec.ts` desktop journey passes its opening camera-fit
+  assertions but fails at line 73 because no lake polygon is rendered. The same
+  failure reproduces with the pre-integration HEAD atlas/page/style modules in
+  Waterford mode (port 5193). This is recorded, not silently counted as a pass or
+  addressed by changing source geometry in this UI task. Artifacts:
+  `frontend/test-results/atlas-parity/2026-09-25T13-55-50-902Z` (integrated) and
+  `frontend/test-results/atlas-parity/2026-09-25T13-57-10-157Z` (baseline).
+
+The new mobile focus contract caught a real regression introduced by hiding the
+covered controls. Save and registration selectors were corrected to use existing
+accessible names; no product expectation was weakened. Backend aggregation is
+unchanged from its passing Parquet-to-API/admission contracts in the initial PR.
 
 ### Checks
 
