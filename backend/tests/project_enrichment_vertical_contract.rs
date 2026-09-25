@@ -20,8 +20,8 @@ use backend::assets::{
     OsmLocalityBoundariesInput, OsmLocalityBoundaryInput, OsmPowerInfrastructureInput,
     OsmPowerLineObservationRecord, OsmSocietyAccessInput, OsmSocietyStructuresInput,
     ReraProjectPlanFramesInput, ReraProjectSnapshotRecord, ReraRegistryMonthlyInput,
-    SkillFactAnnotationRecord, SkillFactRecord, SocietyGoldManifest, SourceEntitySeed, SourceWatermark,
-    BUILDER_RERA_AGGREGATES_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
+    SkillFactAnnotationRecord, SkillFactRecord, SocietyGoldManifest, SourceEntitySeed,
+    SourceWatermark, BUILDER_RERA_AGGREGATES_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
     EXTERNAL_LISTING_FACTS_ASSET_ID,
 };
 use backend::catalog::CatalogRecords;

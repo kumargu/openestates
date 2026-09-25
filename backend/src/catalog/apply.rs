@@ -183,6 +183,14 @@ struct Operation {
     report: Option<CatalogApplyReport>,
     collection_ms: u64,
     completed: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    terminal_failure: Option<CatalogOperationTerminalFailure>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum CatalogOperationTerminalFailure {
+    StaleBaseRevision,
 }
 
 impl CatalogStore {
@@ -272,6 +280,7 @@ impl CatalogStore {
                     report: None,
                     collection_ms: 0,
                     completed: false,
+                    terminal_failure: None,
                 };
                 self.lake
                     .put_json_if(&key, &operation, |current: Option<&Operation>| {
@@ -286,9 +295,17 @@ impl CatalogStore {
             return Err(invalid("operation ID already names a different request"));
         }
         if operation.completed {
-            return operation
-                .report
-                .ok_or_else(|| invalid("completed operation has no report"));
+            if let Some(report) = operation.report {
+                return Ok(report);
+            }
+            return match operation.terminal_failure {
+                Some(CatalogOperationTerminalFailure::StaleBaseRevision) => {
+                    Err(CatalogError::CasConflict)
+                }
+                None => Err(invalid(
+                    "completed operation has no report or terminal failure",
+                )),
+            };
         }
         let now = Utc::now();
         if operation.lease_owner.is_some()
@@ -325,6 +342,12 @@ impl CatalogStore {
             }
         }
         if pointer != operation.base {
+            // A stale base can never be resumed without silently rebasing the
+            // request. Close it as a terminal failure so it does not remain an
+            // in-flight operation forever; collected immutable inputs remain.
+            operation.completed = true;
+            operation.terminal_failure = Some(CatalogOperationTerminalFailure::StaleBaseRevision);
+            self.save_operation(&key, &mut operation).await?;
             return Err(CatalogError::CasConflict);
         }
         if operation.producer_hash != producer_hash {
@@ -634,7 +657,8 @@ impl CatalogStore {
                     }
                     let prior_input = work.inputs.get(&asset).cloned();
                     if collector.scope == "shared"
-                        && operation.shared_materializations.contains_key(&asset)
+                        && (operation.shared_materializations.contains_key(&asset)
+                            || active_shared.contains(&asset))
                     {
                         continue;
                     }
@@ -646,11 +670,24 @@ impl CatalogStore {
                         .requires
                         .iter()
                         .any(|dependency| changed.contains(dependency));
+                    let reusable_input = input_lineage_is_compatible(
+                        &asset,
+                        scope,
+                        &work.inputs,
+                        &work.input_lineage,
+                        collector,
+                    );
                     if !refresh.contains(&asset)
                         && !dependency_changed
-                        && (prior_input.is_some() || pinned)
+                        && (reusable_input || (prior_input.is_none() && pinned))
                     {
                         continue;
+                    }
+                    if prior_input.is_some() && !reusable_input {
+                        // Never feed a collector an input whose owner or pinned
+                        // dependency references no longer match this snapshot.
+                        work.inputs.remove(&asset);
+                        work.input_lineage.remove(&asset);
                     }
                     if !operation.collections.contains_key(&collection_id) {
                         let mut dependencies = serde_json::Map::new();
@@ -1428,6 +1465,42 @@ fn collection_order(
         visit(asset, config, wanted, &mut BTreeSet::new(), &mut order)?;
     }
     Ok(order)
+}
+
+fn input_lineage_is_compatible(
+    asset: &str,
+    owner: &str,
+    inputs: &BTreeMap<String, ArtifactRef>,
+    lineage: &BTreeMap<String, CatalogInputLineage>,
+    collector: &Collector,
+) -> bool {
+    if !inputs.contains_key(asset) {
+        return false;
+    }
+    let Some(lineage) = lineage.get(asset) else {
+        return false;
+    };
+    if lineage.owner != owner || lineage.producer_hash.trim().is_empty() {
+        return false;
+    }
+    if collector
+        .requires
+        .iter()
+        .any(|dependency| !inputs.contains_key(dependency))
+    {
+        return false;
+    }
+    let expected_dependencies = collector
+        .requires
+        .iter()
+        .chain(&collector.context)
+        .filter_map(|dependency| {
+            inputs
+                .get(dependency)
+                .map(|reference| (dependency.clone(), reference.clone()))
+        })
+        .collect::<BTreeMap<_, _>>();
+    lineage.dependencies == expected_dependencies
 }
 fn operation_key(id: &str) -> Result<LakeKey, CatalogError> {
     if id.is_empty()

@@ -2035,13 +2035,21 @@ mod tests {
             .apply_with_provider(apply_request("winner"), project, &NoCollection)
             .await
             .unwrap();
-        assert!(matches!(
-            store
-                .apply_with_provider(stale, project, &NoCollection)
-                .await
-                .unwrap_err(),
-            CatalogError::CasConflict
-        ));
+        for _ in 0..2 {
+            assert!(matches!(
+                store
+                    .apply_with_provider(stale.clone(), project, &NoCollection)
+                    .await
+                    .unwrap_err(),
+                CatalogError::CasConflict
+            ));
+        }
+        let stale_operation: serde_json::Value = lake
+            .get_json(&LakeKey::new("manifests/catalog/operations/stale.json".to_string()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(stale_operation["completed"], true);
+        assert_eq!(stale_operation["terminal_failure"], "stale_base_revision");
         let mut remove = apply_request("remove-beta");
         remove.removals.push("society:beta".into());
         let removed = store

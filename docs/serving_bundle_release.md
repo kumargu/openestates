@@ -42,6 +42,11 @@ cargo run --bin openestates-catalog -- undo
   collection.
 - `undo` swaps current and previous generations.
 
+An operation whose saved base revision is no longer current is closed as a
+terminal `stale_base_revision` failure. Repeating it returns the same conflict;
+the catalog never rebases it, and its immutable collected inputs remain
+available for diagnosis or an explicit new operation.
+
 Every mutating command builds and validates first, then compare-and-swaps the
 pointer. A corrupt snapshot, structural error, empty projected property set,
 or CAS conflict leaves `dev` unchanged.
