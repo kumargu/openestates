@@ -18,6 +18,8 @@ The existing atlas could not render Google locally; its identity, navigation and
 photo interaction remained inspectable. The original checkout also has an
 unfinished merge and a missing frontend dependency. Work is isolated at
 `openestates-issue-148`, based on `7e3bb6bf`.
+The review branch was subsequently rebased onto `c11e00ef` (current main) and
+revalidated; the shared story model's retired arrival field was removed.
 
 ## Three structural proposals
 
@@ -164,7 +166,7 @@ and runtime schema checks at the API boundary.
   invariance, timestamp independence, invalid bindings/history and tampering.
 - Rust `cargo clippy --all-targets -- -D warnings`: clean.
 - Frontend: lint, prototype typecheck/build, production typecheck/build, and all
-  308 existing frontend tests pass. The main build reports existing mixed JSON
+  307 existing frontend tests pass on current main. The main build reports existing mixed JSON
   import-attribute and large-chunk warnings.
 - Four browser journeys pass against the real preview API: search/save/return,
   all fixture states, keyboard/touch/mobile/reduced motion, and failures including

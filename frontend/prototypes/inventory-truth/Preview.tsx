@@ -56,7 +56,7 @@ function HomeView({ summary, catalog, saved, onSave, onRefreshCatalog }: { summa
   const story: PropertyStoryModel = {
     identity: { propertyId: home.id, title: home.title, location: home.location, facts: physicalFacts(home).map((value, index) => ({ key: String(index), value })) },
     media: { frames: [{ id: "society-exterior", url: image, role: "exterior", sourceType: "fixture", lifecycle: "unknown" }], galleryUrls: [image] },
-    map: { available: false }, arrival: { frames: [] }, reviews: { state: "missing" }, recordCards: [],
+    map: { available: false }, reviews: { state: "missing" }, recordCards: [],
     coverage: { level: "sparse", availableDecks: 1, totalDecks: 1 }, motionSeed: 0, motionTheme: "still", decks: [],
   };
   const context: PropertySearchContext = {
