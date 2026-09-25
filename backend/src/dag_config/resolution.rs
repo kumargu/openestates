@@ -7,6 +7,8 @@ use super::loader::{dag_root, load_json, DagConfigError};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ResolutionPoliciesFile {
     pub version: u32,
+    pub inventory_evidence: InventoryEvidencePolicy,
+    pub identity_evidence: EvidenceSourcePolicy,
     #[serde(default)]
     pub default_strategy: Option<String>,
     #[serde(default)]
@@ -23,6 +25,31 @@ pub struct ResolutionPoliciesFile {
     pub market_locality: MarketLocalityPolicy,
     #[serde(default)]
     pub overrides: HashMap<String, ResolutionOverride>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct InventoryEvidencePolicy {
+    pub fact_key_pattern: String,
+    #[serde(flatten)]
+    pub source: EvidenceSourcePolicy,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EvidenceSourcePolicy {
+    pub minimum_confidence: f32,
+    pub allowed_sources: Vec<String>,
+}
+
+impl EvidenceSourcePolicy {
+    pub fn admits(&self, source: &str, confidence: f32, policies: &ResolutionPoliciesFile) -> bool {
+        confidence.is_finite()
+            && (0.0..=1.0).contains(&confidence)
+            && capped_confidence(source, confidence, policies) >= self.minimum_confidence
+            && self
+                .allowed_sources
+                .iter()
+                .any(|allowed| normalize_source_type(allowed) == normalize_source_type(source))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -179,6 +206,31 @@ pub fn resolution_policies_path() -> std::path::PathBuf {
 
 pub fn load_resolution_policies() -> Result<ResolutionPoliciesFile, DagConfigError> {
     let policies: ResolutionPoliciesFile = load_json(&resolution_policies_path())?;
+    for rule in [
+        &policies.inventory_evidence.source,
+        &policies.identity_evidence,
+    ] {
+        if !rule.minimum_confidence.is_finite()
+            || rule.minimum_confidence <= 0.0
+            || rule.minimum_confidence > 1.0
+            || rule.allowed_sources.is_empty()
+            || rule
+                .allowed_sources
+                .iter()
+                .any(|source| source.trim().is_empty())
+        {
+            return Err(DagConfigError::InvalidConfig(
+                "evidence admission requires eligible sources and a positive confidence threshold"
+                    .into(),
+            ));
+        }
+    }
+    let pattern = &policies.inventory_evidence.fact_key_pattern;
+    if !pattern.starts_with('^') || !pattern.ends_with('$') || regex::Regex::new(pattern).is_err() {
+        return Err(DagConfigError::InvalidConfig(
+            "inventory evidence requires an anchored fact-key pattern".into(),
+        ));
+    }
     let topology = &policies.spatial_topology;
     let market = &policies.market_locality;
     if !(0.0..=1.0).contains(&topology.minimum_society_overlap_ratio)
@@ -435,6 +487,22 @@ pub fn normalize_source_type(source_type: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn evidence_admission_applies_source_caps_and_confidence_bounds() {
+        let mut policies = load_resolution_policies().unwrap();
+        let rule = policies.inventory_evidence.source.clone();
+        assert!(rule.admits("ExternalListing", rule.minimum_confidence, &policies));
+        for confidence in [0.0, rule.minimum_confidence - 0.01, -0.1, f32::NAN, 1.1] {
+            assert!(!rule.admits("ExternalListing", confidence, &policies));
+        }
+        assert!(!rule.admits("UnverifiedSource", 1.0, &policies));
+        policies.source_caps.insert(
+            normalize_source_type("ExternalListing"),
+            rule.minimum_confidence - 0.01,
+        );
+        assert!(!rule.admits("ExternalListing", 1.0, &policies));
+    }
 
     #[test]
     fn configured_sources_order_by_tier() {

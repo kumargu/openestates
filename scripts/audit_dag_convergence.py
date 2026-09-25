@@ -36,7 +36,7 @@ REQUIRED_CONFIG_FILES = (
     "app/config/dag/search_intent.json",
     "app/config/dag/search_guardrails.json",
     "app/config/dag/nearby_place_categories.json",
-    "app/config/dag/ui_surfaces.json",
+    "app/config/ui/property-context.json",
     "app/config/dag/evidence_sections.json",
     "app/config/dag/scoring_policy.json",
     "app/config/dag/fact_registry.json",
@@ -245,7 +245,7 @@ def collect_terms(root: Path) -> list[Term]:
     add_search_intent_terms(terms, read_json(dag / "search_intent.json"))
     add_policy_terms(terms, read_json(dag / "search_guardrails.json"), "search guardrails")
     add_nearby_category_terms(terms, read_json(dag / "nearby_place_categories.json"))
-    add_ui_surface_terms(terms, read_json(dag / "ui_surfaces.json"))
+    add_ui_surface_terms(terms, read_json(dag.parent / "ui" / "property-context.json"))
     add_evidence_section_terms(terms, read_json(dag / "evidence_sections.json"))
     add_scoring_policy_terms(terms, read_json(dag / "scoring_policy.json"))
     add_fact_registry_terms(terms, read_json(dag / "fact_registry.json"))

@@ -5,12 +5,11 @@ use std::collections::{HashMap, HashSet};
 use crate::dag_config::{
     nearby_place_category_for_fact_key, requested_nearby_place_categories, search_resolution_config,
 };
-use crate::knowledge::node::RootSource;
-use crate::knowledge::{FactValue, KnowledgeGraph};
+use crate::knowledge::FactValue;
+use crate::models::Property;
 #[cfg(test)]
 use crate::models::Society;
-use crate::models::{KgEntityRefs, Property};
-use crate::routes::enrichment::{area_node_id, property_node_id, society_node_id};
+use crate::routes::enrichment::society_node_id;
 use crate::scoring::BestEffortRankingTier;
 use crate::serving::{
     EvidenceId, GoogleReviewEvidence, ServingFactIndex, ServingFactRecord,
@@ -21,11 +20,9 @@ use super::analyzer;
 use super::ast::ConstraintTerm;
 #[cfg(test)]
 use super::ast::IntentAst;
-use super::evaluation::{InventoryOption, VerifiedMatch};
+use super::evaluation::{BooleanEvaluation, InventoryOption, VerifiedMatch};
 use super::geo;
-use super::index::{
-    property_matches_excluded_builder, property_matches_excluded_society, SearchIndex,
-};
+use super::index::SearchIndex;
 use super::intent::{ConstraintOperator, HardConstraint, SearchIntent};
 use super::resolver::{is_resolvable_entity_name, query_contains_lower_text};
 use super::schema::{
@@ -45,17 +42,18 @@ pub struct CandidateEvaluator;
 
 #[derive(Clone, Copy)]
 pub struct SearchEvaluationContext<'a> {
+    pub identities: Option<&'a super::identity::IdentityEvaluationIndex>,
     pub options: &'a HashMap<String, InventoryOption>,
     pub spatial_matches: &'a HashMap<String, Vec<VerifiedMatch>>,
     pub snapshot_identity: &'a str,
 }
 
-pub struct CandidateEvaluationRequest<'a, 'geo> {
+pub struct CandidateEvaluationRequest<'a> {
     pub properties: &'a [Property],
     pub search_index: Option<&'a SearchIndex>,
     pub extra_candidate_ids: Option<&'a [String]>,
     pub candidate_property_indexes: Option<Vec<usize>>,
-    pub geo_query: Option<&'a geo::GeoSearchQuery<'geo>>,
+    pub geo_query: Option<&'a geo::GeoSearchQuery>,
     pub serving_facts: Option<&'a ServingFactIndex>,
     pub society_names: &'a std::collections::HashMap<String, String>,
     pub query: &'a str,
@@ -65,10 +63,9 @@ pub struct CandidateEvaluationRequest<'a, 'geo> {
 }
 
 const COORDINATE_NAMED_PLACE_PROOF_RANK: u8 = 1;
-const SERVING_NAMED_PLACE_PROOF_RANK: u8 = 2;
 
 impl CandidateEvaluator {
-    pub fn search(request: CandidateEvaluationRequest<'_, '_>) -> Vec<SearchResultCard> {
+    pub fn search(request: CandidateEvaluationRequest<'_>) -> Vec<SearchResultCard> {
         Self::search_compiled_with_candidate_property_indexes(
             request.properties,
             request.search_index,
@@ -90,7 +87,7 @@ impl CandidateEvaluator {
         search_index: Option<&SearchIndex>,
         extra_candidate_ids: Option<&[String]>,
         candidate_property_indexes: Option<Vec<usize>>,
-        geo_query: Option<&geo::GeoSearchQuery<'_>>,
+        geo_query: Option<&geo::GeoSearchQuery>,
         serving_facts: Option<&ServingFactIndex>,
         society_names: &std::collections::HashMap<String, String>,
         query: &str,
@@ -181,31 +178,7 @@ impl CandidateEvaluator {
                 }
 
                 let named_place_evidence = geo_query
-                    .map(|query| {
-                        let mut evidence = serving_facts
-                            .map(|facts| {
-                                serving_named_place_evidence_for_entity(
-                                    facts,
-                                    &p.society_id,
-                                    society_entity_id.as_ref(),
-                                    query,
-                                )
-                            })
-                            .unwrap_or_default();
-                        for fallback in query.evidence_for_society(society_entity_id.as_ref()) {
-                            if !evidence.iter().any(|existing| {
-                                existing.place_entity_id == fallback.place_entity_id
-                                    || (existing
-                                        .place_name
-                                        .eq_ignore_ascii_case(&fallback.place_name)
-                                        && (existing.distance_km - fallback.distance_km).abs()
-                                            < 0.05)
-                            }) {
-                                evidence.push(fallback.into());
-                            }
-                        }
-                        evidence
-                    })
+                    .map(|query| project_named_place_evidence(&verified_matches, query))
                     .unwrap_or_default();
 
                 // Soft constraint: area — exact match keeps full score,
@@ -244,6 +217,7 @@ impl CandidateEvaluator {
                     p,
                     serving_facts,
                     society_entity_id.as_ref(),
+                    evaluation,
                 )?;
 
                 let society_name = society_names
@@ -320,17 +294,11 @@ impl CandidateEvaluator {
                     .map(|evidence| evidence.distance_km)
                     .min_by(f64::total_cmp);
                 primary_intent_score += named_place_intent_score(&named_place_evidence);
-                let named_place_proof_rank = named_place_evidence
-                    .iter()
-                    .map(|evidence| {
-                        if evidence.scoring_method == geo::NAMED_PLACE_FACT_SCORING_METHOD {
-                            SERVING_NAMED_PLACE_PROOF_RANK
-                        } else {
-                            COORDINATE_NAMED_PLACE_PROOF_RANK
-                        }
-                    })
-                    .max()
-                    .unwrap_or(0);
+                let named_place_proof_rank = if named_place_evidence.is_empty() {
+                    0
+                } else {
+                    COORDINATE_NAMED_PLACE_PROOF_RANK
+                };
                 for evidence in named_place_evidence {
                     total_facts_consulted += 1;
                     graph_count += 1;
@@ -512,56 +480,7 @@ impl CandidateEvaluator {
                     return None;
                 }
 
-                let mut card = crate::models::PropertyCard {
-                    id: p.id.clone(),
-                    kg_entity_refs: KgEntityRefs {
-                        property_entity_id: property_node_id(&p.id),
-                        society_entity_id: society_node_id(&p.society_id),
-                        area_entity_id: area_node_id(&p.area),
-                        builder_entity_id: None,
-                        source_entity_ids: Vec::new(),
-                    },
-                    title: p.title.clone(),
-                    area: p.area.clone(),
-                    price: p.price,
-                    price_min: p.price_min,
-                    price_max: p.price_max,
-                    price_per_sqft: p.price_per_sqft,
-                    bhk: p.bhk,
-                    sqft: p.carpet_area_sqft,
-                    carpet_area_sqft: p.carpet_area_sqft,
-                    super_builtup_sqft: p.super_builtup_sqft,
-                    society_name: society_name.to_string(),
-                    builder_name: p.builder_name.clone(),
-                    images: p.images.clone(),
-                    hero_image: p.hero_image.clone(),
-                    transparency_tags: crate::routes::enrichment::compact_transparency_tags(
-                        &p.transparency_tags,
-                    ),
-                    description_summary: p.description_summary.clone(),
-                    possession_status: p.possession_status.clone(),
-                    metro_distance_mins: p.metro_distance_mins,
-                    floor: p.floor,
-                    total_floors: p.total_floors,
-                    facing: p.facing.clone(),
-                    google_rating: None,
-                    google_review_count: None,
-                    google_reviews_url: None,
-                    society_land_acres: None,
-                    open_space_pct: None,
-                    root_source: None,
-                    project_status: None,
-                    project_status_display: None,
-                    home_state_display: None,
-                    builder_delivery_display: None,
-                    data_freshness: None,
-                    floor_plan_preview_url: None,
-                    plan_carpet_area_sqft: None,
-                    plan_sale_area_sqft: None,
-                    plan_configuration_type: None,
-                    decision_labels: Vec::new(),
-                    decision_check_summary: None,
-                };
+                let mut card = p.to_card(society_name);
                 if let Some(serving_facts) = serving_facts {
                     enrich_card_from_serving_facts(
                         &mut card,
@@ -799,7 +718,8 @@ fn diversify_ranked_results(
                         || !candidate
                             .result
                             .card
-                            .society_name
+                            .kg_entity_refs
+                            .society_entity_id
                             .eq_ignore_ascii_case(&last_society)
                 })
             })
@@ -811,12 +731,18 @@ fn diversify_ranked_results(
         if candidate
             .result
             .card
-            .society_name
+            .kg_entity_refs
+            .society_entity_id
             .eq_ignore_ascii_case(&last_society)
         {
             consecutive += 1;
         } else {
-            last_society = candidate.result.card.society_name.clone();
+            last_society = candidate
+                .result
+                .card
+                .kg_entity_refs
+                .society_entity_id
+                .clone();
             consecutive = 1;
         }
         diversified.push(candidate);
@@ -824,33 +750,6 @@ fn diversify_ranked_results(
 
     diversified.extend(pending.into_iter().flatten());
     *results = diversified;
-}
-
-#[cfg(test)]
-fn distance_m(distance_km: f64) -> Option<u32> {
-    distance_km
-        .is_finite()
-        .then(|| (distance_km * 1000.0).round())
-        .filter(|meters| *meters >= 0.0 && *meters <= u32::MAX as f64)
-        .map(|meters| meters as u32)
-}
-
-impl From<geo::HaversineEvidence> for NamedPlaceEvidence {
-    fn from(evidence: geo::HaversineEvidence) -> Self {
-        Self {
-            place_entity_id: evidence.place_entity_id,
-            place_name: evidence.place_name,
-            distance_km: evidence.distance_km,
-            fact_key: geo::DISTANCE_TO_PLACE_FACT_KEY.to_string(),
-            display: evidence.display,
-            normalized_score: evidence.normalized_score,
-            score_delta: evidence.score_delta,
-            confidence: evidence.confidence,
-            source_type: "Computed".to_string(),
-            scoring_method: geo::HAVERSINE_SCORING_METHOD.to_string(),
-            evidence_identity: None,
-        }
-    }
 }
 
 pub(crate) fn enrich_card_from_serving_facts(
@@ -1024,149 +923,46 @@ struct NamedPlaceEvidence {
     evidence_identity: Option<MatchEvidenceIdentity>,
 }
 
-fn serving_named_place_evidence_for_entity(
-    serving_facts: &ServingFactIndex,
-    society_id: &str,
-    society_entity_id: &str,
-    geo_query: &geo::GeoSearchQuery<'_>,
+fn project_named_place_evidence(
+    matches: &[VerifiedMatch],
+    query: &geo::GeoSearchQuery,
 ) -> Vec<NamedPlaceEvidence> {
-    if !geo_query.allows_society_evidence(society_id) {
-        return Vec::new();
-    }
-    let Some(rows) = serving_facts.entity(society_entity_id) else {
-        return Vec::new();
-    };
-    let mut matches = Vec::new();
-
-    for clause in geo_query.resolved_clauses() {
-        let mut best: Option<NamedPlaceEvidence> = None;
-        for fact in &rows.facts {
-            if !evidence_is_confident_enough(
-                &fact.source_type,
-                fact.confidence,
-                geo::NAMED_PLACE_FACT_SCORING_METHOD,
-            ) {
-                continue;
-            }
-            let metadata = rows.search_metadata_for_fact_key(&fact.fact_key).next();
-            for snippet in serving_fact_text_snippets(fact) {
-                for place in geo_query.places_for_clause(clause) {
-                    if !geo_query.fact_key_matches_resolved_place(&fact.fact_key, place)
-                        || !geo::nearby_fact_mentions_place(&snippet, &place.name)
-                    {
-                        continue;
-                    }
-                    let Some(distance_km) =
-                        distance_for_nearby_place_snippet(&snippet, &place.name)
-                    else {
-                        continue;
-                    };
-                    if geo_query
-                        .clause_distance_limit_km(clause)
-                        .is_some_and(|max_distance| distance_km > max_distance)
-                    {
-                        continue;
-                    }
-                    let Some(evidence) =
-                        named_place_serving_fact_evidence(fact, metadata, place, distance_km)
-                    else {
-                        continue;
-                    };
-                    if best.as_ref().is_none_or(|current| {
-                        evidence.score_delta > current.score_delta
-                            || ((evidence.score_delta - current.score_delta).abs() < f64::EPSILON
-                                && evidence.confidence > current.confidence)
-                    }) {
-                        best = Some(evidence);
-                    }
-                }
-            }
-        }
-        if let Some(best) = best {
-            matches.push(best);
-        }
-    }
-
-    matches
-}
-
-#[cfg(test)]
-fn serving_named_place_evidence(
-    serving_facts: &ServingFactIndex,
-    society_id: &str,
-    geo_query: &geo::GeoSearchQuery<'_>,
-) -> Vec<NamedPlaceEvidence> {
-    serving_named_place_evidence_for_entity(
-        serving_facts,
-        society_id,
-        &society_node_id(society_id),
-        geo_query,
-    )
-}
-
-fn named_place_serving_fact_evidence(
-    fact: &ServingFactRecord,
-    metadata: Option<&ServingSearchMetadataRecord>,
-    place: &geo::ResolvedGeoPlace,
-    distance_km: f64,
-) -> Option<NamedPlaceEvidence> {
-    if !distance_km.is_finite() || distance_km < 0.0 {
-        return None;
-    }
     let policy = schema::ranking_policy();
-    let normalized_score = geo::normalized_distance_score(
-        distance_km,
-        policy.nearby_distance_full_score_km,
-        policy.nearby_distance_zero_score_km,
-    )?;
-
-    let weight = metadata
-        .and_then(|metadata| metadata.scoring_weight)
-        .map(f64::from)
-        .unwrap_or(1.0)
-        .clamp(0.0, 2.0);
-    let score_delta = (weight
-        + normalized_score * policy.nearby_distance_bonus_cap.max(0.0)
-        + normalized_score * policy.named_place_score_weight.max(0.0))
-    .clamp(0.0, 3.0);
-    if score_delta <= 0.0 {
-        return None;
-    }
-
-    Some(NamedPlaceEvidence {
-        place_entity_id: place.entity_id.clone(),
-        place_name: place.name.clone(),
-        distance_km,
-        fact_key: fact.fact_key.clone(),
-        display: format!("{distance_km:.1} km from {}", place.name),
-        normalized_score,
-        score_delta,
-        confidence: fact.confidence.min(place.confidence),
-        source_type: fact.source_type.clone(),
-        scoring_method: geo::NAMED_PLACE_FACT_SCORING_METHOD.to_string(),
-        evidence_identity: match_evidence_identity(fact),
-    })
-}
-
-fn serving_fact_text_snippets(fact: &ServingFactRecord) -> Vec<String> {
-    let mut snippets = fact_text_snippets(&fact.value);
-    if let Some(value_text) = fact.value_text.as_deref() {
-        if !snippets.iter().any(|snippet| snippet == value_text) {
-            snippets.push(value_text.to_string());
-        }
-    }
-    snippets
-}
-
-fn distance_for_nearby_place_snippet(snippet: &str, place_name: &str) -> Option<f64> {
-    snippet
-        .split(['\n', ';', '|'])
-        .find_map(|segment| {
-            geo::nearby_fact_mentions_place(segment, place_name)
-                .then(|| geo::extract_first_distance_km(segment))
-                .flatten()
+    matches
+        .iter()
+        .filter_map(|matched| {
+            if matched.unit.as_deref() != Some("km") || matched.evidence_refs.is_empty() {
+                return None;
+            }
+            let target = matched.target_entity_id.as_deref()?;
+            let place = query
+                .resolved_places()
+                .iter()
+                .find(|place| place.entity_id == target)?;
+            let distance_km = matched.value?;
+            let normalized_score = geo::normalized_distance_score(
+                distance_km,
+                policy.named_place_full_score_km,
+                policy.named_place_zero_score_km,
+            )?;
+            Some(NamedPlaceEvidence {
+                place_entity_id: target.to_string(),
+                place_name: place.name.clone(),
+                distance_km,
+                fact_key: matched
+                    .fact_key
+                    .clone()
+                    .unwrap_or_else(|| query.evidence_fact_key_for_place(place).to_string()),
+                display: format!("{distance_km:.1} km from {}", place.name),
+                normalized_score,
+                score_delta: normalized_score * policy.named_place_score_weight.max(0.0),
+                confidence: matched.confidence?,
+                source_type: "Computed".to_string(),
+                scoring_method: geo::HAVERSINE_SCORING_METHOD.to_string(),
+                evidence_identity: None,
+            })
         })
-        .or_else(|| geo::extract_first_distance_km(snippet))
+        .collect()
 }
 
 fn minimum_evidence_floor(positive_evidence_score: f64, evidence_count: usize) -> f64 {
@@ -1232,7 +1028,7 @@ fn named_place_intent_score(evidence: &[NamedPlaceEvidence]) -> f64 {
 }
 
 fn named_place_query_answers_preference(
-    geo_query: Option<&geo::GeoSearchQuery<'_>>,
+    geo_query: Option<&geo::GeoSearchQuery>,
     candidate_fact_keys: &[String],
 ) -> bool {
     let Some(query) = geo_query else {
@@ -1443,121 +1239,131 @@ fn match_hard_constraints(
     property: &Property,
     serving_facts: Option<&ServingFactIndex>,
     society_entity_id: &str,
+    evaluation: SearchEvaluationContext<'_>,
 ) -> Option<Vec<EvidenceMatch>> {
-    if constraints.is_empty() {
-        return Some(Vec::new());
-    }
-
-    let mut matches = Vec::new();
-
-    for constraint in constraints {
-        let schema = schema::numeric_constraint_schema(&constraint.field)?;
-        if let Some(evidence) = runtime_numeric_constraint_evidence(property, schema, constraint) {
-            matches.push(evidence);
-            continue;
-        }
-        let serving_evaluation = serving_facts
-            .map(|index| {
-                serving_numeric_constraint_evidence(index, society_entity_id, schema, constraint)
+    constraints
+        .iter()
+        .map(|constraint| {
+            let result = numeric_constraint_evaluation(
+                constraint,
+                property,
+                serving_facts,
+                society_entity_id,
+                evaluation,
+            );
+            if result.state != super::evaluation::EvaluationState::Satisfied {
+                return None;
+            }
+            let verified = result.verified_matches.first()?;
+            let reference = verified.evidence_refs.first()?;
+            let schema = schema::numeric_constraint_schema(&constraint.field)?;
+            Some(EvidenceMatch {
+                preference: constraint.raw_text.clone(),
+                fact_key: verified.fact_key.clone()?,
+                fact_key_rank: usize::MAX,
+                display: format!(
+                    "{}: {} {}",
+                    schema.label,
+                    format_measurement(verified.value?),
+                    constraint.unit
+                ),
+                normalized_score: 1.0,
+                ranking_score: 1.0,
+                score_delta: 2.0,
+                confidence: verified.confidence?,
+                source_type: "ServingBundle".to_string(),
+                scoring_method: schema.scoring_method.clone(),
+                reason: format!("proved constraint: {}", constraint.raw_text),
+                evidence_identity: Some(MatchEvidenceIdentity {
+                    subject_entity_id: reference.subject_entity_id.clone(),
+                    evidence_id: reference.evidence_id.clone(),
+                }),
             })
-            .unwrap_or(ConstraintEvaluation::Missing);
-        match serving_evaluation {
-            ConstraintEvaluation::Matched(evidence) => matches.push(*evidence),
-            ConstraintEvaluation::Failed | ConstraintEvaluation::Missing => return None,
-        }
-    }
-
-    Some(matches)
+        })
+        .collect()
 }
 
-fn runtime_numeric_constraint_evidence(
+fn numeric_constraint_evaluation(
+    constraint: &HardConstraint,
     property: &Property,
-    schema: &NumericConstraintSchema,
-    constraint: &HardConstraint,
-) -> Option<EvidenceMatch> {
-    let runtime_field = schema.runtime_field.as_deref()?;
-    let value = match runtime_field {
-        "carpet_area_sqft" => f64::from(property.carpet_area_sqft),
-        "super_builtup_sqft" => f64::from(property.super_builtup_sqft),
-        _ => return None,
-    };
-    let query_unit = schema
-        .query_units
-        .iter()
-        .find(|unit| unit.unit.eq_ignore_ascii_case(&constraint.unit))?;
-    let threshold = constraint.value * query_unit.to_canonical;
-    let matches = match constraint.operator {
-        ConstraintOperator::Min => value + 0.001 >= threshold,
-        ConstraintOperator::Max => value - 0.001 <= threshold,
-    };
-    matches.then(|| EvidenceMatch {
-        preference: constraint.raw_text.clone(),
-        fact_key: runtime_field.to_string(),
-        fact_key_rank: usize::MAX,
-        display: format!(
-            "{}: {} {}",
-            schema.label,
-            format_measurement(value / query_unit.to_canonical),
-            query_unit.unit
-        ),
-        normalized_score: 1.0,
-        ranking_score: 1.0,
-        score_delta: 2.0,
-        confidence: 1.0,
-        source_type: "ServingBundle".to_string(),
-        scoring_method: "runtime-field".to_string(),
-        reason: format!("proved constraint: {}", constraint.raw_text),
-        evidence_identity: None,
-    })
-}
-
-fn serving_numeric_constraint_evidence(
-    serving_facts: &ServingFactIndex,
+    serving_facts: Option<&ServingFactIndex>,
     society_entity_id: &str,
-    schema: &NumericConstraintSchema,
-    constraint: &HardConstraint,
-) -> ConstraintEvaluation {
-    let Some(rows) = serving_facts.entity(society_entity_id) else {
-        return ConstraintEvaluation::Missing;
-    };
-    let Some(query_unit) = schema
-        .query_units
-        .iter()
-        .find(|unit| unit.unit.eq_ignore_ascii_case(&constraint.unit))
-    else {
-        return ConstraintEvaluation::Missing;
-    };
-    let threshold = constraint.value * query_unit.to_canonical;
-    let Some((fact, canonical_value)) = aggregate_numeric_constraint_fact(rows, schema) else {
-        return ConstraintEvaluation::Missing;
-    };
-    let matched = match constraint.operator {
-        ConstraintOperator::Min => canonical_value + 0.001 >= threshold,
-        ConstraintOperator::Max => canonical_value - 0.001 <= threshold,
-    };
-    if !matched {
-        return ConstraintEvaluation::Failed;
+    evaluation: SearchEvaluationContext<'_>,
+) -> BooleanEvaluation {
+    if schema::numeric_constraint_schema(&constraint.field).is_some_and(|schema| !schema.supported)
+    {
+        return BooleanEvaluation::unsupported();
     }
-    let display_value = canonical_value / query_unit.to_canonical;
-    ConstraintEvaluation::Matched(Box::new(EvidenceMatch {
-        preference: constraint.raw_text.clone(),
-        fact_key: fact.fact_key.clone(),
-        fact_key_rank: usize::MAX,
-        display: format!(
-            "{}: {} {}",
-            schema.label,
-            format_measurement(display_value),
-            query_unit.unit
-        ),
-        normalized_score: 1.0,
-        ranking_score: 1.0,
-        score_delta: 2.0,
-        confidence: fact.confidence,
-        source_type: fact.source_type.clone(),
-        scoring_method: schema.scoring_method.clone(),
-        reason: format!("proved constraint: {}", constraint.raw_text),
-        evidence_identity: match_evidence_identity(fact),
-    }))
+    let witness = (|| {
+        let schema = schema::numeric_constraint_schema(&constraint.field)?;
+        let query_unit = schema
+            .query_units
+            .iter()
+            .find(|unit| unit.unit.eq_ignore_ascii_case(&constraint.unit))?;
+        let (value, reference, fact_key, confidence) =
+            if let Some(basis) = &schema.measurement_basis {
+                let option = evaluation.options.get(&property.id)?;
+                let measurement = option.area_measurement.as_ref()?;
+                if basis != "*" && !measurement.basis.eq_ignore_ascii_case(basis) {
+                    return None;
+                }
+                (
+                    measurement.value,
+                    measurement.evidence.clone(),
+                    option.evidence_fact_key.clone()?,
+                    option.confidence,
+                )
+            } else {
+                let rows = serving_facts?.entity(society_entity_id)?;
+                let (fact, value) = aggregate_numeric_constraint_fact(rows, schema)?;
+                let observation = fact.observation.as_ref()?;
+                observation.validate().ok()?;
+                (
+                    value,
+                    crate::serving::EvidenceRef::for_observation(
+                        evaluation.snapshot_identity,
+                        observation,
+                    ),
+                    fact.fact_key.clone(),
+                    fact.confidence,
+                )
+            };
+        reference
+            .validate_for(society_entity_id, evaluation.snapshot_identity)
+            .ok()?;
+        let threshold = constraint.value * query_unit.to_canonical;
+        let satisfied = match constraint.operator {
+            ConstraintOperator::Min => value + 0.001 >= threshold,
+            ConstraintOperator::Max => value - 0.001 <= threshold,
+        };
+        let verified = VerifiedMatch {
+            constraint: Some(constraint.clone()),
+            subject_entity_id: society_entity_id.to_string(),
+            target_entity_id: None,
+            predicate: constraint.raw_text.clone(),
+            relation: match constraint.operator {
+                ConstraintOperator::Min => "at_least",
+                ConstraintOperator::Max => "at_most",
+            }
+            .to_string(),
+            metric: schema.dimension.clone(),
+            value: Some(value / query_unit.to_canonical),
+            unit: Some(constraint.unit.clone()),
+            observation_ids: Vec::new(),
+            evidence_refs: vec![reference],
+            fact_key: Some(fact_key),
+            derived_evidence: None,
+            algorithm_version: "numeric-evaluator-v1".to_string(),
+            confidence: Some(confidence),
+            snapshot_identity: evaluation.snapshot_identity.to_string(),
+        };
+        Some(if satisfied {
+            BooleanEvaluation::satisfied(vec![verified])
+        } else {
+            BooleanEvaluation::unsatisfied_with(vec![verified])
+        })
+    })();
+    witness.unwrap_or_else(BooleanEvaluation::unknown)
 }
 
 fn aggregate_numeric_constraint_fact<'a>(
@@ -1574,14 +1380,40 @@ fn aggregate_numeric_constraint_fact<'a>(
                         .eq_ignore_ascii_case(&format!("{source:?}"))
                 })
             })
+            .filter(|fact| {
+                fact.observation
+                    .as_ref()
+                    .is_some_and(|o| o.validate().is_ok())
+            })
             .filter_map(|fact| {
                 numeric_constraint_fact_value(fact, schema).map(|value| (fact, value))
             })
     });
+    let mut values = values.collect::<Vec<_>>();
+    values.sort_by(|left, right| {
+        let priority = |fact: &crate::serving::ServingFactRecord| {
+            schema
+                .fact_keys
+                .iter()
+                .position(|key| key.eq_ignore_ascii_case(&fact.fact_key))
+        };
+        priority(left.0)
+            .cmp(&priority(right.0))
+            .then_with(|| right.0.confidence.total_cmp(&left.0.confidence))
+            .then_with(|| {
+                left.0
+                    .stable_selection_key()
+                    .cmp(&right.0.stable_selection_key())
+            })
+    });
     match schema.aggregation {
         NumericAggregation::First => values.into_iter().next(),
-        NumericAggregation::Minimum => values.min_by(|left, right| left.1.total_cmp(&right.1)),
-        NumericAggregation::Maximum => values.max_by(|left, right| left.1.total_cmp(&right.1)),
+        NumericAggregation::Minimum => values
+            .into_iter()
+            .min_by(|left, right| left.1.total_cmp(&right.1)),
+        NumericAggregation::Maximum => values
+            .into_iter()
+            .max_by(|left, right| left.1.total_cmp(&right.1)),
     }
 }
 
@@ -1594,15 +1426,8 @@ fn numeric_constraint_fact_value(
             FactValue::Numeric(value) => value,
             _ => return None,
         },
-        NumericFactValueKind::DistanceKmInText => geo::serving_fact_distance_km(fact)?,
     };
     (value.is_finite() && value >= 0.0).then_some(value)
-}
-
-enum ConstraintEvaluation {
-    Missing,
-    Failed,
-    Matched(Box<EvidenceMatch>),
 }
 
 fn serving_preference_evidence(
@@ -1679,7 +1504,7 @@ pub(super) fn required_preference_has_evidence(
     query_lower: &str,
 ) -> bool {
     let Some(serving_facts) = serving_facts else {
-        return preference.polarity == crate::search::intent::Polarity::Negative;
+        return false;
     };
     let builder_entity_id =
         search_index.and_then(|index| index.builder_entity_id_for_property(&property.id));
@@ -1724,6 +1549,9 @@ fn required_negative_preference_is_satisfied(
                 continue;
             };
             for fact in &rows.facts {
+                if match_evidence_identity(fact).is_none() {
+                    continue;
+                }
                 if fact.confidence < schema::ranking_policy().min_support_evidence_confidence
                     || !preference
                         .expanded_keys
@@ -1757,6 +1585,21 @@ fn required_negative_preference_is_satisfied(
     .is_some_and(|evidence| evidence.score_delta >= 0.0)
 }
 
+/// Admission calls the same configured evaluators as ranking; no second scoring registry.
+pub(super) fn preference_capability_supported(
+    facts: &ServingFactIndex,
+    entity_id: &str,
+    fact_key: &str,
+    preference: &str,
+) -> bool {
+    let keys = [fact_key.to_string()];
+    serving_entity_preference_evidence(facts, entity_id, preference, &keys, "")
+        .or_else(|| {
+            serving_entity_negative_preference_evidence(facts, entity_id, preference, &keys)
+        })
+        .is_some_and(|evidence| evidence.evidence_identity.is_some())
+}
+
 fn serving_entity_preference_evidence(
     serving_facts: &ServingFactIndex,
     entity_id: &str,
@@ -1769,6 +1612,9 @@ fn serving_entity_preference_evidence(
 
     let mut best_structured: Option<RankedEvidence> = None;
     for fact in &rows.facts {
+        if match_evidence_identity(fact).is_none() {
+            continue;
+        }
         if schema::search_excludes_fact_key(&fact.fact_key) {
             continue;
         }
@@ -1850,6 +1696,9 @@ fn serving_entity_preference_evidence(
     let schema = schema::text_evidence_schema(preference)?;
     let mut best_text: Option<RankedEvidence> = None;
     for fact in &rows.facts {
+        if match_evidence_identity(fact).is_none() {
+            continue;
+        }
         if schema::search_excludes_fact_key(&fact.fact_key) {
             continue;
         }
@@ -1969,6 +1818,9 @@ fn serving_entity_negative_preference_evidence(
     let mut best: Option<RankedEvidence> = None;
 
     for fact in &rows.facts {
+        if match_evidence_identity(fact).is_none() {
+            continue;
+        }
         if schema::search_excludes_fact_key(&fact.fact_key) {
             continue;
         }
@@ -2107,7 +1959,11 @@ fn negative_evidence_from_fact(
 }
 
 fn match_evidence_identity(fact: &ServingFactRecord) -> Option<MatchEvidenceIdentity> {
+    if crate::serving::admission::inventory_fact_key(&fact.fact_key) {
+        super::evaluation::InventoryObservationValue::from_fact(fact).ok()?;
+    }
     let observation = fact.observation.as_ref()?;
+    fact.validate_observation().ok()?;
     Some(MatchEvidenceIdentity {
         subject_entity_id: observation.subject_entity_id.clone(),
         evidence_id: EvidenceId::Observation(observation.observation_id.clone()),
@@ -2236,17 +2092,19 @@ fn negative_coverage_status(evidence: &EvidenceMatch) -> &'static str {
 }
 
 fn evidence_is_confident_enough(source_type: &str, confidence: f32, scoring_method: &str) -> bool {
-    let source = source_type.to_lowercase();
-    if source == "rera" || source == "computed" {
-        return confidence >= 0.50;
-    }
-    if source == "llm" {
-        return confidence >= schema::ranking_policy().min_llm_evidence_confidence;
-    }
-    if scoring_method == "local" || scoring_method == "local-risk" {
-        return false;
-    }
-    confidence >= schema::ranking_policy().min_support_evidence_confidence
+    let policy = schema::ranking_policy();
+    !policy
+        .excluded_evidence_scoring_methods
+        .iter()
+        .any(|method| method.eq_ignore_ascii_case(scoring_method))
+        && confidence.is_finite()
+        && confidence <= 1.0
+        && confidence
+            >= policy
+                .evidence_confidence_by_source
+                .get(&source_type.to_ascii_lowercase())
+                .copied()
+                .unwrap_or(policy.min_support_evidence_confidence)
 }
 
 fn negative_no_data_penalty(intent: &SearchIntent, preference: &str) -> f64 {
@@ -2618,61 +2476,6 @@ fn format_measurement(value: f64) -> String {
 
 /// Compute a confidence score for a property based on data quality dimensions.
 /// Used by search results (with graph_driven_pct from match explanation).
-pub fn compute_confidence(
-    graph: Option<&KnowledgeGraph>,
-    society_id: &str,
-    graph_driven_pct: f32,
-) -> Option<ConfidenceScore> {
-    let graph = graph?;
-    let node_id = society_node_id(society_id);
-    let node = graph.get_node(&node_id);
-
-    // Source quality: RERA=1.0, Discovered=0.5, Legacy/None=0.3
-    let (source_score, source_explanation) = compute_source_quality(&node);
-
-    // Fact coverage: min(fact_count/configured full-coverage threshold, 1.0)
-    let (coverage_score, coverage_explanation) = compute_fact_coverage(&node);
-
-    // Match quality: graph_driven_pct / 100.0
-    let match_score = (graph_driven_pct / 100.0) as f64;
-    let match_explanation = format!(
-        "{}% of scoring from verified graph data",
-        graph_driven_pct.round() as u32
-    );
-
-    // Observation time is provenance, not a quality signal.
-    let overall = source_score * 0.5 + coverage_score * 0.25 + match_score * 0.25;
-
-    let label = confidence_label(overall);
-
-    let components = vec![
-        ConfidenceComponent {
-            dimension: "source_quality".to_string(),
-            score: source_score,
-            weight: 0.5,
-            explanation: source_explanation,
-        },
-        ConfidenceComponent {
-            dimension: "fact_coverage".to_string(),
-            score: coverage_score,
-            weight: 0.25,
-            explanation: coverage_explanation,
-        },
-        ConfidenceComponent {
-            dimension: "match_quality".to_string(),
-            score: match_score,
-            weight: 0.25,
-            explanation: match_explanation,
-        },
-    ];
-
-    Some(ConfidenceScore {
-        overall: (overall * 100.0).round() / 100.0,
-        label,
-        components,
-    })
-}
-
 fn compute_confidence_from_serving_facts(
     serving_facts: &ServingFactIndex,
     society_entity_id: &str,
@@ -2749,105 +2552,6 @@ fn compute_confidence_from_serving_facts(
     })
 }
 
-/// Compute a confidence score for the detail page, replacing match_quality
-/// (which is meaningless outside search context) with fact_source_quality
-/// (average confidence of the node's facts).
-pub fn compute_confidence_for_detail(
-    graph: Option<&KnowledgeGraph>,
-    society_id: &str,
-) -> Option<ConfidenceScore> {
-    let graph = graph?;
-    let node_id = society_node_id(society_id);
-    let node = graph.get_node(&node_id);
-
-    let (source_score, source_explanation) = compute_source_quality(&node);
-    let (coverage_score, coverage_explanation) = compute_fact_coverage(&node);
-    // Fact source quality: average confidence of all facts on this node.
-    // This replaces match_quality (graph_driven_pct) which is 0.0 on detail pages.
-    let (fact_quality_score, fact_quality_explanation) = if let Some(n) = &node {
-        if n.facts.is_empty() {
-            (0.0, "No facts available".to_string())
-        } else {
-            let avg: f64 =
-                n.facts.iter().map(|f| f.confidence as f64).sum::<f64>() / n.facts.len() as f64;
-            (
-                avg,
-                format!(
-                    "Average fact confidence: {:.0}% across {} facts",
-                    avg * 100.0,
-                    n.facts.len()
-                ),
-            )
-        }
-    } else {
-        (0.0, "No knowledge graph data".to_string())
-    };
-
-    let overall = source_score * 0.5 + coverage_score * 0.25 + fact_quality_score * 0.25;
-
-    let label = confidence_label(overall);
-
-    let components = vec![
-        ConfidenceComponent {
-            dimension: "source_quality".to_string(),
-            score: source_score,
-            weight: 0.5,
-            explanation: source_explanation,
-        },
-        ConfidenceComponent {
-            dimension: "fact_coverage".to_string(),
-            score: coverage_score,
-            weight: 0.25,
-            explanation: coverage_explanation,
-        },
-        ConfidenceComponent {
-            dimension: "fact_source_quality".to_string(),
-            score: fact_quality_score,
-            weight: 0.25,
-            explanation: fact_quality_explanation,
-        },
-    ];
-
-    Some(ConfidenceScore {
-        overall: (overall * 100.0).round() / 100.0,
-        label,
-        components,
-    })
-}
-
-// ---------------------------------------------------------------------------
-// Confidence scoring helpers — shared between search and detail variants
-// ---------------------------------------------------------------------------
-
-use crate::knowledge::node::Node;
-
-fn compute_source_quality(node: &Option<&Node>) -> (f64, String) {
-    if let Some(n) = node {
-        match n.root_source {
-            Some(RootSource::Rera) => (1.0, "RERA verified source".to_string()),
-            Some(RootSource::Seller) => (0.6, "Self-reported source".to_string()),
-            Some(RootSource::Discovered) => (
-                0.5,
-                "Discovered via search, verification pending".to_string(),
-            ),
-            Some(RootSource::Legacy) | None => (0.3, "Legacy/unclassified source".to_string()),
-        }
-    } else {
-        (0.3, "No knowledge graph data".to_string())
-    }
-}
-
-fn compute_fact_coverage(node: &Option<&Node>) -> (f64, String) {
-    let fact_count = node.as_ref().map(|n| n.facts.len()).unwrap_or(0);
-    let threshold = schema::ranking_policy().fact_coverage_threshold;
-    let score = (fact_count as f64 / threshold).min(1.0);
-    let explanation = format!(
-        "{} facts available ({} = full coverage)",
-        fact_count, threshold as u32
-    );
-    (score, explanation)
-}
-
 fn confidence_label(overall: f64) -> String {
     if overall >= 0.7 {
         "High".to_string()
@@ -2884,17 +2588,6 @@ fn score_property(property: &Property, society_name: &str, terms: &[&str]) -> (f
                 total_score += weight;
                 if !term_matched {
                     reasons.push(format!("matched '{}' in {}", term, field_name));
-                    term_matched = true;
-                }
-            }
-        }
-
-        // Also check transparency tags.
-        for tag in &property.transparency_tags {
-            if crate::search::index::text_field_matches_term(&tag.to_lowercase(), term) {
-                total_score += 1.0;
-                if !term_matched {
-                    reasons.push(format!("matched '{}' in tags", term));
                     term_matched = true;
                 }
             }
@@ -2964,20 +2657,13 @@ pub(super) fn property_constraint_evaluation(
 pub(super) fn constraint_term_evaluation_for_society(
     property: &Property,
     term: &ConstraintTerm,
-    search_index: Option<&SearchIndex>,
+    _search_index: Option<&SearchIndex>,
     serving_facts: Option<&ServingFactIndex>,
     society_entity_id: &str,
     evaluation: SearchEvaluationContext<'_>,
 ) -> super::evaluation::BooleanEvaluation {
     use super::evaluation::BooleanEvaluation;
 
-    let known_match = |matches| {
-        if matches {
-            BooleanEvaluation::satisfied(Vec::new())
-        } else {
-            BooleanEvaluation::unsatisfied()
-        }
-    };
     match term {
         ConstraintTerm::Bhk { value, .. } => evaluation
             .options
@@ -3007,51 +2693,22 @@ pub(super) fn constraint_term_evaluation_for_society(
         ConstraintTerm::Area {
             entity_id: Some(entity_id),
             ..
-        } => search_index
-            .map(|index| known_match(index.entity_has_property(entity_id, &property.id)))
+        }
+        | ConstraintTerm::Society { entity_id, .. }
+        | ConstraintTerm::Builder { entity_id, .. } => evaluation
+            .identities
+            .map(|index| index.evaluate(society_entity_id, entity_id, evaluation.snapshot_identity))
             .unwrap_or_else(BooleanEvaluation::unknown),
-        ConstraintTerm::Area { value, .. } => {
-            if property.area.trim().is_empty() {
-                BooleanEvaluation::unknown()
-            } else {
-                known_match(property.area.eq_ignore_ascii_case(value))
-            }
-        }
-        ConstraintTerm::Society {
-            entity_id,
-            display_name,
-            ..
-        } => {
-            if let Some(index) = search_index {
-                known_match(index.entity_has_property(entity_id, &property.id))
-            } else if property.society_id.trim().is_empty() {
-                BooleanEvaluation::unknown()
-            } else {
-                known_match(property_matches_excluded_society(property, display_name))
-            }
-        }
-        ConstraintTerm::Builder {
-            entity_id,
-            display_name,
-            ..
-        } => {
-            if let Some(index) = search_index {
-                known_match(index.entity_has_property(entity_id, &property.id))
-            } else if property.builder_name.trim().is_empty() {
-                BooleanEvaluation::unknown()
-            } else {
-                known_match(property_matches_excluded_builder(property, display_name))
-            }
-        }
-        ConstraintTerm::Evidence { constraint, .. } => match match_hard_constraints(
-            std::slice::from_ref(constraint),
+        ConstraintTerm::Area {
+            entity_id: None, ..
+        } => BooleanEvaluation::unknown(),
+        ConstraintTerm::Evidence { constraint, .. } => numeric_constraint_evaluation(
+            constraint,
             property,
             serving_facts,
             society_entity_id,
-        ) {
-            Some(_) => BooleanEvaluation::satisfied(Vec::new()),
-            None => BooleanEvaluation::unknown(),
-        },
+            evaluation,
+        ),
         ConstraintTerm::Spatial {
             relation,
             entity_id,
@@ -3386,7 +3043,7 @@ mod tests {
     use super::*;
     use crate::knowledge::fact::{FactValue, SourcedFact};
     use crate::knowledge::graph::KnowledgeGraph;
-    use crate::knowledge::node::{Node, NodeType, RootSource};
+    use crate::knowledge::node::{Node, NodeType};
     use crate::search::schema::SQM_PER_ACRE;
     use crate::serving::{
         EvidenceRef, ServingEdgeRecord, ServingEntityRecord, ServingFactIndex, ServingFactRecord,
@@ -3565,7 +3222,7 @@ mod tests {
         properties: &[Property],
         search_index: Option<&SearchIndex>,
         extra_candidate_ids: Option<&[String]>,
-        geo_query: Option<&geo::GeoSearchQuery<'_>>,
+        geo_query: Option<&geo::GeoSearchQuery>,
         serving_facts: Option<&ServingFactIndex>,
         society_names: &std::collections::HashMap<String, String>,
         _societies: &[Society],
@@ -3573,7 +3230,34 @@ mod tests {
         intent: &SearchIntent,
         _graph: Option<&KnowledgeGraph>,
     ) -> Vec<SearchResultCard> {
-        let compiled_query = IntentAst::from_text_with_intent(query, intent.clone());
+        let mut compiled_query = IntentAst::from_text_with_intent(query, intent.clone());
+        fn bind_fixture_areas(
+            expr: &mut crate::search::ast::ConstraintExpr,
+            properties: &[Property],
+        ) {
+            use crate::search::ast::ConstraintExpr;
+            match expr {
+                ConstraintExpr::Term {
+                    term:
+                        ConstraintTerm::Area {
+                            entity_id, value, ..
+                        },
+                } => {
+                    *entity_id = properties
+                        .iter()
+                        .find(|property| property.area == *value)
+                        .map(|property| format!("area:{}", property.area_id));
+                }
+                ConstraintExpr::And { clauses } | ConstraintExpr::AnyOf { clauses } => {
+                    for child in clauses {
+                        bind_fixture_areas(child, properties);
+                    }
+                }
+                ConstraintExpr::Not { clause } => bind_fixture_areas(clause, properties),
+                _ => {}
+            }
+        }
+        bind_fixture_areas(&mut compiled_query.constraints, properties);
         let merged_ids = merged_candidate_ids(
             search_index.map(|index| index.recall_ids(&compiled_query)),
             extra_candidate_ids,
@@ -3588,6 +3272,33 @@ mod tests {
                 .filter(|indexes| !indexes.is_empty())
         });
         let inventory_options = fixture_inventory_options(properties, search_index);
+        let spatial_matches = geo_query
+            .zip(serving_facts)
+            .map(|(query, facts)| {
+                let entities = facts
+                    .rows()
+                    .map(|(id, _)| serving_entity(id, id.split(':').next().unwrap(), id))
+                    .collect::<Vec<_>>();
+                let spatial =
+                    crate::serving::SpatialServingIndex::from_serving_bundle(&entities, facts);
+                let fixture_index = SearchIndex::build_with_serving_entities(properties, &entities);
+                properties
+                    .iter()
+                    .map(|property| {
+                        (
+                            property.id.clone(),
+                            query.verified_matches_for_property(
+                                property,
+                                &fixture_index,
+                                &spatial,
+                                facts,
+                                FIXTURE_SNAPSHOT_IDENTITY,
+                            ),
+                        )
+                    })
+                    .collect::<HashMap<_, _>>()
+            })
+            .unwrap_or_default();
         CandidateEvaluator::search(CandidateEvaluationRequest {
             properties,
             search_index,
@@ -3599,7 +3310,10 @@ mod tests {
             query: &compiled_query.raw,
             intent: &compiled_query.intent,
             constraints: &compiled_query.constraints,
-            evaluation: fixture_inventory_context(&inventory_options),
+            evaluation: SearchEvaluationContext {
+                spatial_matches: &spatial_matches,
+                ..fixture_inventory_context(&inventory_options)
+            },
         })
     }
 
@@ -3671,197 +3385,26 @@ mod tests {
     // compute_confidence tests
     // ---------------------------------------------------------------
 
-    /// Helper: create a SourcedFact with a given key for padding fact counts.
-    fn make_fact(key: &str) -> SourcedFact {
-        SourcedFact::manual(key, FactValue::Text("test".into()))
-    }
-
-    /// Helper: build a graph with a society node having given root_source and fact count.
-    fn graph_with_society_node(
-        slug: &str,
-        root_source: Option<RootSource>,
-        fact_count: usize,
-    ) -> KnowledgeGraph {
-        let mut g = KnowledgeGraph::new();
-        let node_id = format!("society:{}", slug);
-        let mut node = Node::new(&node_id, NodeType::Society, slug);
-        node.root_source = root_source;
-        for i in 0..fact_count {
-            node.add_fact(make_fact(&format!("fact_{}", i)));
-        }
-        g.add_node(node);
-        g
-    }
-
     #[test]
-    fn test_confidence_rera_many_facts_is_high() {
-        let g = graph_with_society_node("well-known", Some(RootSource::Rera), 30);
-        let score = compute_confidence(Some(&g), "well-known", 80.0).unwrap();
-        assert_eq!(score.label, "High");
-        // source=1.0*0.5 + coverage=1.0*0.25 + match=0.8*0.25 = 0.95
-        assert!(
-            score.overall >= 0.7,
-            "Expected High, got overall={}",
-            score.overall
+    fn serving_confidence_ignores_observation_timestamps() {
+        let first = serving_fact(
+            "sample",
+            "google_rating",
+            FactValue::Numeric(4.2),
+            "Google",
+            0.9,
         );
-    }
-
-    #[test]
-    fn test_confidence_discovered_few_facts_is_low() {
-        // Discovered source (0.5) with only 2 facts and 0% graph-driven scoring.
-        // source=0.5*0.5 + coverage=(2/25)*0.25 + match=0.0*0.25 = 0.27.
-        let g = graph_with_society_node("unknown", Some(RootSource::Discovered), 2);
-        let score = compute_confidence(Some(&g), "unknown", 0.0).unwrap();
-        assert_eq!(score.label, "Low");
-        assert!(score.overall < 0.4, "Expected < 0.4, got {}", score.overall);
-
-        // Compare: Legacy source (0.3) with 1 fact also Low
-        let g2 = graph_with_society_node("legacy-sparse", Some(RootSource::Legacy), 1);
-        let score2 = compute_confidence(Some(&g2), "legacy-sparse", 0.0).unwrap();
-        assert_eq!(score2.label, "Low");
-    }
-
-    #[test]
-    fn test_confidence_threshold_calibration() {
-        // At exactly the configured coverage threshold, coverage should be 1.0.
-        let fact_coverage_threshold = schema::ranking_policy().fact_coverage_threshold as usize;
-        let g = graph_with_society_node(
-            "calibrated",
-            Some(RootSource::Legacy),
-            fact_coverage_threshold,
-        );
-        let score = compute_confidence(Some(&g), "calibrated", 0.0).unwrap();
-        let coverage_component = score
-            .components
-            .iter()
-            .find(|c| c.dimension == "fact_coverage")
-            .unwrap();
-        assert!(
-            (coverage_component.score - 1.0).abs() < 0.001,
-            "Expected coverage=1.0 at threshold, got {}",
-            coverage_component.score
-        );
-    }
-
-    #[test]
-    fn test_confidence_no_graph_returns_none() {
-        let result = compute_confidence(None, "any-society", 0.0);
-        assert!(result.is_none());
-    }
-
-    #[test]
-    fn test_confidence_unknown_society_still_returns() {
-        // Society not in graph — should still return a score (low)
-        let g = KnowledgeGraph::new();
-        let score = compute_confidence(Some(&g), "nonexistent", 0.0).unwrap();
-        assert_eq!(score.label, "Low");
-    }
-
-    #[test]
-    fn test_confidence_components_sum_weights() {
-        let g = graph_with_society_node("test", Some(RootSource::Rera), 10);
-        let score = compute_confidence(Some(&g), "test", 50.0).unwrap();
-        let total_weight: f64 = score.components.iter().map(|c| c.weight).sum();
-        assert!(
-            (total_weight - 1.0).abs() < 0.001,
-            "Component weights should sum to 1.0, got {}",
-            total_weight
-        );
-    }
-
-    // ---------------------------------------------------------------
-    // compute_confidence_for_detail tests (Day 71)
-    // ---------------------------------------------------------------
-
-    #[test]
-    fn test_confidence_detail_uses_fact_quality() {
-        // Detail page confidence uses average fact.confidence instead of graph_driven_pct.
-        // Create a node with high-confidence facts (RERA facts default to 0.9 confidence).
-        let mut g = KnowledgeGraph::new();
-        let node_id = "society:well-enriched";
-        let mut node = Node::new(node_id, NodeType::Society, "well-enriched");
-        node.root_source = Some(RootSource::Rera);
-        // Add facts with varying confidence
-        for i in 0..10 {
-            let mut fact = make_fact(&format!("fact_{}", i));
-            fact.confidence = 0.8;
-            node.add_fact(fact);
-        }
-        g.add_node(node);
-
-        let score = compute_confidence_for_detail(Some(&g), "well-enriched").unwrap();
-
-        // Should have "fact_source_quality" component instead of "match_quality"
-        let fsq = score
-            .components
-            .iter()
-            .find(|c| c.dimension == "fact_source_quality");
-        assert!(fsq.is_some(), "Should have fact_source_quality component");
-
-        let mq = score
-            .components
-            .iter()
-            .find(|c| c.dimension == "match_quality");
-        assert!(mq.is_none(), "Should NOT have match_quality component");
-
-        // fact_source_quality should be ~0.8 (all facts have 0.8 confidence)
-        let fsq = fsq.unwrap();
-        assert!(
-            (fsq.score - 0.8).abs() < 0.01,
-            "Expected ~0.8, got {}",
-            fsq.score
-        );
-
-        // Overall should be High (RERA + good coverage + high fact quality)
-        assert_eq!(score.label, "High");
-    }
-
-    #[test]
-    fn test_bulk_timestamp_is_not_a_confidence_component() {
-        let g = graph_with_society_node("bulk-created", Some(RootSource::Discovered), 5);
-        let score = compute_confidence_for_detail(Some(&g), "bulk-created").unwrap();
-        assert!(score
-            .components
-            .iter()
-            .all(|component| component.dimension != "freshness"));
-    }
-
-    #[test]
-    fn test_fact_timestamps_do_not_change_detail_confidence() {
-        let mut g = KnowledgeGraph::new();
-        let timestamp = Utc.timestamp_opt(1_700_000_000, 0).unwrap();
-        let mut same_time = Node::new("society:same-time", NodeType::Society, "same-time");
-        same_time.root_source = Some(RootSource::Rera);
-        let mut varied_time = Node::new("society:varied-time", NodeType::Society, "varied-time");
-        varied_time.root_source = Some(RootSource::Rera);
-        for i in 0..5 {
-            let mut same = make_fact(&format!("fact_{i}"));
-            same.learned_at = timestamp;
-            same_time.add_fact(same);
-            let mut varied = make_fact(&format!("fact_{i}"));
-            varied.learned_at = timestamp + chrono::Duration::days(i as i64 * 365);
-            varied_time.add_fact(varied);
-        }
-        g.add_node(same_time);
-        g.add_node(varied_time);
-
-        let same = compute_confidence_for_detail(Some(&g), "same-time").unwrap();
-        let varied = compute_confidence_for_detail(Some(&g), "varied-time").unwrap();
-        assert_eq!(same.overall, varied.overall);
-        assert_eq!(same.label, varied.label);
-        assert_eq!(same.components.len(), varied.components.len());
-        for (left, right) in same.components.iter().zip(&varied.components) {
-            assert_eq!(left.dimension, right.dimension);
-            assert_eq!(left.score, right.score);
-            assert_eq!(left.weight, right.weight);
-        }
-    }
-
-    #[test]
-    fn test_single_fact_confidence_does_not_depend_on_timestamp() {
-        let g = graph_with_society_node("single-fact", Some(RootSource::Discovered), 1);
-        let score = compute_confidence_for_detail(Some(&g), "single-fact").unwrap();
-        assert!(score
+        let mut later = first.clone();
+        later.learned_at += chrono::Duration::days(365);
+        let original = ServingFactIndex::from_records(vec![first], vec![]);
+        let changed = ServingFactIndex::from_records(vec![later], vec![]);
+        let left =
+            compute_confidence_from_serving_facts(&original, "society:sample", 50.0).unwrap();
+        let right =
+            compute_confidence_from_serving_facts(&changed, "society:sample", 50.0).unwrap();
+        assert_eq!(left.overall, right.overall);
+        assert_eq!(left.label, right.label);
+        assert!(left
             .components
             .iter()
             .all(|component| component.dimension != "freshness"));
@@ -3893,6 +3436,7 @@ mod tests {
             price_per_sqft: 12_000,
             carpet_area_sqft: 1_200,
             super_builtup_sqft: 1_550,
+            area_measurement: None,
             floor: 8,
             total_floors: 20,
             facing: "East".to_string(),
@@ -3918,7 +3462,7 @@ mod tests {
             images: vec![format!("/media/{id}.webp")],
             hero_image: format!("/media/{id}.webp"),
             description_summary: "Local test listing".to_string(),
-            transparency_tags: Vec::new(),
+
             source_reference: "unit-test".to_string(),
         }
     }
@@ -3934,11 +3478,15 @@ mod tests {
 
     const FIXTURE_SNAPSHOT_IDENTITY: &str = "text-search-fixture";
 
+    struct FixtureInventory {
+        options: HashMap<String, InventoryOption>,
+        identities: super::super::identity::IdentityEvaluationIndex,
+    }
     fn fixture_inventory_options(
         properties: &[Property],
         search_index: Option<&SearchIndex>,
-    ) -> HashMap<String, InventoryOption> {
-        properties
+    ) -> FixtureInventory {
+        let options = properties
             .iter()
             .filter(|property| property.bhk > 0)
             .map(|property| {
@@ -3956,6 +3504,7 @@ mod tests {
                 (
                     property.id.clone(),
                     InventoryOption {
+                        confidence: 1.0,
                         property_id: property.id.clone(),
                         society_id,
                         bhk: Some(property.bhk),
@@ -3963,6 +3512,7 @@ mod tests {
                         price_max: property.price_max.or(exact_price),
                         size_sqft: (property.super_builtup_sqft > 0)
                             .then_some(property.super_builtup_sqft),
+                        area_measurement: None,
                         evidence_reference: Some(EvidenceRef::for_observation(
                             FIXTURE_SNAPSHOT_IDENTITY,
                             &observation,
@@ -3971,23 +3521,48 @@ mod tests {
                     },
                 )
             })
-            .collect()
+            .collect();
+        let mut entities = Vec::new();
+        let mut edges = Vec::new();
+        for property in properties {
+            let subject = canonical_society_entity_id(property, search_index).into_owned();
+            let area = search_index
+                .and_then(|index| index.area_entity_id_for_property(&property.id))
+                .map(str::to_string)
+                .unwrap_or_else(|| format!("area:{}", property.area_id));
+            entities.push(serving_entity(&subject, "society", &property.society_id));
+            entities.push(serving_entity(&area, "area", &property.area));
+            edges.push(ServingEdgeRecord {
+                from_entity_id: subject,
+                to_entity_id: area,
+                edge_type: "in_area".to_string(),
+                confidence: 1.0,
+                source_type: "OpenStreetMap".to_string(),
+                derivation: None,
+            });
+        }
+        FixtureInventory {
+            options,
+            identities: super::super::identity::IdentityEvaluationIndex::from_records(
+                &entities,
+                &edges,
+                FIXTURE_SNAPSHOT_IDENTITY,
+            ),
+        }
     }
 
-    fn fixture_inventory_context(
-        options: &HashMap<String, InventoryOption>,
-    ) -> SearchEvaluationContext<'_> {
+    fn fixture_inventory_context(options: &FixtureInventory) -> SearchEvaluationContext<'_> {
         SearchEvaluationContext {
-            options,
+            identities: Some(&options.identities),
+            options: &options.options,
             spatial_matches: empty_spatial_matches(),
             snapshot_identity: FIXTURE_SNAPSHOT_IDENTITY,
         }
     }
 
     fn empty_inventory_context() -> SearchEvaluationContext<'static> {
-        static OPTIONS: std::sync::OnceLock<HashMap<String, InventoryOption>> =
-            std::sync::OnceLock::new();
-        fixture_inventory_context(OPTIONS.get_or_init(HashMap::new))
+        static OPTIONS: std::sync::OnceLock<FixtureInventory> = std::sync::OnceLock::new();
+        fixture_inventory_context(OPTIONS.get_or_init(|| fixture_inventory_options(&[], None)))
     }
 
     fn empty_spatial_matches() -> &'static HashMap<String, Vec<VerifiedMatch>> {
@@ -4024,7 +3599,7 @@ mod tests {
             FactValue::Tags(_) => "tags",
             FactValue::Score { .. } => "score",
         };
-        ServingFactRecord {
+        crate::serving::measurements::normalize_distance_fact(ServingFactRecord {
             entity_id: format!("society:{society_id}"),
             fact_key: fact_key.to_string(),
             value_type: value_type.to_string(),
@@ -4036,8 +3611,22 @@ mod tests {
             model: None,
             skill_id: Some("unit-test".to_string()),
             learned_at: Utc.with_ymd_and_hms(2026, 7, 31, 0, 0, 0).unwrap(),
-            observation: None,
-        }
+            observation: Some(
+                crate::serving::SourceObservation::new(
+                    source_type,
+                    if fact_key.starts_with("geo.") {
+                        "fixture:coordinates".to_string()
+                    } else {
+                        format!("fixture:{fact_key}")
+                    },
+                    format!("society:{society_id}"),
+                    Utc.with_ymd_and_hms(2026, 7, 31, 0, 0, 0).unwrap(),
+                    None,
+                    vec!["fixture/source-v1".to_string()],
+                )
+                .unwrap(),
+            ),
+        })
     }
 
     fn serving_metadata(
@@ -4109,7 +3698,7 @@ mod tests {
             FactValue::Tags(_) => "tags",
             FactValue::Score { .. } => "score",
         };
-        ServingFactRecord {
+        crate::serving::measurements::normalize_distance_fact(ServingFactRecord {
             entity_id: entity_id.to_string(),
             fact_key: fact_key.to_string(),
             value_type: value_type.to_string(),
@@ -4121,8 +3710,22 @@ mod tests {
             model: None,
             skill_id: Some("unit-test".to_string()),
             learned_at: Utc.with_ymd_and_hms(2026, 7, 31, 0, 0, 0).unwrap(),
-            observation: None,
-        }
+            observation: Some(
+                crate::serving::SourceObservation::new(
+                    source_type,
+                    if fact_key.starts_with("geo.") {
+                        "fixture:coordinates".to_string()
+                    } else {
+                        format!("fixture:{fact_key}")
+                    },
+                    entity_id,
+                    Utc.with_ymd_and_hms(2026, 7, 31, 0, 0, 0).unwrap(),
+                    None,
+                    vec!["fixture/v1".to_string()],
+                )
+                .unwrap(),
+            ),
+        })
     }
 
     #[test]
@@ -4220,7 +3823,7 @@ mod tests {
             crate::search::ast::ConstraintExpr::any_of(vec![
                 crate::search::ast::ConstraintExpr::and(vec![
                     crate::search::ast::ConstraintExpr::term(ConstraintTerm::Area {
-                        entity_id: None,
+                        entity_id: Some("area:whitefield".to_string()),
                         value: "Whitefield".to_string(),
                         span: None,
                     }),
@@ -4279,7 +3882,7 @@ mod tests {
             to_entity_id: "area:whitefield".to_string(),
             edge_type: "in_area".to_string(),
             confidence: 1.0,
-            source_type: "unit-test".to_string(),
+            source_type: "OpenStreetMap".to_string(),
             derivation: None,
         }];
         let index = SearchIndex::build_with_serving_graph(&properties, &entities, &edges);
@@ -4337,7 +3940,7 @@ mod tests {
             to_entity_id: canonical_society_id.to_string(),
             edge_type: "in_society".to_string(),
             confidence: 1.0,
-            source_type: "unit-test".to_string(),
+            source_type: "OpenStreetMap".to_string(),
             derivation: None,
         }];
         let index = SearchIndex::build_with_serving_graph(&properties, &entities, &edges);
@@ -4433,9 +4036,6 @@ mod tests {
         unknown_price.price = 0;
         unknown_price.price_min = None;
         unknown_price.price_max = None;
-        unknown_price
-            .transparency_tags
-            .push("Price unavailable".to_string());
 
         let properties = vec![supported, unknown_price];
         let society_names = local_society_names(&properties);
@@ -4457,7 +4057,7 @@ mod tests {
                 to_entity_id: "society:incomplete-supported".to_string(),
                 edge_type: "in_society".to_string(),
                 confidence: 1.0,
-                source_type: "unit-test".to_string(),
+                source_type: "OpenStreetMap".to_string(),
                 derivation: None,
             },
             ServingEdgeRecord {
@@ -4465,7 +4065,7 @@ mod tests {
                 to_entity_id: "society:incomplete-unknown-price".to_string(),
                 edge_type: "in_society".to_string(),
                 confidence: 1.0,
-                source_type: "unit-test".to_string(),
+                source_type: "OpenStreetMap".to_string(),
                 derivation: None,
             },
         ];
@@ -5840,246 +5440,6 @@ mod tests {
     }
 
     #[test]
-    fn named_place_distance_limit_filters_serving_nearby_fact() {
-        let entities = vec![serving_entity(
-            "place:google:deens-academy",
-            "place",
-            "The Deens Academy",
-        )];
-        let serving_facts = ServingFactIndex::from_records(
-            vec![
-                serving_fact(
-                    "outside-limit",
-                    "nearby_schools",
-                    FactValue::Text("Nearby schools: The Deens Academy (0.7 km)".to_string()),
-                    "Google",
-                    0.9,
-                ),
-                serving_entity_fact(
-                    "place:google:deens-academy",
-                    "geo.latitude",
-                    FactValue::Numeric(12.9857),
-                    "Google",
-                    0.9,
-                ),
-                serving_entity_fact(
-                    "place:google:deens-academy",
-                    "geo.longitude",
-                    FactValue::Numeric(77.7468),
-                    "Google",
-                    0.9,
-                ),
-            ],
-            vec![serving_metadata(
-                "outside-limit",
-                "nearby_schools",
-                vec!["schools", "school access", "social infrastructure"],
-                "TextMatch",
-                1.2,
-                Vec::new(),
-            )],
-        );
-        let entity_index = geo::SpatialEntityIndex::from_serving_bundle(&entities, &serving_facts);
-        let tight_query = entity_index
-            .query("homes within 500m of deens academy")
-            .expect("query should resolve Deens Academy");
-        let loose_query = entity_index
-            .query("homes within 1 km of deens academy")
-            .expect("query should resolve Deens Academy");
-        let postposed_tight_query = entity_index
-            .query("homes near deens academy within 500m")
-            .expect("postposed distance should stay attached to Deens Academy");
-
-        assert!(
-            serving_named_place_evidence(&serving_facts, "outside-limit", &tight_query).is_empty(),
-            "0.7 km serving fact should not satisfy a 500m query"
-        );
-        assert!(
-            !serving_named_place_evidence(&serving_facts, "outside-limit", &loose_query).is_empty(),
-            "0.7 km serving fact should satisfy a 1 km query"
-        );
-        assert!(
-            serving_named_place_evidence(&serving_facts, "outside-limit", &postposed_tight_query,)
-                .is_empty(),
-            "0.7 km serving fact should not satisfy a postposed 500m query"
-        );
-    }
-
-    #[test]
-    fn named_lake_uses_lake_fact_instead_of_same_name_park_fact() {
-        let place_id = "place:osm:begur-lake";
-        let entities = vec![serving_entity(place_id, "place", "Begur Lake")];
-        let serving_facts = ServingFactIndex::from_records(
-            vec![
-                serving_entity_fact(
-                    place_id,
-                    "place.category",
-                    FactValue::Text("lake".to_string()),
-                    "OpenStreetMap",
-                    1.0,
-                ),
-                serving_entity_fact(
-                    place_id,
-                    "geo.latitude",
-                    FactValue::Numeric(12.88),
-                    "OpenStreetMap",
-                    1.0,
-                ),
-                serving_entity_fact(
-                    place_id,
-                    "geo.longitude",
-                    FactValue::Numeric(77.62),
-                    "OpenStreetMap",
-                    1.0,
-                ),
-                serving_fact(
-                    "lake-home",
-                    "nearby_public_parks",
-                    FactValue::Text("Nearby parks: Begur Lake (0.1 km)".to_string()),
-                    "Google",
-                    0.99,
-                ),
-                serving_fact(
-                    "lake-home",
-                    "nearby_lakes",
-                    FactValue::Text("Nearby lakes: Begur Lake (0.8 km)".to_string()),
-                    "OpenStreetMap",
-                    0.9,
-                ),
-            ],
-            Vec::new(),
-        );
-        let entity_index = geo::SpatialEntityIndex::from_serving_bundle(&entities, &serving_facts);
-        let geo_query = entity_index
-            .query("homes near Begur Lake")
-            .expect("named lake should resolve");
-
-        let evidence = serving_named_place_evidence(&serving_facts, "lake-home", &geo_query)
-            .into_iter()
-            .next()
-            .expect("direct lake fact should provide proof");
-
-        assert_eq!(evidence.fact_key, "nearby_lakes");
-        assert_eq!(evidence.place_entity_id, place_id);
-    }
-
-    #[test]
-    fn named_stormwater_drain_uses_direct_risk_fact() {
-        let place_id = "place:stormwater-drain:way-1";
-        let entities = vec![serving_entity(place_id, "place", "drain")];
-        let serving_facts = ServingFactIndex::from_records(
-            vec![
-                serving_entity_fact(
-                    place_id,
-                    "place.category",
-                    FactValue::Text("stormwater_drain".to_string()),
-                    "OpenStreetMap",
-                    0.74,
-                ),
-                serving_entity_fact(
-                    place_id,
-                    "geo.latitude",
-                    FactValue::Numeric(12.87),
-                    "OpenStreetMap",
-                    0.74,
-                ),
-                serving_entity_fact(
-                    place_id,
-                    "geo.longitude",
-                    FactValue::Numeric(77.62),
-                    "OpenStreetMap",
-                    0.74,
-                ),
-                serving_fact(
-                    "southern-star",
-                    "stormwater_drain_nearby",
-                    FactValue::Text("drain (237 m, stormwater_drain, severity: info)".to_string()),
-                    "OpenStreetMap",
-                    0.74,
-                ),
-            ],
-            Vec::new(),
-        );
-        let entity_index = geo::SpatialEntityIndex::from_serving_bundle(&entities, &serving_facts);
-        let geo_query = entity_index
-            .query("Prestige Southern Star near stormwater drain")
-            .expect("named stormwater drain should resolve");
-
-        let evidence = serving_named_place_evidence(&serving_facts, "southern-star", &geo_query)
-            .into_iter()
-            .next()
-            .expect("direct stormwater fact should provide proof");
-
-        assert_eq!(evidence.fact_key, "stormwater_drain_nearby");
-        assert_eq!(evidence.place_entity_id, place_id);
-        assert_eq!(distance_m(evidence.distance_km), Some(237));
-    }
-
-    #[test]
-    fn named_metro_ignores_hospital_fact_with_same_locality_token() {
-        let place_id = "place:google:bommanahalli-metro";
-        let entities = vec![serving_entity(
-            place_id,
-            "place",
-            "Bommanahalli Metro Station",
-        )];
-        let serving_facts = ServingFactIndex::from_records(
-            vec![
-                serving_entity_fact(
-                    place_id,
-                    "place.category",
-                    FactValue::Text("metro_station".to_string()),
-                    "Google",
-                    1.0,
-                ),
-                serving_entity_fact(
-                    place_id,
-                    "geo.latitude",
-                    FactValue::Numeric(12.9),
-                    "Google",
-                    1.0,
-                ),
-                serving_entity_fact(
-                    place_id,
-                    "geo.longitude",
-                    FactValue::Numeric(77.61),
-                    "Google",
-                    1.0,
-                ),
-                serving_fact(
-                    "metro-home",
-                    "nearby_hospitals",
-                    FactValue::Text("Nearby hospital: Bommanahalli Hospital (0.1 km)".to_string()),
-                    "Google",
-                    0.99,
-                ),
-                serving_fact(
-                    "metro-home",
-                    "nearby_metro_stations",
-                    FactValue::Text(
-                        "Nearby metro: Bommanahalli Metro Station (1.0 km)".to_string(),
-                    ),
-                    "Google",
-                    0.9,
-                ),
-            ],
-            Vec::new(),
-        );
-        let entity_index = geo::SpatialEntityIndex::from_serving_bundle(&entities, &serving_facts);
-        let geo_query = entity_index
-            .query("homes near Bommanahalli Metro Station")
-            .expect("named metro should resolve");
-
-        let evidence = serving_named_place_evidence(&serving_facts, "metro-home", &geo_query)
-            .into_iter()
-            .next()
-            .expect("direct metro fact should provide proof");
-
-        assert_eq!(evidence.fact_key, "nearby_metro_stations");
-        assert_eq!(evidence.place_entity_id, place_id);
-    }
-
-    #[test]
     fn specific_school_fact_beats_context_locality_distance_for_multi_place_query() {
         let properties = vec![
             local_property("school-fit", "Hoodi", "school-fit", 3, 20_000_000, 0, 0.2),
@@ -6096,6 +5456,13 @@ mod tests {
         ];
         let serving_facts = ServingFactIndex::from_records(
             vec![
+                serving_entity_fact(
+                    "place:google:gopalan-national-school",
+                    "place.category",
+                    FactValue::Text("school".to_string()),
+                    "Google",
+                    1.0,
+                ),
                 serving_entity_fact(
                     "society:school-fit",
                     "geo.latitude",
@@ -6191,6 +5558,17 @@ mod tests {
         );
 
         assert_eq!(results[0].card.id, "school-fit");
+        let witness = results[0]
+            .verified_matches
+            .iter()
+            .find(|matched| {
+                matched.target_entity_id.as_deref() == Some("place:google:gopalan-national-school")
+            })
+            .unwrap();
+        assert!(
+            witness.value.is_some_and(|distance| distance < 0.02),
+            "observed coordinates, not the 0.5 km display text, own the distance"
+        );
         let reasons = &results[0]
             .match_explanation
             .as_ref()
@@ -6199,7 +5577,7 @@ mod tests {
         assert!(
             reasons.iter().any(|reason| {
                 reason.fact_key == "nearby_schools"
-                    && reason.scoring_method == geo::NAMED_PLACE_FACT_SCORING_METHOD
+                    && reason.scoring_method == geo::HAVERSINE_SCORING_METHOD
                     && reason.display.contains("Gopalan National School")
             }),
             "specific school fact should be used ahead of locality distance: {:?}",
@@ -6404,6 +5782,20 @@ mod tests {
         )];
         let serving_facts = ServingFactIndex::from_records(
             vec![
+                serving_entity_fact(
+                    "society:near-office-park",
+                    "geo.latitude",
+                    FactValue::Numeric(12.9954),
+                    "Google",
+                    0.9,
+                ),
+                serving_entity_fact(
+                    "society:near-office-park",
+                    "geo.longitude",
+                    FactValue::Numeric(77.71),
+                    "Google",
+                    0.9,
+                ),
                 serving_entity_fact(
                     "place:google:example-office-park",
                     "place.category",
@@ -6677,6 +6069,20 @@ mod tests {
         let entities = vec![serving_entity(place_id, "place", "Bagmane Tech Park")];
         let serving_facts = ServingFactIndex::from_records(
             vec![
+                serving_entity_fact(
+                    "society:far-proven",
+                    "geo.latitude",
+                    FactValue::Numeric(13.0358),
+                    "Google",
+                    0.9,
+                ),
+                serving_entity_fact(
+                    "society:far-proven",
+                    "geo.longitude",
+                    FactValue::Numeric(77.65),
+                    "Google",
+                    0.9,
+                ),
                 serving_entity_fact(
                     place_id,
                     "place.category",
@@ -7314,7 +6720,7 @@ mod tests {
             to_entity_id: "area:whitefield".to_string(),
             edge_type: "in_area".to_string(),
             confidence: 1.0,
-            source_type: "unit-test".to_string(),
+            source_type: "OpenStreetMap".to_string(),
             derivation: None,
         }];
         let index = SearchIndex::build_with_serving_graph(&properties, &entities, &edges);
@@ -8383,7 +7789,7 @@ mod tests {
             compiled.constraints,
             crate::search::ast::ConstraintExpr::negated(crate::search::ast::ConstraintExpr::term(
                 ConstraintTerm::Area {
-                    entity_id: None,
+                    entity_id: Some("area:electronic-city".to_string()),
                     value: "Electronic City".to_string(),
                     span: None,
                 },
@@ -8567,7 +7973,7 @@ mod tests {
             to_entity_id: to.to_string(),
             edge_type: "built_by".to_string(),
             confidence: 1.0,
-            source_type: "unit-test".to_string(),
+            source_type: "OpenStreetMap".to_string(),
             derivation: None,
         })
         .collect::<Vec<_>>();

@@ -1,20 +1,49 @@
 {
   "historyLimit": 6,
   "persistenceByteLimit": 1500000,
-  "navigationCache": { "historyLimit": 6, "ttlMs": 14400000, "mapCandidateLimit": 24 },
+  "navigationCache": {
+    "historyLimit": 6,
+    "ttlMs": 14400000,
+    "mapCandidateLimit": 24
+  },
   "targetLabels": {
     "option": "Option",
     "negative": "Not",
     "preferred": "Prefer",
-    "operators": { "equals": "=", "atLeast": "≥", "atMost": "≤", "between": "", "inside": "", "near": "near" },
+    "operators": {
+      "equals": "=",
+      "atLeast": "\u2265",
+      "atMost": "\u2264",
+      "between": "",
+      "inside": "",
+      "near": "near"
+    },
     "numberLocale": "en-IN",
-    "units": { "INR": { "divisor": 10000000, "prefix": "₹", "suffix": "Cr" } }
+    "units": {
+      "INR": {
+        "divisor": 10000000,
+        "prefix": "\u20b9",
+        "suffix": "Cr"
+      }
+    }
   },
   "suggestions": [
-    { "label": "Quiet near schools", "query": "Quiet family home near good schools" },
-    { "label": "Under ₹2.5Cr", "query": "3BHK under 2.5Cr with listing price proof" },
-    { "label": "Ready to move", "query": "Ready-to-move homes with possession proof" },
-    { "label": "Low commute", "query": "Low commute-pain home near tech parks" }
+    {
+      "label": "Quiet near schools",
+      "query": "Quiet family home near good schools"
+    },
+    {
+      "label": "Under \u20b92.5Cr",
+      "query": "3BHK under 2.5Cr with listing price proof"
+    },
+    {
+      "label": "Ready to move",
+      "query": "Ready-to-move homes with possession proof"
+    },
+    {
+      "label": "Low commute",
+      "query": "Low commute-pain home near tech parks"
+    }
   ],
   "copy": {
     "history": "History",
@@ -22,5 +51,6 @@
     "chooseTarget": "Which part should change?",
     "choosePlaceholder": "Choose a condition",
     "applyTarget": "Apply to this condition"
-  }
+  },
+  "summaryBatchLimit": 24
 }

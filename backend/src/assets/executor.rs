@@ -1998,6 +1998,7 @@ impl BuiltInAssetExecutor {
                             &canonical_rows.edges,
                             &support_rows.facts,
                             &support_rows.fact_annotations,
+                            &context.options.source_inputs.source_entities,
                         )
                         .await?;
                 Ok(ExecutedAsset::SocietyGoldSnapshot(Box::new(

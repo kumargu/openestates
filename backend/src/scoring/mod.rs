@@ -12,11 +12,10 @@ mod policy;
 mod transparency;
 
 pub use policy::{
-    area_tracker_policy, score_property_for_surface, scoring_policy, search_ranking_policy,
-    signal_score, AreaTrackerPolicy, BestEffortRankingTier, CandidateScore, FactAvailability,
-    RecommendationBranchPolicy, RecommendationEligibilityPolicy,
-    RecommendationFallbackBranchPolicy, RecommendationRecallChannelPolicy,
-    RecommendationRecallOperator, RecommendationRecallPolicy, ScoredSignal, ScoringPolicyFile,
-    SearchRankingPolicy,
+    score_recommendation_candidate, scoring_policy, search_ranking_policy, signal_score,
+    BestEffortRankingTier, CandidateScore, FactAvailability, RecommendationBranchPolicy,
+    RecommendationEligibilityPolicy, RecommendationFallbackBranchPolicy,
+    RecommendationRecallChannelPolicy, RecommendationRecallOperator, RecommendationRecallPolicy,
+    ScoredSignal, ScoringPolicyFile, SearchRankingPolicy,
 };
 pub use transparency::{compute_transparency_score, TransparencyScore};

@@ -75,8 +75,8 @@ const SOCIETY_VIEW_RADIUS_KM = 0.8;
 const EMPTY_ARRIVAL_LINES: MapOverlayLine[] = [];
 const EMPTY_MAP_PLACES: MapPlacePin[] = [];
 
-function compactPrice(price: number): string | null {
-  if (!Number.isFinite(price) || price <= 0) return null;
+function compactPrice(price: number | undefined): string | null {
+  if (price === undefined || !Number.isFinite(price) || price <= 0) return null;
   if (price >= 10_000_000) return `₹${(price / 10_000_000).toFixed(1).replace(/\.0$/, "")} Cr`;
   if (price >= 100_000) return `₹${(price / 100_000).toFixed(1).replace(/\.0$/, "")} L`;
   return `₹${Math.round(price).toLocaleString("en-IN")}`;

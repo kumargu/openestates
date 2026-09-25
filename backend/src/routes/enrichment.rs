@@ -6,16 +6,14 @@ use std::collections::{BTreeMap, HashMap};
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 
-use crate::knowledge::edge::Relation;
-use crate::knowledge::{google_reviews_url_from_facts, FactValue, KnowledgeGraph, SourcedFact};
-use crate::models::{AreaProfile, KgEntityRefs, Property, PropertyCard, Society};
+use crate::models::PropertyCard;
 use crate::serving::{ServingFactIndex, SocietyFactProjection};
 
 // ---------------------------------------------------------------------------
 // RERA and Area Intelligence response structs
 // ---------------------------------------------------------------------------
 
-#[derive(Serialize, Clone, Debug, Default)]
+#[derive(schemars::JsonSchema, Serialize, Clone, Debug, Default)]
 pub struct ReraInfo {
     pub registered: bool,
     pub registration_number: Option<String>,
@@ -57,13 +55,13 @@ pub struct ReraInfo {
     pub decision_cards: Vec<ReraDecisionCard>,
 }
 
-#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+#[derive(schemars::JsonSchema, Serialize, Clone, Debug, Default, PartialEq)]
 pub struct ReraDecisionAction {
     pub kind: String,
     pub label: String,
 }
 
-#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+#[derive(schemars::JsonSchema, Serialize, Clone, Debug, Default, PartialEq)]
 pub struct ReraDecisionCard {
     pub id: String,
     pub title: String,
@@ -77,7 +75,7 @@ pub struct ReraDecisionCard {
     pub validation_notes: Vec<String>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[derive(schemars::JsonSchema, Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct ReraComplaintScopeSummary {
     #[serde(default)]
     pub scope: String,
@@ -99,7 +97,7 @@ pub struct ReraComplaintScopeSummary {
     pub validation_notes: Vec<String>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[derive(schemars::JsonSchema, Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct ReraDocumentManifestItem {
     #[serde(default)]
     pub artifact_id: String,
@@ -127,13 +125,13 @@ pub struct ReraDocumentManifestItem {
     pub confidence: Option<f64>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[derive(schemars::JsonSchema, Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct ReraDocumentGroupSummary {
     pub group: String,
     pub count: i32,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[derive(schemars::JsonSchema, Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct ReraScheduleSection {
     #[serde(default)]
     pub group: String,
@@ -143,7 +141,7 @@ pub struct ReraScheduleSection {
     pub rows: Vec<ReraScheduleRow>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[derive(schemars::JsonSchema, Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct ReraScheduleRow {
     #[serde(default)]
     pub label: String,
@@ -155,56 +153,6 @@ pub struct ReraScheduleRow {
     pub value: Option<String>,
     #[serde(default)]
     pub confidence: Option<f64>,
-}
-
-#[derive(Serialize, Clone, Debug, Default)]
-pub struct AreaIntelligence {
-    pub safety: Option<String>,
-    pub commute_reality: Option<String>,
-    pub water_supply: Option<String>,
-    pub noise_level: Option<String>,
-    pub green_cover: Option<String>,
-    pub community_vibe: Option<String>,
-    pub walkability: Option<String>,
-    pub school_quality: Option<String>,
-    pub grocery_shopping: Option<String>,
-    pub healthcare_access: Option<String>,
-    pub recurring_complaints: Vec<String>,
-    pub hidden_gems: Vec<String>,
-    pub deal_breakers: Vec<String>,
-    pub overall_sentiment: Option<String>,
-    pub source_count: Option<i32>,
-    pub last_updated: Option<String>,
-}
-
-// ---------------------------------------------------------------------------
-// Fact extraction helpers — work on a node's facts slice
-// ---------------------------------------------------------------------------
-
-fn get_text_fact(facts: &[SourcedFact], key: &str) -> Option<String> {
-    facts
-        .iter()
-        .filter(|f| f.key == key)
-        .max_by_key(|f| f.version)
-        .and_then(|f| match &f.value {
-            FactValue::Text(s) => Some(s.clone()),
-            _ => None,
-        })
-}
-
-fn get_numeric_fact(facts: &[SourcedFact], key: &str) -> Option<f64> {
-    facts
-        .iter()
-        .filter(|f| f.key == key)
-        .max_by_key(|f| f.version)
-        .and_then(|f| match &f.value {
-            FactValue::Numeric(n) => Some(*n),
-            _ => None,
-        })
-}
-
-fn parse_rera_json<T: serde::de::DeserializeOwned>(value: &str) -> Option<T> {
-    serde_json::from_str(value).ok()
 }
 
 pub fn rera_document_groups(
@@ -539,37 +487,6 @@ pub fn rera_decision_cards(info: &ReraInfo) -> Vec<ReraDecisionCard> {
     cards
 }
 
-fn get_bool_fact(facts: &[SourcedFact], key: &str) -> Option<bool> {
-    facts
-        .iter()
-        .filter(|f| f.key == key)
-        .max_by_key(|f| f.version)
-        .and_then(|f| match &f.value {
-            FactValue::Bool(b) => Some(*b),
-            _ => None,
-        })
-}
-
-fn get_fact_display_template(facts: &[SourcedFact], key: &str) -> Option<String> {
-    facts
-        .iter()
-        .filter(|f| f.key == key)
-        .max_by_key(|f| f.version)
-        .and_then(|f| f.display_template.clone())
-}
-
-fn get_tags_fact(facts: &[SourcedFact], key: &str) -> Vec<String> {
-    facts
-        .iter()
-        .filter(|f| f.key == key)
-        .max_by_key(|f| f.version)
-        .and_then(|f| match &f.value {
-            FactValue::Tags(tags) => Some(tags.clone()),
-            _ => None,
-        })
-        .unwrap_or_default()
-}
-
 pub(crate) fn overlay_project_scale_facts(
     card: &mut PropertyCard,
     serving_facts: &ServingFactIndex,
@@ -589,267 +506,9 @@ pub(crate) fn overlay_project_scale_facts(
     }
 }
 
-/// Get the learned_at timestamp from any fact matching the key, formatted as ISO string.
-fn get_fact_timestamp(facts: &[SourcedFact], key: &str) -> Option<String> {
-    facts
-        .iter()
-        .filter(|f| f.key == key)
-        .max_by_key(|f| f.version)
-        .map(|f| f.learned_at.to_rfc3339())
-}
-
-// ---------------------------------------------------------------------------
-// RERA extraction — reads rera_* facts from a society KG node
-// ---------------------------------------------------------------------------
-
-/// Extract RERA information from the knowledge graph for a given society.
-/// Returns None if no "rera_registered" fact exists (meaning no RERA data has been ingested).
-pub fn extract_rera_info(graph: &KnowledgeGraph, society_id: &str) -> Option<ReraInfo> {
-    let node_id = society_node_id(society_id);
-    let node = graph.get_node(&node_id)?;
-    let facts = &node.facts;
-
-    // Only return ReraInfo if we have RERA data
-    let has_rera = facts.iter().any(|f| f.key == "rera_registered");
-    if !has_rera {
-        return None;
-    }
-
-    let registered = get_bool_fact(facts, "rera_registered").unwrap_or(false);
-
-    let total_units = get_numeric_fact(facts, "rera_total_units").map(|n| n as i32);
-
-    // Get last_verified from the rera_registered fact's learned_at timestamp
-    let last_verified = get_fact_timestamp(facts, "rera_registered");
-
-    // Map fact keys while deliberately avoiding RERA-entered cost fields.
-    // Those costs are not reliable enough for buyer-facing price evidence.
-    let registration_number = get_text_fact(facts, "rera_number")
-        .or_else(|| get_text_fact(facts, "rera_registration_number"));
-    let builder_projects = get_numeric_fact(facts, "rera_builder_projects_count")
-        .or_else(|| get_numeric_fact(facts, "rera_builder_total_projects"))
-        .map(|n| n as i32);
-
-    // builder_states might be stored as Text (comma-separated) instead of Tags
-    let builder_states = {
-        let tags = get_tags_fact(facts, "rera_builder_states");
-        if tags.is_empty() {
-            // Try text version (comma-separated)
-            get_text_fact(facts, "rera_builder_states")
-                .map(|s| s.split(',').map(|t| t.trim().to_string()).collect())
-                .unwrap_or_default()
-        } else {
-            tags
-        }
-    };
-
-    let total_land_area_sqm = get_numeric_fact(facts, "rera_total_land_area_sqm");
-    let total_land_area_acres = total_land_area_sqm.map(|sqm| sqm / 4_046.856_422_4);
-    let document_manifest = get_text_fact(facts, "rera_document_manifest")
-        .and_then(|value| parse_rera_json::<Vec<ReraDocumentManifestItem>>(&value))
-        .unwrap_or_default();
-    let complaint_summaries = get_text_fact(facts, "rera_complaint_summary_manifest")
-        .and_then(|value| parse_rera_json::<Vec<ReraComplaintScopeSummary>>(&value))
-        .unwrap_or_default();
-    let schedule_sections = get_text_fact(facts, "rera_schedule_manifest")
-        .and_then(|value| parse_rera_json::<Vec<ReraScheduleSection>>(&value))
-        .unwrap_or_default();
-
-    let mut info = ReraInfo {
-        registered,
-        registration_number,
-        status: get_text_fact(facts, "rera_status"),
-        start_date: get_text_fact(facts, "rera_start_date")
-            .or_else(|| get_text_fact(facts, "project_start_date")),
-        completion_date: get_text_fact(facts, "rera_completion_date"),
-        original_completion_date: get_text_fact(facts, "rera_original_completion_date"),
-        delay_months: get_numeric_fact(facts, "rera_delay_months").map(|n| n as i32),
-        total_units,
-        total_land_area_sqm,
-        total_land_area_acres,
-        open_area_pct: get_numeric_fact(facts, "project_open_area_pct")
-            .or_else(|| get_numeric_fact(facts, "rera_open_area_pct")),
-        total_project_cost_inr: None,
-        land_cost_inr: None,
-        construction_cost_inr: None,
-        cost_per_unit_inr: None,
-        complaints_count: get_numeric_fact(facts, "rera_complaints_count").map(|n| n as i32),
-        complaints_resolved_pct: get_numeric_fact(facts, "rera_complaints_resolved_pct"),
-        project_complaints_count: get_numeric_fact(facts, "rera_project_complaints_count")
-            .map(|n| n as i32),
-        project_complaints_open_count: get_numeric_fact(
-            facts,
-            "rera_project_complaints_open_count",
-        )
-        .map(|n| n as i32),
-        project_complaints_disposed_count: get_numeric_fact(
-            facts,
-            "rera_project_complaints_disposed_count",
-        )
-        .map(|n| n as i32),
-        promoter_complaints_count: get_numeric_fact(facts, "rera_promoter_complaints_count")
-            .map(|n| n as i32),
-        promoter_complaints_open_count: get_numeric_fact(
-            facts,
-            "rera_promoter_complaints_open_count",
-        )
-        .map(|n| n as i32),
-        promoter_complaints_disposed_count: get_numeric_fact(
-            facts,
-            "rera_promoter_complaints_disposed_count",
-        )
-        .map(|n| n as i32),
-        complaint_summaries,
-        schedule_sections,
-        document_groups: rera_document_groups(&document_manifest),
-        affidavit_only_visible: rera_affidavit_only_visible(&document_manifest),
-        document_manifest,
-        builder_total_projects: builder_projects,
-        builder_revocations: get_numeric_fact(facts, "rera_builder_revocations").map(|n| n as i32),
-        builder_states,
-        land_litigation: get_bool_fact(facts, "rera_land_litigation"),
-        escrow_bank: get_text_fact(facts, "rera_escrow_bank"),
-        has_borrowing: get_bool_fact(facts, "rera_has_borrowing"),
-        has_mortgage: get_bool_fact(facts, "rera_has_mortgage"),
-        rera_portal_url: get_text_fact(facts, "rera_portal_url"),
-        last_verified,
-        decision_cards: Vec::new(),
-    };
-    info.decision_cards = rera_decision_cards(&info);
-    Some(info)
-}
-
-// ---------------------------------------------------------------------------
-// Area Intelligence extraction — reads area intelligence facts from KG
-// ---------------------------------------------------------------------------
-
-/// Extract area intelligence from the knowledge graph for a given area.
-/// Returns None if no Reddit-sourced area intelligence facts exist.
-pub fn extract_area_intelligence(
-    graph: &KnowledgeGraph,
-    area_id: &str,
-) -> Option<AreaIntelligence> {
-    let node_id = area_node_id(area_id);
-    let node = graph.get_node(&node_id)?;
-    let facts = &node.facts;
-
-    // Check if we have any area intelligence facts (Reddit-sourced or LLM-sourced)
-    let intelligence_keys = [
-        "safety",
-        "commute_reality",
-        "water_supply",
-        "noise_level",
-        "green_cover",
-        "community_vibe",
-        "walkability",
-        "school_quality",
-        "grocery_shopping",
-        "healthcare_access",
-        "recurring_complaints",
-        "hidden_gems",
-        "deal_breakers",
-        "overall_sentiment",
-    ];
-    let has_intelligence = facts
-        .iter()
-        .any(|f| intelligence_keys.contains(&f.key.as_str()));
-    if !has_intelligence {
-        return None;
-    }
-
-    // Count source threads (look for source_count fact or count Reddit-sourced facts)
-    let source_count = get_numeric_fact(facts, "source_count").map(|n| n as i32);
-    let last_updated = get_fact_timestamp(facts, "safety")
-        .or_else(|| get_fact_timestamp(facts, "overall_sentiment"));
-
-    Some(AreaIntelligence {
-        safety: get_text_fact(facts, "safety"),
-        commute_reality: get_text_fact(facts, "commute_reality"),
-        water_supply: get_text_fact(facts, "water_supply"),
-        noise_level: get_text_fact(facts, "noise_level"),
-        green_cover: get_text_fact(facts, "green_cover"),
-        community_vibe: get_text_fact(facts, "community_vibe"),
-        walkability: get_text_fact(facts, "walkability"),
-        school_quality: get_text_fact(facts, "school_quality"),
-        grocery_shopping: get_text_fact(facts, "grocery_shopping"),
-        healthcare_access: get_text_fact(facts, "healthcare_access"),
-        recurring_complaints: get_tags_fact(facts, "recurring_complaints"),
-        hidden_gems: get_tags_fact(facts, "hidden_gems"),
-        deal_breakers: get_tags_fact(facts, "deal_breakers"),
-        overall_sentiment: get_text_fact(facts, "overall_sentiment"),
-        source_count,
-        last_updated,
-    })
-}
-
-// ---------------------------------------------------------------------------
-// Builder trust extraction — reads builder facts via BuiltBy edges
-// ---------------------------------------------------------------------------
-
-#[derive(Serialize, Clone, Debug, Default)]
-pub struct BuilderTrust {
-    pub delivery_rate: Option<f64>,
-    pub project_count: Option<u32>,
-    pub delivery_display: Option<String>,
-}
-
-/// Extract builder trust from a facts slice — shared logic between direct and canonical builder.
-fn builder_trust_from_facts(facts: &[SourcedFact]) -> Option<BuilderTrust> {
-    let delivery_rate = get_numeric_fact(facts, "builder_delivery_rate");
-    let project_count = get_numeric_fact(facts, "builder_project_count").map(|n| n as u32);
-
-    // Only return BuilderTrust if we have delivery data
-    if delivery_rate.is_none() && project_count.is_none() {
-        return None;
-    }
-
-    let delivery_display =
-        get_fact_display_template(facts, "builder_delivery_rate").and_then(|tmpl| {
-            if tmpl.contains("{value}") {
-                delivery_rate.map(|r| {
-                    let pct = (r * 100.0) as u32;
-                    tmpl.replace("{value}", &pct.to_string())
-                })
-            } else {
-                Some(tmpl)
-            }
-        });
-
-    Some(BuilderTrust {
-        delivery_rate,
-        project_count,
-        delivery_display,
-    })
-}
-
-/// Extract builder trust data by traversing BuiltBy edges from society to builder node.
-/// If the builder has a `canonical_builder` fact (orphan resolution), follows the
-/// reference to the canonical builder node and reads delivery data from there.
-/// Returns None if no builder node found or no delivery data.
-pub fn extract_builder_trust(graph: &KnowledgeGraph, society_id: &str) -> Option<BuilderTrust> {
-    let soc_node_id = society_node_id(society_id);
-
-    // Find builder nodes connected via BuiltBy edge (society -> builder)
-    let builder_nodes = graph.neighbors(&soc_node_id, Some(Relation::BuiltBy));
-    let builder = builder_nodes.first()?;
-
-    // Check for canonical_builder fact — if present, follow to canonical builder node
-    // and read delivery data from there instead of the orphan.
-    if let Some(canonical_id) = get_text_fact(&builder.facts, "canonical_builder") {
-        if let Some(canonical_node) = graph.get_node(&canonical_id) {
-            if let Some(trust) = builder_trust_from_facts(&canonical_node.facts) {
-                return Some(trust);
-            }
-        }
-    }
-
-    // Fall back to direct builder facts
-    builder_trust_from_facts(&builder.facts)
-}
-
 /// Legacy optional API shape. Search and detail responses do not calculate
 /// freshness or age from timestamps.
-#[derive(Serialize, Clone, Debug, Default)]
+#[derive(schemars::JsonSchema, Serialize, Clone, Debug, Default)]
 pub struct DataFreshness {
     /// ISO timestamp of last enrichment
     pub last_enriched: String,
@@ -875,6 +534,9 @@ pub fn to_slug(id: &str) -> String {
 
 /// Build a society node ID for KG lookup.
 pub fn society_node_id(society_id: &str) -> String {
+    if society_id.starts_with("society:") {
+        return society_id.to_string();
+    }
     let normalized = society_id.trim().to_lowercase().replace(['_', ' '], "-");
     if normalized.starts_with("society:") {
         normalized
@@ -897,431 +559,10 @@ pub fn property_node_id(property_id: &str) -> String {
     }
 }
 
-pub fn kg_entity_refs_for_property(p: &Property, graph: &KnowledgeGraph) -> KgEntityRefs {
-    let property_entity_id = property_node_id(&p.id);
-    let society_entity_id = society_node_id(&p.society_id);
-    let area_entity_id = area_node_id(&p.area);
-    let builder_entity_id = graph
-        .edges_from(&society_entity_id)
-        .iter()
-        .find(|edge| edge.relation == Relation::BuiltBy && graph.get_node(&edge.to).is_some())
-        .map(|edge| edge.to.clone());
-
-    let mut source_entity_ids = vec![
-        property_entity_id.clone(),
-        society_entity_id.clone(),
-        area_entity_id.clone(),
-    ];
-    if let Some(builder_entity_id) = &builder_entity_id {
-        source_entity_ids.push(builder_entity_id.clone());
-    }
-    source_entity_ids.retain(|id| graph.get_node(id).is_some());
-    source_entity_ids.sort();
-    source_entity_ids.dedup();
-
-    KgEntityRefs {
-        property_entity_id,
-        society_entity_id,
-        area_entity_id,
-        builder_entity_id,
-        source_entity_ids,
-    }
-}
-
 // ---------------------------------------------------------------------------
 // KG fact extraction helpers
 // ---------------------------------------------------------------------------
 
-pub fn kg_numeric(graph: &KnowledgeGraph, node_id: &str, key: &str) -> Option<f64> {
-    let node = graph.get_node(node_id)?;
-    node.facts
-        .iter()
-        .find(|f| f.key == key)
-        .and_then(|f| match &f.value {
-            FactValue::Numeric(n) => Some(*n),
-            _ => None,
-        })
-}
-
-pub fn kg_text(graph: &KnowledgeGraph, node_id: &str, key: &str) -> Option<String> {
-    let node = graph.get_node(node_id)?;
-    node.facts
-        .iter()
-        .find(|f| f.key == key)
-        .and_then(|f| match &f.value {
-            FactValue::Text(s) => Some(s.clone()),
-            _ => None,
-        })
-}
-
-pub fn kg_tags(graph: &KnowledgeGraph, node_id: &str, key: &str) -> Option<Vec<String>> {
-    let node = graph.get_node(node_id)?;
-    node.facts
-        .iter()
-        .find(|f| f.key == key)
-        .and_then(|f| match &f.value {
-            FactValue::Tags(tags) => Some(tags.clone()),
-            _ => None,
-        })
-}
-
-fn is_placeholder(s: &str) -> bool {
-    s.is_empty()
-        || s.starts_with("Not yet enriched")
-        || s.contains("Needs enrichment")
-        || s.starts_with("Area discovered")
-        || s.starts_with("Society discovered")
-}
-
 // ---------------------------------------------------------------------------
 // Property card enrichment — used by /properties, /search, /properties/:id
 // ---------------------------------------------------------------------------
-
-/// Enrich a Property into a PropertyCard with KG data.
-/// This is THE function — every route that returns a PropertyCard must use it.
-pub fn enrich_property_card(
-    p: &Property,
-    societies: &[Society],
-    graph: &KnowledgeGraph,
-) -> PropertyCard {
-    let society_name = societies
-        .iter()
-        .find(|s| to_slug(&s.id) == to_slug(&p.society_id))
-        .map(|s| s.name.clone())
-        .unwrap_or_default();
-
-    let node_id = society_node_id(&p.society_id);
-
-    let google_rating = kg_numeric(graph, &node_id, "google_rating");
-    let google_review_count = kg_numeric(graph, &node_id, "google_review_count").map(|n| n as u32);
-    let google_reviews_url = graph
-        .get_node(&node_id)
-        .and_then(|node| google_reviews_url_from_facts(&node.facts, &node.name));
-
-    // Use photo_url from KG if property has no hero_image
-    let hero_image = if p.hero_image.is_empty() {
-        kg_text(graph, &node_id, "photo_url").unwrap_or_default()
-    } else {
-        p.hero_image.clone()
-    };
-
-    // Extract root_source and project_status from the society KG node
-    let (root_source, project_status, project_status_display) =
-        if let Some(node) = graph.get_node(&node_id) {
-            let rs = node.root_source.map(|r| r.as_str().to_string());
-            let ps = get_text_fact(&node.facts, "project_status");
-            let ps_display = get_fact_display_template(&node.facts, "project_status").map(|tmpl| {
-                // Replace {value} placeholder with the actual value
-                let val = get_text_fact(&node.facts, "project_status").unwrap_or_default();
-                if tmpl.contains("{value}") {
-                    tmpl.replace("{value}", &val)
-                } else {
-                    tmpl
-                }
-            });
-            (rs, ps, ps_display)
-        } else {
-            (None, None, None)
-        };
-
-    // Extract builder delivery display from builder node via BuiltBy edge
-    let builder_delivery_display =
-        extract_builder_trust(graph, &p.society_id).and_then(|bt| bt.delivery_display);
-
-    PropertyCard {
-        id: p.id.clone(),
-        kg_entity_refs: kg_entity_refs_for_property(p, graph),
-        title: p.title.clone(),
-        area: p.area.clone(),
-        price: p.price,
-        price_min: p.price_min,
-        price_max: p.price_max,
-        price_per_sqft: p.price_per_sqft,
-        bhk: p.bhk,
-        sqft: p.carpet_area_sqft,
-        carpet_area_sqft: p.carpet_area_sqft,
-        super_builtup_sqft: p.super_builtup_sqft,
-        society_name,
-        builder_name: p.builder_name.clone(),
-        images: p.images.clone(),
-        hero_image,
-        transparency_tags: compact_transparency_tags(&p.transparency_tags),
-        description_summary: p.description_summary.clone(),
-        possession_status: p.possession_status.clone(),
-        metro_distance_mins: p.metro_distance_mins,
-        floor: p.floor,
-        total_floors: p.total_floors,
-        facing: p.facing.clone(),
-        google_rating,
-        google_review_count,
-        google_reviews_url,
-        society_land_acres: None,
-        open_space_pct: None,
-        root_source,
-        project_status,
-        project_status_display,
-        home_state_display: None,
-        builder_delivery_display,
-        data_freshness: None,
-        floor_plan_preview_url: None,
-        plan_carpet_area_sqft: None,
-        plan_sale_area_sqft: None,
-        plan_configuration_type: None,
-        decision_labels: Vec::new(),
-        decision_check_summary: None,
-    }
-}
-
-pub fn compact_transparency_tags(tags: &[String]) -> Vec<String> {
-    let mut compact = tags.iter().take(3).cloned().collect::<Vec<_>>();
-    if tags
-        .iter()
-        .any(|tag| tag.eq_ignore_ascii_case("Price unavailable"))
-        && !compact
-            .iter()
-            .any(|tag| tag.eq_ignore_ascii_case("Price unavailable"))
-    {
-        compact.push("Price unavailable".to_string());
-    }
-    compact
-}
-
-// ---------------------------------------------------------------------------
-// Society enrichment — overlays KG facts onto in-memory data
-// ---------------------------------------------------------------------------
-
-/// Enrich a Society with knowledge graph facts. Mutates in place.
-pub fn enrich_society(society: &mut Society, graph: &KnowledgeGraph) {
-    let node_id = society_node_id(&society.id);
-
-    if graph.get_node(&node_id).is_none() {
-        return;
-    }
-
-    if let Some(node) = graph.get_node(&node_id) {
-        society.google_reviews_url = google_reviews_url_from_facts(&node.facts, &node.name);
-        if society.future_google_place_id.is_none() {
-            society.future_google_place_id = kg_text(graph, &node_id, "google_place_id");
-        }
-    }
-
-    if is_placeholder(&society.review_summary) {
-        if let Some(val) = kg_text(graph, &node_id, "google_sentiment") {
-            society.review_summary = val;
-        }
-    }
-
-    if is_placeholder(&society.maintenance_sentiment) {
-        if let Some(val) = kg_text(graph, &node_id, "google_sentiment") {
-            society.maintenance_sentiment = if val.to_lowercase().contains("maintenance") {
-                val
-            } else {
-                "See reviews".to_string()
-            };
-        }
-    }
-
-    if is_placeholder(&society.livability_sentiment) {
-        if let Some(val) = kg_text(graph, &node_id, "google_sentiment") {
-            society.livability_sentiment = val.chars().take(120).collect();
-        }
-    }
-
-    if society.common_positives.is_empty() {
-        if let Some(tags) = kg_tags(graph, &node_id, "google_top_positives") {
-            society.common_positives = tags;
-        }
-    }
-
-    if society.common_complaints.is_empty() {
-        if let Some(tags) = kg_tags(graph, &node_id, "google_top_negatives") {
-            society.common_complaints = tags;
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Area enrichment — overlays KG facts onto in-memory data
-// ---------------------------------------------------------------------------
-
-/// Enrich an AreaProfile with knowledge graph facts. Mutates in place.
-pub fn enrich_area(area: &mut AreaProfile, graph: &KnowledgeGraph) {
-    let node_id = area_node_id(&area.name);
-
-    if graph.get_node(&node_id).is_none() {
-        return;
-    }
-
-    let set_if_placeholder = |field: &mut String, key: &str| {
-        if is_placeholder(field) {
-            if let Some(val) = kg_text(graph, &node_id, key) {
-                *field = val;
-            }
-        }
-    };
-
-    set_if_placeholder(&mut area.metro_access_summary, "metro_details");
-    set_if_placeholder(&mut area.traffic_summary, "traffic_reality");
-    set_if_placeholder(&mut area.waterlogging_summary, "waterlogging_detail");
-    set_if_placeholder(&mut area.livability_summary, "livability_summary");
-    set_if_placeholder(&mut area.community_notes, "area_vibe");
-
-    // Trend
-    if is_placeholder(&area.trend_summary) {
-        if let Some(trend) = kg_text(graph, &node_id, "price_trend") {
-            area.trend_summary = format!("Price trend: {}", trend);
-            area.trend_direction = trend;
-        }
-    }
-
-    // Tags
-    if area.externality_tags.is_empty() {
-        let mut tags = Vec::new();
-        if let Some(wl) = kg_text(graph, &node_id, "waterlogging_risk") {
-            tags.push(format!("Waterlogging: {}", wl));
-        }
-        if let Some(m) = kg_text(graph, &node_id, "metro_access") {
-            tags.push(format!("Metro: {}", m));
-        }
-        if let Some(p) = kg_text(graph, &node_id, "price_trend") {
-            tags.push(format!("Price: {}", p));
-        }
-        if !tags.is_empty() {
-            area.externality_tags = tags;
-        }
-    }
-
-    if area.infrastructure_tags.is_empty() {
-        let mut tags = Vec::new();
-        if let Some(infra) = kg_text(graph, &node_id, "upcoming_infra") {
-            let truncated: String = infra.chars().take(80).collect();
-            tags.push(truncated);
-        }
-        if let Some(schools) = kg_tags(graph, &node_id, "school_quality") {
-            for s in schools.into_iter().take(3) {
-                tags.push(format!("School: {}", s));
-            }
-        }
-        if !tags.is_empty() {
-            area.infrastructure_tags = tags;
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::knowledge::edge::Edge;
-    use crate::knowledge::fact::{FactSource, FactValue, SourceType, SourcedFact};
-    use crate::knowledge::graph::KnowledgeGraph;
-    use crate::knowledge::node::{Node, NodeType};
-
-    fn make_text_fact(key: &str, value: &str) -> SourcedFact {
-        SourcedFact {
-            key: key.into(),
-            value: FactValue::Text(value.into()),
-            confidence: 0.9,
-            source: FactSource {
-                source_type: SourceType::Manual,
-                url: None,
-                model: None,
-                skill_id: None,
-                triggered_by: None,
-            },
-            learned_at: chrono::Utc::now(),
-            version: 1,
-            display_template: None,
-            answers_preferences: Vec::new(),
-            scoring_hint: None,
-        }
-    }
-
-    fn make_numeric_fact(key: &str, value: f64) -> SourcedFact {
-        SourcedFact {
-            key: key.into(),
-            value: FactValue::Numeric(value),
-            confidence: 0.9,
-            source: FactSource {
-                source_type: SourceType::Manual,
-                url: None,
-                model: None,
-                skill_id: None,
-                triggered_by: None,
-            },
-            learned_at: chrono::Utc::now(),
-            version: 1,
-            display_template: Some("Delivery rate: {value}%".into()),
-            answers_preferences: Vec::new(),
-            scoring_hint: None,
-        }
-    }
-
-    #[test]
-    fn test_canonical_builder_resolution() {
-        let mut g = KnowledgeGraph::new();
-
-        // Create society node
-        let soc_id = "society:test-society";
-        g.add_node(Node::new(soc_id, NodeType::Society, "Test Society"));
-
-        // Create orphan builder node with canonical_builder pointing to canonical
-        let orphan_id = "builder:orphan-builder";
-        let mut orphan = Node::new(orphan_id, NodeType::Builder, "Orphan Builder");
-        orphan.add_fact(make_text_fact(
-            "canonical_builder",
-            "builder:canonical-builder",
-        ));
-        g.add_node(orphan);
-
-        // Create canonical builder node with actual delivery data
-        let canonical_id = "builder:canonical-builder";
-        let mut canonical = Node::new(canonical_id, NodeType::Builder, "Canonical Builder");
-        canonical.add_fact(make_numeric_fact("builder_delivery_rate", 0.85));
-        canonical.add_fact(make_numeric_fact("builder_project_count", 12.0));
-        g.add_node(canonical);
-
-        // Add BuiltBy edge from society to orphan builder
-        g.add_edge(Edge::new(
-            soc_id.to_string(),
-            orphan_id.to_string(),
-            Relation::BuiltBy,
-        ));
-
-        // Extract builder trust — should follow canonical_builder to canonical node
-        let trust = extract_builder_trust(&g, "test-society").unwrap();
-        assert!(
-            (trust.delivery_rate.unwrap() - 0.85).abs() < 0.001,
-            "Should read delivery_rate from canonical builder, got {:?}",
-            trust.delivery_rate
-        );
-        assert_eq!(trust.project_count, Some(12));
-    }
-
-    #[test]
-    fn test_builder_trust_direct_when_no_canonical() {
-        let mut g = KnowledgeGraph::new();
-
-        // Create society node
-        let soc_id = "society:direct-society";
-        g.add_node(Node::new(soc_id, NodeType::Society, "Direct Society"));
-
-        // Create builder node with delivery data but NO canonical_builder fact
-        let builder_id = "builder:direct-builder";
-        let mut builder = Node::new(builder_id, NodeType::Builder, "Direct Builder");
-        builder.add_fact(make_numeric_fact("builder_delivery_rate", 0.90));
-        g.add_node(builder);
-
-        // Add BuiltBy edge
-        g.add_edge(Edge::new(
-            soc_id.to_string(),
-            builder_id.to_string(),
-            Relation::BuiltBy,
-        ));
-
-        let trust = extract_builder_trust(&g, "direct-society").unwrap();
-        assert!(
-            (trust.delivery_rate.unwrap() - 0.90).abs() < 0.001,
-            "Should read delivery_rate directly from builder"
-        );
-    }
-}

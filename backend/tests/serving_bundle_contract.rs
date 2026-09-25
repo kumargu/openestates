@@ -35,12 +35,33 @@ async fn serving_bundle_writes_parquet_manifest_and_hydratable_tantivy_index() {
         .unwrap();
 
     assert_eq!(manifest.entity_count, 2);
-    assert_eq!(manifest.fact_count, 18);
-    assert_eq!(manifest.search_metadata_count, 18);
+    assert_eq!(manifest.fact_count, 16);
+    assert_eq!(manifest.search_metadata_count, 16);
     assert_eq!(manifest.rera_evidence_count, 0);
     assert_eq!(manifest.edge_count, 0);
-    assert_eq!(manifest.eligibility_policy_version, 5);
+    assert_eq!(manifest.eligibility_policy_version, 7);
     assert_eq!(manifest.quarantined_society_count, 0);
+    let report: serde_json::Value = serde_json::from_str(
+        &lake
+            .get_text(&LakeKey::new(manifest.quarantine_report_key.clone()).unwrap())
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let excluded = report["excluded_claims"].as_array().unwrap();
+    assert_eq!(
+        excluded.len(),
+        2,
+        "unobserved inventory claims must be reported"
+    );
+    assert!(excluded
+        .iter()
+        .all(|claim| claim["reason"] == "missing_eligible_observation"));
+    assert!(
+        report["societies"].as_array().unwrap().is_empty(),
+        "societies remain browseable"
+    );
+
     assert_eq!(
         manifest.entity_parquet_key,
         "serving/search_bundle/version=2026-07-12t18-30z/entities/part-00000.parquet"
@@ -107,8 +128,8 @@ async fn serving_bundle_writes_parquet_manifest_and_hydratable_tantivy_index() {
     assert_is_parquet(&fact_bytes);
     assert_is_parquet(&search_metadata_bytes);
     assert_eq!(parquet_rows(&entity_bytes), 2);
-    assert_eq!(parquet_rows(&fact_bytes), 18);
-    assert_eq!(parquet_rows(&search_metadata_bytes), 18);
+    assert_eq!(parquet_rows(&fact_bytes), 16);
+    assert_eq!(parquet_rows(&search_metadata_bytes), 16);
     let fact_columns = parquet_columns(&fact_bytes);
     let search_metadata_columns = parquet_columns(&search_metadata_bytes);
     let edge_columns = parquet_columns(&edge_bytes);

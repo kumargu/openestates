@@ -1,0 +1,3506 @@
+{
+  "contractVersion": 1,
+  "snapshotIdentity": "renderer-fixture-v1",
+  "propertyId": "discovered-prestige-waterford-3bhk",
+  "entityRefs": {
+    "property_entity_id": "property:discovered-prestige-waterford-3bhk",
+    "society_entity_id": "society:prestige-waterford",
+    "area_entity_id": "area:itpl,-whitefield"
+  },
+  "anchor": {
+    "entityId": "society:prestige-waterford",
+    "name": "PRESTIGE WATERFORD",
+    "point": [
+      77.74218189999999,
+      12.9819914
+    ],
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [
+            77.7437612,
+            12.9824745
+          ],
+          [
+            77.7405505,
+            12.9824213
+          ],
+          [
+            77.7404213,
+            12.9824192
+          ],
+          [
+            77.7403155,
+            12.981656
+          ],
+          [
+            77.7394255,
+            12.9814691
+          ],
+          [
+            77.739374,
+            12.9807949
+          ],
+          [
+            77.7393516,
+            12.9805031
+          ],
+          [
+            77.7406114,
+            12.9803659
+          ],
+          [
+            77.7406458,
+            12.9803736
+          ],
+          [
+            77.7406699,
+            12.9804808
+          ],
+          [
+            77.741189,
+            12.9804402
+          ],
+          [
+            77.7414713,
+            12.9806973
+          ],
+          [
+            77.7420818,
+            12.9812533
+          ],
+          [
+            77.7422118,
+            12.9813717
+          ],
+          [
+            77.7428352,
+            12.9816647
+          ],
+          [
+            77.7434694,
+            12.9815468
+          ],
+          [
+            77.7436802,
+            12.9819929
+          ],
+          [
+            77.7437453,
+            12.9821307
+          ],
+          [
+            77.743725,
+            12.98228
+          ],
+          [
+            77.7437612,
+            12.9824745
+          ]
+        ]
+      ]
+    },
+    "geometrySource": {
+      "id": "obs:244ca47d56623346bec52f02d3ceed7213383c6facc1bf417eb9b083b4355400:geo.geometry_geojson",
+      "entityId": "society:prestige-waterford",
+      "factKey": "geo.geometry_geojson",
+      "value": {
+        "type": "Text",
+        "data": "{\"type\": \"Polygon\", \"coordinates\": [[[77.7437612, 12.9824745], [77.7405505, 12.9824213], [77.7404213, 12.9824192], [77.7403155, 12.981656], [77.7394255, 12.9814691], [77.739374, 12.9807949], [77.7393516, 12.9805031], [77.7406114, 12.9803659], [77.7406458, 12.9803736], [77.7406699, 12.9804808], [77.741189, 12.9804402], [77.7414713, 12.9806973], [77.7420818, 12.9812533], [77.7422118, 12.9813717], [77.7428352, 12.9816647], [77.7434694, 12.9815468], [77.7436802, 12.9819929], [77.7437453, 12.9821307], [77.743725, 12.98228], [77.7437612, 12.9824745]]]}"
+      },
+      "evidence": {
+        "snapshot_identity": "renderer-fixture-v1",
+        "subject_entity_id": "society:prestige-waterford",
+        "evidence_id": {
+          "kind": "observation",
+          "id": "obs:244ca47d56623346bec52f02d3ceed7213383c6facc1bf417eb9b083b4355400"
+        }
+      },
+      "sourceType": "Renderer fixture",
+      "sourceUrl": "https://www.openstreetmap.org/way/133630420",
+      "observedAt": "2026-09-13T00:00:00Z",
+      "confidence": 0.78
+    },
+    "geometryEvidence": [
+      {
+        "snapshot_identity": "renderer-fixture-v1",
+        "subject_entity_id": "society:prestige-waterford",
+        "evidence_id": {
+          "kind": "observation",
+          "id": "obs:244ca47d56623346bec52f02d3ceed7213383c6facc1bf417eb9b083b4355400"
+        }
+      }
+    ]
+  },
+  "features": [
+    {
+      "fact": {
+        "id": "obs:86b8f7eca629b1c7df813623a37f18847f0eb8fe841982d17a47a947ceed09b8:nearby_metro_stations",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_metro_stations",
+        "value": {
+          "type": "Text",
+          "data": "Kadugodi Tree Park Metro (0.5 km)"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:86b8f7eca629b1c7df813623a37f18847f0eb8fe841982d17a47a947ceed09b8"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://maps.google.com/?cid=8950456211087285334&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.82
+      },
+      "target": {
+        "entityId": "place:google:chijs-ojywiorjsrvtyln4bonnw",
+        "name": "Kadugodi Tree Park",
+        "point": [
+          77.746842,
+          12.985711
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.746842,
+            12.985711
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:86b8f7eca629b1c7df813623a37f18847f0eb8fe841982d17a47a947ceed09b8"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:58f8bc3926b90f8ac50eeb3050560f2f00886e7a9544411e738cdd5c3d268094:nearby_metro_stations",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_metro_stations",
+        "value": {
+          "type": "Text",
+          "data": "Pattandur Agrahara (0.6 km)"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:58f8bc3926b90f8ac50eeb3050560f2f00886e7a9544411e738cdd5c3d268094"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://maps.google.com/?cid=9936760870529431379&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.82
+      },
+      "target": {
+        "entityId": "place:google:chij1-at8uqrrjsru3fouv135ok",
+        "name": "Pattandur Agrahara",
+        "point": [
+          77.737737,
+          12.987622
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.737737,
+            12.987622
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:58f8bc3926b90f8ac50eeb3050560f2f00886e7a9544411e738cdd5c3d268094"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:807c108978c90d64049fcfde1bbb37fd3b09a9daf5088026430644f9614d0c61:society.entrance_entity",
+        "entityId": "society:prestige-waterford",
+        "factKey": "society.entrance_entity",
+        "value": {
+          "type": "Text",
+          "data": "place:society-entrance:society-rera-53c0b81882e6acc6-node-12638053899"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:807c108978c90d64049fcfde1bbb37fd3b09a9daf5088026430644f9614d0c61"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://www.openstreetmap.org/node/12638053899",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.78
+      },
+      "target": {
+        "entityId": "place:society-entrance:society-rera-53c0b81882e6acc6-node-12638053899",
+        "name": "Entrance",
+        "point": [
+          77.7437166,
+          12.9822519
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.7437166,
+            12.9822519
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:807c108978c90d64049fcfde1bbb37fd3b09a9daf5088026430644f9614d0c61"
+            }
+          }
+        ]
+      },
+      "attributes": [
+        {
+          "id": "obs:8e55b9f312ec898afb4a94bfe6a8f1c964294b93764912f277d629c9402345d3:road.association_method",
+          "entityId": "place:society-entrance:society-rera-53c0b81882e6acc6-node-12638053899",
+          "factKey": "road.association_method",
+          "value": {
+            "type": "Text",
+            "data": "osm_gate_boundary_public_road"
+          },
+          "evidence": {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "place:society-entrance:society-rera-53c0b81882e6acc6-node-12638053899",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:8e55b9f312ec898afb4a94bfe6a8f1c964294b93764912f277d629c9402345d3"
+            }
+          },
+          "sourceType": "Renderer fixture",
+          "sourceUrl": "https://www.openstreetmap.org/node/12638053899",
+          "observedAt": "2026-09-13T00:00:00Z",
+          "confidence": 0.78
+        },
+        {
+          "id": "obs:0c61370089a86dfa5b33ae7d1924ceb1482c8166b9cd8b0763ed5b3bf62b41c0:entrance.status",
+          "entityId": "place:society-entrance:society-rera-53c0b81882e6acc6-node-12638053899",
+          "factKey": "entrance.status",
+          "value": {
+            "type": "Text",
+            "data": "inferred"
+          },
+          "evidence": {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "place:society-entrance:society-rera-53c0b81882e6acc6-node-12638053899",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:0c61370089a86dfa5b33ae7d1924ceb1482c8166b9cd8b0763ed5b3bf62b41c0"
+            }
+          },
+          "sourceType": "Renderer fixture",
+          "sourceUrl": "https://www.openstreetmap.org/node/12638053899",
+          "observedAt": "2026-09-13T00:00:00Z",
+          "confidence": 0.78
+        }
+      ],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:e04778e23ff83ad13f10069a4d8083ab44286127158ffbea6adb4a5817083df8:approach_road",
+        "entityId": "society:prestige-waterford",
+        "factKey": "approach_road",
+        "value": {
+          "type": "Text",
+          "data": "ECC Road"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:e04778e23ff83ad13f10069a4d8083ab44286127158ffbea6adb4a5817083df8"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://www.openstreetmap.org/way/23213668",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.78
+      },
+      "target": {
+        "entityId": "place:approach-road:society-rera-53c0b81882e6acc6-23213668",
+        "name": "ECC Road",
+        "point": null,
+        "geometry": {
+          "type": "LineString",
+          "coordinates": [
+            [
+              77.7413357,
+              12.9760344
+            ],
+            [
+              77.7417137,
+              12.9770455
+            ],
+            [
+              77.7419124,
+              12.9775769
+            ],
+            [
+              77.7419495,
+              12.9776762
+            ],
+            [
+              77.742028,
+              12.9780589
+            ],
+            [
+              77.7420749,
+              12.9782874
+            ],
+            [
+              77.7420842,
+              12.9783591
+            ],
+            [
+              77.7421298,
+              12.9786474
+            ],
+            [
+              77.7421359,
+              12.9786878
+            ],
+            [
+              77.742183,
+              12.9788947
+            ],
+            [
+              77.7421907,
+              12.9789112
+            ],
+            [
+              77.7422762,
+              12.9790953
+            ],
+            [
+              77.7423166,
+              12.9791736
+            ],
+            [
+              77.7423624,
+              12.9792552
+            ],
+            [
+              77.7425448,
+              12.9796341
+            ],
+            [
+              77.7426373,
+              12.9798261
+            ],
+            [
+              77.7427615,
+              12.9800841
+            ],
+            [
+              77.7428436,
+              12.9802546
+            ],
+            [
+              77.7429844,
+              12.9805469
+            ],
+            [
+              77.7430801,
+              12.9807456
+            ],
+            [
+              77.743212,
+              12.9810195
+            ],
+            [
+              77.743379,
+              12.9813228
+            ],
+            [
+              77.7435939,
+              12.9817538
+            ],
+            [
+              77.7436213,
+              12.9818087
+            ],
+            [
+              77.7436776,
+              12.9819217
+            ],
+            [
+              77.7437652,
+              12.9821367
+            ],
+            [
+              77.743819,
+              12.9822607
+            ],
+            [
+              77.7438711,
+              12.9823965
+            ],
+            [
+              77.7439898,
+              12.9827003
+            ],
+            [
+              77.7439871,
+              12.9827748
+            ],
+            [
+              77.7439483,
+              12.9829904
+            ],
+            [
+              77.7438694,
+              12.9833247
+            ],
+            [
+              77.7438466,
+              12.9833822
+            ],
+            [
+              77.7438044,
+              12.9837053
+            ],
+            [
+              77.7437913,
+              12.9838059
+            ],
+            [
+              77.7442767,
+              12.9850243
+            ],
+            [
+              77.744386,
+              12.9852987
+            ],
+            [
+              77.7446195,
+              12.9858097
+            ],
+            [
+              77.7448189,
+              12.9863119
+            ],
+            [
+              77.7448394,
+              12.9863637
+            ]
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:e04778e23ff83ad13f10069a4d8083ab44286127158ffbea6adb4a5817083df8"
+            }
+          }
+        ]
+      },
+      "attributes": [
+        {
+          "id": "obs:7a71a092501e8361450318cd48d09aeecb9a59a4b9bdb684aee4430ca4e6675c:road.direction",
+          "entityId": "place:approach-road:society-rera-53c0b81882e6acc6-23213668",
+          "factKey": "road.direction",
+          "value": {
+            "type": "Text",
+            "data": "two_way"
+          },
+          "evidence": {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "place:approach-road:society-rera-53c0b81882e6acc6-23213668",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:7a71a092501e8361450318cd48d09aeecb9a59a4b9bdb684aee4430ca4e6675c"
+            }
+          },
+          "sourceType": "Renderer fixture",
+          "sourceUrl": "https://www.openstreetmap.org/way/23213668",
+          "observedAt": "2026-09-13T00:00:00Z",
+          "confidence": 0.78
+        },
+        {
+          "id": "obs:1439be204e7b256789e5d0e53fdd8f90a4e3c070ebd8d980f0e7841d5321e619:road.association_method",
+          "entityId": "place:approach-road:society-rera-53c0b81882e6acc6-23213668",
+          "factKey": "road.association_method",
+          "value": {
+            "type": "Text",
+            "data": "boundary_proximity"
+          },
+          "evidence": {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "place:approach-road:society-rera-53c0b81882e6acc6-23213668",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:1439be204e7b256789e5d0e53fdd8f90a4e3c070ebd8d980f0e7841d5321e619"
+            }
+          },
+          "sourceType": "Renderer fixture",
+          "sourceUrl": "https://www.openstreetmap.org/way/23213668",
+          "observedAt": "2026-09-13T00:00:00Z",
+          "confidence": 0.78
+        }
+      ],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:08f9ec00a66fa26857051df4dc3d05dd6823e680503f225ba095c91def3b8600:nearby_schools",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_schools",
+        "value": {
+          "type": "Text",
+          "data": "Narayana eTechno (CBSE) School - Whitefield (1.3 km)"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:08f9ec00a66fa26857051df4dc3d05dd6823e680503f225ba095c91def3b8600"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://maps.google.com/?cid=1616325480287209589&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.82
+      },
+      "target": {
+        "entityId": "place:google:chijcfj2rqitrjsrdyju7xvxbhy",
+        "name": "Narayana eTechno (CBSE) School - Whitefield",
+        "point": [
+          77.7417613,
+          12.9683895
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.7417613,
+            12.9683895
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:08f9ec00a66fa26857051df4dc3d05dd6823e680503f225ba095c91def3b8600"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:5d9ebdecd7fb6968af6d6d79961529d70fce84379b5a0143f753eab465e83138:nearby_schools",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_schools",
+        "value": {
+          "type": "Text",
+          "data": "Gopalan National School (3.5 km)"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:5d9ebdecd7fb6968af6d6d79961529d70fce84379b5a0143f753eab465e83138"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://maps.google.com/?cid=3974057079295310505&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.82
+      },
+      "target": {
+        "entityId": "place:google:chijq6qqqnmrrjsrqfqfsnuvjjc",
+        "name": "Gopalan National School",
+        "point": [
+          77.70740099999999,
+          12.9863492
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.70740099999999,
+            12.9863492
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:5d9ebdecd7fb6968af6d6d79961529d70fce84379b5a0143f753eab465e83138"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:0bb56b458f2e6cd47c3481bf10ffb501951c8effa6b579a7b7accbf37492e03e:nearby_schools",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_schools",
+        "value": {
+          "type": "Text",
+          "data": "VedaVihaan The Global School - Best Pre School & Day Care Whitefield - Campus - 2, \u0cb5\u0cc7\u0ca6 \u0cb5\u0cbf\u0cb9\u0cbe\u0ca8\u0ccd \u0c97\u0ccd\u0cb2\u0ccb\u0cac\u0cb2\u0ccd \u0cb8\u0ccd\u0c95\u0cc2\u0cb2\u0ccd - \u0cb5\u0cc8\u0c9f\u0ccd \u0cab\u0cc0\u0cb2\u0ccd\u0ca1\u0ccd (2.5 km)"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:0bb56b458f2e6cd47c3481bf10ffb501951c8effa6b579a7b7accbf37492e03e"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://maps.google.com/?cid=13817199609018017295&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.82
+      },
+      "target": {
+        "entityId": "place:google:chijkznd-64nrjsrd2yvdtanwl8",
+        "name": "VedaVihaan The Global School - Best Pre School & Day Care Whitefield - Campus - 2, \u0cb5\u0cc7\u0ca6 \u0cb5\u0cbf\u0cb9\u0cbe\u0ca8\u0ccd \u0c97\u0ccd\u0cb2\u0ccb\u0cac\u0cb2\u0ccd \u0cb8\u0ccd\u0c95\u0cc2\u0cb2\u0ccd - \u0cb5\u0cc8\u0c9f\u0ccd \u0cab\u0cc0\u0cb2\u0ccd\u0ca1\u0ccd",
+        "point": [
+          77.7604266,
+          12.9667002
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.7604266,
+            12.9667002
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:0bb56b458f2e6cd47c3481bf10ffb501951c8effa6b579a7b7accbf37492e03e"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:b2ecb09fb874b8ba9123dca8ce7090bb1d6d9015a8f406888804680e503db1db:nearby_schools",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_schools",
+        "value": {
+          "type": "Text",
+          "data": "Pragathi ORCHIDS The International School - CBSE School in Whitefield- Affiliation No.830467 (2.7 km)"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:b2ecb09fb874b8ba9123dca8ce7090bb1d6d9015a8f406888804680e503db1db"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://maps.google.com/?cid=18101616861430774994&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.82
+      },
+      "target": {
+        "entityId": "place:google:chijd9lkuteprjsr0nznbahcnfs",
+        "name": "Pragathi ORCHIDS The International School - CBSE School in Whitefield- Affiliation No.830467",
+        "point": [
+          77.76346439999999,
+          12.9968946
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.76346439999999,
+            12.9968946
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:b2ecb09fb874b8ba9123dca8ce7090bb1d6d9015a8f406888804680e503db1db"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:28fd9c0a4e13102961b27fd14f4086362b8a83b89aa40b48c831aae26a795881:nearby_schools",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_schools",
+        "value": {
+          "type": "Text",
+          "data": "The Sommer School (2.3 km)"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:28fd9c0a4e13102961b27fd14f4086362b8a83b89aa40b48c831aae26a795881"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://maps.google.com/?cid=1862339117432196728&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.82
+      },
+      "target": {
+        "entityId": "place:google:chijheodc3wnrjsree7cay9b2bk",
+        "name": "The Sommer School",
+        "point": [
+          77.74687899999999,
+          12.9601426
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.74687899999999,
+            12.9601426
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:28fd9c0a4e13102961b27fd14f4086362b8a83b89aa40b48c831aae26a795881"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:1f8fdec5a0955b91113917487471e9956e5a59e180be276ca17bd4a006b25b94:nearby_schools",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_schools",
+        "value": {
+          "type": "Text",
+          "data": "The Cerebral Academy (1.5 km)"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:1f8fdec5a0955b91113917487471e9956e5a59e180be276ca17bd4a006b25b94"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://maps.google.com/?cid=4377181633755896574&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.82
+      },
+      "target": {
+        "entityId": "place:google:chijfywa5seprjsr-lpilyhfvjw",
+        "name": "The Cerebral Academy",
+        "point": [
+          77.7574165,
+          12.9798241
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.7574165,
+            12.9798241
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:1f8fdec5a0955b91113917487471e9956e5a59e180be276ca17bd4a006b25b94"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:6ed3fc0cfee3f9ef4e1cdd34bb40711ce1ba7cc2e4407d95fe285dee0420d0fb:nearby_schools",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_schools",
+        "value": {
+          "type": "Text",
+          "data": "United World Academy, Whitefield Campus (2.3 km)"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:6ed3fc0cfee3f9ef4e1cdd34bb40711ce1ba7cc2e4407d95fe285dee0420d0fb"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://maps.google.com/?cid=1192933762312967056&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.82
+      },
+      "target": {
+        "entityId": "place:google:chijg8amev4trjsrkbm8t-8mjha",
+        "name": "United World Academy, Whitefield Campus",
+        "point": [
+          77.7326483,
+          12.960844800000002
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.7326483,
+            12.960844800000002
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:6ed3fc0cfee3f9ef4e1cdd34bb40711ce1ba7cc2e4407d95fe285dee0420d0fb"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:10bdb91d4dd7c0d7cd825eb15f38b462761051cc317108a1615ceb0aa37c9a51:nearby_hospitals",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_hospitals",
+        "value": {
+          "type": "Text",
+          "data": "Manipal Hospital Whitefield (1.6 km, 4.7 rating, 36146 reviews)"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:10bdb91d4dd7c0d7cd825eb15f38b462761051cc317108a1615ceb0aa37c9a51"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://maps.google.com/?cid=15332696838885152358&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.82
+      },
+      "target": {
+        "entityId": "place:google:chijocj7bfwrrjsrzhab8omuynq",
+        "name": "Manipal Hospital Whitefield",
+        "point": [
+          77.72877439999999,
+          12.9880554
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.72877439999999,
+            12.9880554
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:10bdb91d4dd7c0d7cd825eb15f38b462761051cc317108a1615ceb0aa37c9a51"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:80f3e75e1c312f0d2608f2ef869513de60ea5682f390427f30d8c6fd32344dc9:nearby_hospitals",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_hospitals",
+        "value": {
+          "type": "Text",
+          "data": "Manipal Hospital Varthur Road (2.5 km)"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:80f3e75e1c312f0d2608f2ef869513de60ea5682f390427f30d8c6fd32344dc9"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://maps.google.com/?cid=2663999700547701435&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.82
+      },
+      "target": {
+        "entityId": "place:google:chijsxo6hfynrjsru4rk-jxt-cq",
+        "name": "Manipal Hospital Varthur Road",
+        "point": [
+          77.7455758,
+          12.9581418
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.7455758,
+            12.9581418
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:80f3e75e1c312f0d2608f2ef869513de60ea5682f390427f30d8c6fd32344dc9"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:984108e7929efbcc3468f7dce53b31d9ea30fa4fa5ce08e06af27d9277fdf300:nearby_hospitals",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_hospitals",
+        "value": {
+          "type": "Text",
+          "data": "Aster Hospital Whitefield Bangalore (1.2 km, 4.7 rating, 10896 reviews)"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:984108e7929efbcc3468f7dce53b31d9ea30fa4fa5ce08e06af27d9277fdf300"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://maps.google.com/?cid=12804935806198381837&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.82
+      },
+      "target": {
+        "entityId": "place:google:chijkbnmtagrrjsrdx0itevftle",
+        "name": "Aster Hospital Whitefield Bangalore",
+        "point": [
+          77.7337373,
+          12.9894945
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.7337373,
+            12.9894945
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:984108e7929efbcc3468f7dce53b31d9ea30fa4fa5ce08e06af27d9277fdf300"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:405a59beb09e661d47ffdbf9cfef805e4a0739fb9fb9312a61b889fc4cadd065:nearby_hospitals",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_hospitals",
+        "value": {
+          "type": "Text",
+          "data": "Medicover Hospitals (2.1 km)"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:405a59beb09e661d47ffdbf9cfef805e4a0739fb9fb9312a61b889fc4cadd065"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://maps.google.com/?cid=12246425266692494302&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.82
+      },
+      "target": {
+        "entityId": "place:google:chijqz1rsegrrjsr3hotteuk9kk",
+        "name": "Medicover Hospitals",
+        "point": [
+          77.7232134,
+          12.9913551
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.7232134,
+            12.9913551
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:405a59beb09e661d47ffdbf9cfef805e4a0739fb9fb9312a61b889fc4cadd065"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:fa32f1c41e7d9ad92a33110273479069fba47572920571eae78e9b603c53a11a:nearby_hospitals",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_hospitals",
+        "value": {
+          "type": "Text",
+          "data": "RxDx Clinics, Whitefield (3.2 km)"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:fa32f1c41e7d9ad92a33110273479069fba47572920571eae78e9b603c53a11a"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://maps.google.com/?cid=15406747735277277724&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.82
+      },
+      "target": {
+        "entityId": "place:google:chijcsjmg3urrjsrhjjb0w-dz9u",
+        "name": "RxDx Clinics, Whitefield",
+        "point": [
+          77.71048239999999,
+          12.9768857
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.71048239999999,
+            12.9768857
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:fa32f1c41e7d9ad92a33110273479069fba47572920571eae78e9b603c53a11a"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:b53b3cc1ca6e4f1c99aea3e2889eec82179158bf56408133e4f55bc177f29384:nearby_hospitals",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_hospitals",
+        "value": {
+          "type": "Text",
+          "data": "Brookefield Hospital - Your Neighbourhood Friendly Hospital (2.9 km)"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:b53b3cc1ca6e4f1c99aea3e2889eec82179158bf56408133e4f55bc177f29384"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://maps.google.com/?cid=7464189680467592888&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.82
+      },
+      "target": {
+        "entityId": "place:google:chij29gd-cmsrjsruezoqpcglmc",
+        "name": "Brookefield Hospital - Your Neighbourhood Friendly Hospital",
+        "point": [
+          77.7169177,
+          12.9669762
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.7169177,
+            12.9669762
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:b53b3cc1ca6e4f1c99aea3e2889eec82179158bf56408133e4f55bc177f29384"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:e390c91accd3172e4da100961b4f4e501cf91da97c798fda4eb870f5e393e75a:nearby_hospitals",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_hospitals",
+        "value": {
+          "type": "Text",
+          "data": "Geetha Hospital - Multispeciality Hospital in Virgonagar, Aavalahalli (5.9 km)"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:e390c91accd3172e4da100961b4f4e501cf91da97c798fda4eb870f5e393e75a"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://maps.google.com/?cid=18019548004942615327&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.82
+      },
+      "target": {
+        "entityId": "place:google:chijq5utjburrjsrhxo0v3blevo",
+        "name": "Geetha Hospital - Multispeciality Hospital in Virgonagar, Aavalahalli",
+        "point": [
+          77.73520529999999,
+          13.0357201
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.73520529999999,
+            13.0357201
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:e390c91accd3172e4da100961b4f4e501cf91da97c798fda4eb870f5e393e75a"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:da1dba894431ed195a9f24a5f9b112c6af3e6e64a149adef01fd6d45f5ccf0a4:nearby_hospitals",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_hospitals",
+        "value": {
+          "type": "Text",
+          "data": "Amrik Hospital (0.6 km, 4.0 rating, 717 reviews)"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:da1dba894431ed195a9f24a5f9b112c6af3e6e64a149adef01fd6d45f5ccf0a4"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://maps.google.com/?cid=13355611315942097869&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.82
+      },
+      "target": {
+        "entityId": "place:google:chijqtpfvaiorjsrzypqflupwlk",
+        "name": "Amrik Hospital",
+        "point": [
+          77.7479165,
+          12.982791
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.7479165,
+            12.982791
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:da1dba894431ed195a9f24a5f9b112c6af3e6e64a149adef01fd6d45f5ccf0a4"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:8ba2233a5acc1e5725863c2f6948d3f4b09fc7eae4429b8d973254641c2be9fb:nearby_tech_parks",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_tech_parks",
+        "value": {
+          "type": "Text",
+          "data": "SCB Brigade Tech Park (0.5 km, 4.4 rating, 73 reviews)"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:8ba2233a5acc1e5725863c2f6948d3f4b09fc7eae4429b8d973254641c2be9fb"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://maps.google.com/?cid=679705164713758890&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.82
+      },
+      "target": {
+        "entityId": "place:google:chij-xjj3mgrrjsrqhdd-j7mbgk",
+        "name": "SCB Brigade Tech Park",
+        "point": [
+          77.7403519,
+          12.9856216
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.7403519,
+            12.9856216
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:8ba2233a5acc1e5725863c2f6948d3f4b09fc7eae4429b8d973254641c2be9fb"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:728ecb40e698435d2f791567ce95a804efb44b0f7a3be5b97c5c9d822d04ea81:nearby_tech_parks",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_tech_parks",
+        "value": {
+          "type": "Text",
+          "data": "Sattva Tech Park Zeta (0.5 km, 4.3 rating, 7 reviews)"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:728ecb40e698435d2f791567ce95a804efb44b0f7a3be5b97c5c9d822d04ea81"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://maps.google.com/?cid=5175890868150563095&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.82
+      },
+      "target": {
+        "entityId": "place:google:chijjemkiharrjsrf3fnufj11ec",
+        "name": "Sattva Tech Park Zeta",
+        "point": [
+          77.7432472,
+          12.986418
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.7432472,
+            12.986418
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:728ecb40e698435d2f791567ce95a804efb44b0f7a3be5b97c5c9d822d04ea81"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:c7a2632376682b0a7e1cea46e92d695685900885c13121d52ad6adb5436a8bf7:nearby_tech_parks",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_tech_parks",
+        "value": {
+          "type": "Text",
+          "data": "International Tech Park Bengaluru (ITPB) (0.6 km)"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:c7a2632376682b0a7e1cea46e92d695685900885c13121d52ad6adb5436a8bf7"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://maps.google.com/?cid=6921538493845548311&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.82
+      },
+      "target": {
+        "entityId": "place:google:chijbr0arpsrrjsrfy3bmjy-dma",
+        "name": "International Tech Park Bengaluru (ITPB)",
+        "point": [
+          77.7355549,
+          12.9858421
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.7355549,
+            12.9858421
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:c7a2632376682b0a7e1cea46e92d695685900885c13121d52ad6adb5436a8bf7"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:1d048b83c3674bb859a52ee9b251982af24c7d8d93b961e115d556f8af95dc48:nearby_tech_parks",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_tech_parks",
+        "value": {
+          "type": "Text",
+          "data": "First Technology Park (1.1 km)"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:1d048b83c3674bb859a52ee9b251982af24c7d8d93b961e115d556f8af95dc48"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://maps.google.com/?cid=5888865877190485919&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.82
+      },
+      "target": {
+        "entityId": "place:google:chijkyqs6perrjsrn6fbk1b0uve",
+        "name": "First Technology Park",
+        "point": [
+          77.72991909999999,
+          12.9838713
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.72991909999999,
+            12.9838713
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:1d048b83c3674bb859a52ee9b251982af24c7d8d93b961e115d556f8af95dc48"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:afe540c51518789ef66b13814e5e119ec33ba14e19412aa8ac5bf4de14ffa533:nearby_tech_parks",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_tech_parks",
+        "value": {
+          "type": "Text",
+          "data": "H M Tech Park (1.1 km, 4.0 rating, 267 reviews)"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:afe540c51518789ef66b13814e5e119ec33ba14e19412aa8ac5bf4de14ffa533"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://maps.google.com/?cid=16527355447962552979&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.82
+      },
+      "target": {
+        "entityId": "place:google:chijgvmbigqorjsrk8ps2db2xou",
+        "name": "H M Tech Park",
+        "point": [
+          77.7519497,
+          12.982876
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.7519497,
+            12.982876
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:afe540c51518789ef66b13814e5e119ec33ba14e19412aa8ac5bf4de14ffa533"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:20b6a26ce4b67aa06dcdf71fddd903fa870ede511ed0ae94bf53085a3cf2af25:nearby_tech_parks",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_tech_parks",
+        "value": {
+          "type": "Text",
+          "data": "Prasad Tech Park (1.5 km)"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:20b6a26ce4b67aa06dcdf71fddd903fa870ede511ed0ae94bf53085a3cf2af25"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://maps.google.com/?cid=15880899925075095137&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.82
+      },
+      "target": {
+        "entityId": "place:google:chijhyzfoosrrjsrye6gw1dkznw",
+        "name": "Prasad Tech Park",
+        "point": [
+          77.725769,
+          12.9763969
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.725769,
+            12.9763969
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:20b6a26ce4b67aa06dcdf71fddd903fa870ede511ed0ae94bf53085a3cf2af25"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:5d7cbafe631ad48609d015893db9a3b8f74f0e31fef781bd9154a3cb82ff5966:nearby_tech_parks",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_tech_parks",
+        "value": {
+          "type": "Text",
+          "data": "Mind Comp Tech Park (2.1 km)"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:5d7cbafe631ad48609d015893db9a3b8f74f0e31fef781bd9154a3cb82ff5966"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://maps.google.com/?cid=7151811986435537483&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.82
+      },
+      "target": {
+        "entityId": "place:google:chijbat3jy0rrjsrs-refxxxqgm",
+        "name": "Mind Comp Tech Park",
+        "point": [
+          77.71993979999999,
+          12.982117400000002
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.71993979999999,
+            12.982117400000002
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:5d7cbafe631ad48609d015893db9a3b8f74f0e31fef781bd9154a3cb82ff5966"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:f46ed340c5dd7913288c3621d219acc8f93d0b72c2bb40430d16bb3779e62f32:nearby_tech_parks",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_tech_parks",
+        "value": {
+          "type": "Text",
+          "data": "Sigma Soft Tech Park Gamma Block (2.5 km)"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:f46ed340c5dd7913288c3621d219acc8f93d0b72c2bb40430d16bb3779e62f32"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://maps.google.com/?cid=4598824061568570445&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.82
+      },
+      "target": {
+        "entityId": "place:google:chijny9h5qksrjsrtvrqth5o0j8",
+        "name": "Sigma Soft Tech Park Gamma Block",
+        "point": [
+          77.7446148,
+          12.9582507
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.7446148,
+            12.9582507
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:f46ed340c5dd7913288c3621d219acc8f93d0b72c2bb40430d16bb3779e62f32"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:d9503fd840f767a6e2a885251da76a72061634a06e1b9cd2aa1c3be22bb1c0a0:nearby_tech_parks",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_tech_parks",
+        "value": {
+          "type": "Text",
+          "data": "Prestige Tech Park (6.3 km)"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:d9503fd840f767a6e2a885251da76a72061634a06e1b9cd2aa1c3be22bb1c0a0"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://maps.google.com/?cid=14954276528848865957&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.82
+      },
+      "target": {
+        "entityId": "place:google:chij7-cgk7mtrjsrpyr-lkvdim8",
+        "name": "Prestige Tech Park",
+        "point": [
+          77.696726,
+          12.9423572
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.696726,
+            12.9423572
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:d9503fd840f767a6e2a885251da76a72061634a06e1b9cd2aa1c3be22bb1c0a0"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:eecfcb34cbd88ee97b93b40c6cabe0bee4dbc8fcbf8f580e5764b9679241374c:nearby_tech_parks",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_tech_parks",
+        "value": {
+          "type": "Text",
+          "data": "Prestige Tech Park - PTP (7.6 km)"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:eecfcb34cbd88ee97b93b40c6cabe0bee4dbc8fcbf8f580e5764b9679241374c"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://maps.google.com/?cid=13936553630776517636&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.82
+      },
+      "target": {
+        "entityId": "place:google:chijy0onmrqtrjsrbgsdk7cvame",
+        "name": "Prestige Tech Park - PTP",
+        "point": [
+          77.6910467,
+          12.930624
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.6910467,
+            12.930624
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:eecfcb34cbd88ee97b93b40c6cabe0bee4dbc8fcbf8f580e5764b9679241374c"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:d11a9b4406a728679a5ac7074a8c6b9eea3bc156cee80606a2853654c713fb44:nearby_tech_parks",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_tech_parks",
+        "value": {
+          "type": "Text",
+          "data": "Global Technology Park (8.4 km)"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:d11a9b4406a728679a5ac7074a8c6b9eea3bc156cee80606a2853654c713fb44"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://maps.google.com/?cid=50515869781530776&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.82
+      },
+      "target": {
+        "entityId": "place:google:chijz6c4kactrjsrmbjzeep3swa",
+        "name": "Global Technology Park",
+        "point": [
+          77.6834483,
+          12.927841
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.6834483,
+            12.927841
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:d11a9b4406a728679a5ac7074a8c6b9eea3bc156cee80606a2853654c713fb44"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:2c97f46d9e964e119d63266cdf06697e6ac2f935520814bf1d6b17adb3e5711a:nearby_tech_parks",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_tech_parks",
+        "value": {
+          "type": "Text",
+          "data": "Bagmane Tech Park (9.0 km)"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:2c97f46d9e964e119d63266cdf06697e6ac2f935520814bf1d6b17adb3e5711a"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://maps.google.com/?cid=16971733055600971259&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.82
+      },
+      "target": {
+        "entityId": "place:google:chij84dbbu8rrjsr-83zquu1h-s",
+        "name": "Bagmane Tech Park",
+        "point": [
+          77.65649049999999,
+          12.9797902
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.65649049999999,
+            12.9797902
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:2c97f46d9e964e119d63266cdf06697e6ac2f935520814bf1d6b17adb3e5711a"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:c62a41421b9d796a1449ab829d2760c822f814fda5e2afc560761c7b95a1c222:nearby_tech_parks",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_tech_parks",
+        "value": {
+          "type": "Text",
+          "data": "99 Tech Park (12.7 km)"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:c62a41421b9d796a1449ab829d2760c822f814fda5e2afc560761c7b95a1c222"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://maps.google.com/?cid=16484109893542405604&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.82
+      },
+      "target": {
+        "entityId": "place:google:chijtybnzqatrjsr5ouyk5xsw-q",
+        "name": "99 Tech Park",
+        "point": [
+          77.6615319,
+          12.894544
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.6615319,
+            12.894544
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:c62a41421b9d796a1449ab829d2760c822f814fda5e2afc560761c7b95a1c222"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:7310aeea000b3a99185d9ca0507ce3428ce9d829ca9f3104ee977f8aa88986cf:nearby_tech_parks",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_tech_parks",
+        "value": {
+          "type": "Text",
+          "data": "Novel Tech Park (14.5 km)"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:7310aeea000b3a99185d9ca0507ce3428ce9d829ca9f3104ee977f8aa88986cf"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://maps.google.com/?cid=18002197962051035653&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.82
+      },
+      "target": {
+        "entityId": "place:google:chij-0wxeraurjsrbsjqskqn1pk",
+        "name": "Novel Tech Park",
+        "point": [
+          77.6414856,
+          12.8914639
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.6414856,
+            12.8914639
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:7310aeea000b3a99185d9ca0507ce3428ce9d829ca9f3104ee977f8aa88986cf"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:752e5444218ce2abcce15080eed2c1bf366518f88958624c0e67c9194232353c:nearby_tech_parks",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_tech_parks",
+        "value": {
+          "type": "Text",
+          "data": "Manyata Tech Park (14.6 km)"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:752e5444218ce2abcce15080eed2c1bf366518f88958624c0e67c9194232353c"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://maps.google.com/?cid=3019133208599672923&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.82
+      },
+      "target": {
+        "entityId": "place:google:chijmxawauoxrjsrwzgrpkgd5ik",
+        "name": "Manyata Tech Park",
+        "point": [
+          77.6215943,
+          13.0449229
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.6215943,
+            13.0449229
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:752e5444218ce2abcce15080eed2c1bf366518f88958624c0e67c9194232353c"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:2618c7696d56817125809a12932060b88c76a6704843fa9f0a25b282eaf59909:nearby_tech_parks",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_tech_parks",
+        "value": {
+          "type": "Text",
+          "data": "AMR Tech Park work place (14.8 km)"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:2618c7696d56817125809a12932060b88c76a6704843fa9f0a25b282eaf59909"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://maps.google.com/?cid=12517856831027437932&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.82
+      },
+      "target": {
+        "entityId": "place:google:chijdf7pit0urjsrbggwindcuk0",
+        "name": "AMR Tech Park work place",
+        "point": [
+          77.6307923,
+          12.899122
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.6307923,
+            12.899122
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:2618c7696d56817125809a12932060b88c76a6704843fa9f0a25b282eaf59909"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:e5500f6bb266e06083dc18fe8a5d8c4ce352d586c03ed2add71b471c8f46e911:nearby_tech_parks",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_tech_parks",
+        "value": {
+          "type": "Text",
+          "data": "Ozone Manay Technology Park (14.8 km)"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:e5500f6bb266e06083dc18fe8a5d8c4ce352d586c03ed2add71b471c8f46e911"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://maps.google.com/?cid=13106667931749233652&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.82
+      },
+      "target": {
+        "entityId": "place:google:chijgvafrl4urjsr9lpqtao95lu",
+        "name": "Ozone Manay Technology Park",
+        "point": [
+          77.6378745,
+          12.8914765
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.6378745,
+            12.8914765
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:e5500f6bb266e06083dc18fe8a5d8c4ce352d586c03ed2add71b471c8f46e911"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:1b9de5dda03459bc4d71a37a8f876ffd9b65c97ea9e52dc2cec875274fa5dba9:nearby_public_parks",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_public_parks",
+        "value": {
+          "type": "Text",
+          "data": "Inner circle municipal park (1.3 km, 4.2 rating, 3260 reviews)"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:1b9de5dda03459bc4d71a37a8f876ffd9b65c97ea9e52dc2cec875274fa5dba9"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://maps.google.com/?cid=6038406924878011709&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.82
+      },
+      "target": {
+        "entityId": "place:google:chijnxpnap8nrjsrpd2c9hq7zfm",
+        "name": "Inner circle municipal park",
+        "point": [
+          77.7484923,
+          12.9718951
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.7484923,
+            12.9718951
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:1b9de5dda03459bc4d71a37a8f876ffd9b65c97ea9e52dc2cec875274fa5dba9"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:069eb8ee5ec7b693c6f74faa4d1846158bb57c69c94b06a0b72981e589605f41:nearby_public_parks",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_public_parks",
+        "value": {
+          "type": "Text",
+          "data": "Kadugodi Tree Park (0.6 km, 4.4 rating, 2903 reviews)"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:069eb8ee5ec7b693c6f74faa4d1846158bb57c69c94b06a0b72981e589605f41"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://maps.google.com/?cid=4391296233917239095&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.82
+      },
+      "target": {
+        "entityId": "place:google:chij3ynol9uprjsrn88lnqge8tw",
+        "name": "Kadugodi Tree Park",
+        "point": [
+          77.74480899999999,
+          12.9865938
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.74480899999999,
+            12.9865938
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:069eb8ee5ec7b693c6f74faa4d1846158bb57c69c94b06a0b72981e589605f41"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:4292b80c1f40240f40dec344d9a8c508dc066dae65d2bffb7bb7259e0849e886:nearby_public_parks",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_public_parks",
+        "value": {
+          "type": "Text",
+          "data": "Nallurhalli Park (1.6 km)"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:4292b80c1f40240f40dec344d9a8c508dc066dae65d2bffb7bb7259e0849e886"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://maps.google.com/?cid=11627045516257244100&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.82
+      },
+      "target": {
+        "entityId": "place:google:chijhwbuswqsrjsrxlppv0uqw6e",
+        "name": "Nallurhalli Park",
+        "point": [
+          77.7290081,
+          12.9699781
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.7290081,
+            12.9699781
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:4292b80c1f40240f40dec344d9a8c508dc066dae65d2bffb7bb7259e0849e886"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:707e4e190ec5fe20b8ab42556362d9621c3cdb58d552b07765c133f739167613:nearby_public_parks",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_public_parks",
+        "value": {
+          "type": "Text",
+          "data": "Maithri Layout Park (1.3 km)"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:707e4e190ec5fe20b8ab42556362d9621c3cdb58d552b07765c133f739167613"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://maps.google.com/?cid=18442701382871448112&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.82
+      },
+      "target": {
+        "entityId": "place:google:chija6nybguorjsrmhqosdgj8f8",
+        "name": "Maithri Layout Park",
+        "point": [
+          77.7557574,
+          12.9843716
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.7557574,
+            12.9843716
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:707e4e190ec5fe20b8ab42556362d9621c3cdb58d552b07765c133f739167613"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:8a018272218ee23bac349d2879efd21d29d9d057d49973f7c8513cfea7026edd:nearby_public_parks",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_public_parks",
+        "value": {
+          "type": "Text",
+          "data": "Kodigehalli Hoodi Park (2.4 km)"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:8a018272218ee23bac349d2879efd21d29d9d057d49973f7c8513cfea7026edd"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://maps.google.com/?cid=12833874571817308356&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.82
+      },
+      "target": {
+        "entityId": "place:google:chijuviefr8rrjsrxnawie0ug7i",
+        "name": "Kodigehalli Hoodi Park",
+        "point": [
+          77.72526839999999,
+          12.9980104
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.72526839999999,
+            12.9980104
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:8a018272218ee23bac349d2879efd21d29d9d057d49973f7c8513cfea7026edd"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:2ca49b50ee13a1aa3dc7e03a9ef73a41cf63efe6b0fdcd7417d3900507da73b2:nearby_public_parks",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_public_parks",
+        "value": {
+          "type": "Text",
+          "data": "Avenue Park (0.8 km, 3.8 rating, 5 reviews)"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:2ca49b50ee13a1aa3dc7e03a9ef73a41cf63efe6b0fdcd7417d3900507da73b2"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://maps.google.com/?cid=11690273852691903014&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.82
+      },
+      "target": {
+        "entityId": "place:google:chijfcss6-orrjsrjvk8nceypki",
+        "name": "Avenue Park",
+        "point": [
+          77.735321,
+          12.9835528
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.735321,
+            12.9835528
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:2ca49b50ee13a1aa3dc7e03a9ef73a41cf63efe6b0fdcd7417d3900507da73b2"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:9b2c38be5b57d5aee54635fcf8247bfe61aa12eca0d34649a56151fd05f132f2:nearby_breweries",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_breweries",
+        "value": {
+          "type": "Text",
+          "data": "2 Pints Brewing Taproom & Kitchen (2.7 km, 4.7 rating, 205 reviews)"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:9b2c38be5b57d5aee54635fcf8247bfe61aa12eca0d34649a56151fd05f132f2"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": "https://maps.google.com/?cid=6158494646594350939&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 0.82
+      },
+      "target": {
+        "entityId": "place:google:chijgud8fp8nrjsrw69mgubed1u",
+        "name": "2 Pints Brewing Taproom & Kitchen",
+        "point": [
+          77.717753,
+          12.9759688
+        ],
+        "geometry": {
+          "type": "Point",
+          "coordinates": [
+            77.717753,
+            12.9759688
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:9b2c38be5b57d5aee54635fcf8247bfe61aa12eca0d34649a56151fd05f132f2"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:5785c39243647d950b3b16373d56ed4849247d90e3667a87baceb6df0bcf74b4:nearby_lakes",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_lakes",
+        "value": {
+          "type": "Text",
+          "data": "Pattandur Agrahara Kunte is 500 m from this home"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:5785c39243647d950b3b16373d56ed4849247d90e3667a87baceb6df0bcf74b4"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": null,
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 1.0
+      },
+      "target": {
+        "entityId": "obs:5785c39243647d950b3b16373d56ed4849247d90e3667a87baceb6df0bcf74b4:nearby_lakes",
+        "name": "Pattandur Agrahara Kunte",
+        "point": null,
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                77.7385253,
+                12.9791791
+              ],
+              [
+                77.7379141,
+                12.9796385
+              ],
+              [
+                77.7377856,
+                12.9797196
+              ],
+              [
+                77.7370759,
+                12.9800474
+              ],
+              [
+                77.7367753,
+                12.98022
+              ],
+              [
+                77.7369631,
+                12.9804553
+              ],
+              [
+                77.7376047,
+                12.9806934
+              ],
+              [
+                77.7380851,
+                12.9809078
+              ],
+              [
+                77.7385816,
+                12.9811118
+              ],
+              [
+                77.7388178,
+                12.9810043
+              ],
+              [
+                77.7390111,
+                12.980628
+              ],
+              [
+                77.7391238,
+                12.9802279
+              ],
+              [
+                77.7392016,
+                12.9799846
+              ],
+              [
+                77.7392124,
+                12.9795766
+              ],
+              [
+                77.7391479,
+                12.9790536
+              ],
+              [
+                77.7389332,
+                12.9786037
+              ],
+              [
+                77.7388144,
+                12.9788102
+              ],
+              [
+                77.7386648,
+                12.9790849
+              ],
+              [
+                77.7385253,
+                12.9791791
+              ]
+            ]
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:5785c39243647d950b3b16373d56ed4849247d90e3667a87baceb6df0bcf74b4"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:ed9a7866dbef87af2f0e769131a4ca98c5b020f62d2f2ae81a876f76ad0d721c:nearby_lakes",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_lakes",
+        "value": {
+          "type": "Text",
+          "data": "Pattandur Agrahara Lake is 800 m from this home"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:ed9a7866dbef87af2f0e769131a4ca98c5b020f62d2f2ae81a876f76ad0d721c"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": null,
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 1.0
+      },
+      "target": {
+        "entityId": "obs:ed9a7866dbef87af2f0e769131a4ca98c5b020f62d2f2ae81a876f76ad0d721c:nearby_lakes",
+        "name": "Pattandur Agrahara Lake",
+        "point": null,
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                77.7467576,
+                12.9752104
+              ],
+              [
+                77.7467492,
+                12.9757066
+              ],
+              [
+                77.7467117,
+                12.975819
+              ],
+              [
+                77.7462423,
+                12.975981
+              ],
+              [
+                77.7459231,
+                12.9760359
+              ],
+              [
+                77.7459177,
+                12.9764018
+              ],
+              [
+                77.7459365,
+                12.9766553
+              ],
+              [
+                77.7461296,
+                12.9769455
+              ],
+              [
+                77.74654,
+                12.9769219
+              ],
+              [
+                77.7467331,
+                12.9769115
+              ],
+              [
+                77.7470764,
+                12.9768226
+              ],
+              [
+                77.7473527,
+                12.9768671
+              ],
+              [
+                77.7474359,
+                12.9770605
+              ],
+              [
+                77.7473447,
+                12.9773297
+              ],
+              [
+                77.746717,
+                12.9775492
+              ],
+              [
+                77.7459955,
+                12.9776433
+              ],
+              [
+                77.7452606,
+                12.977578
+              ],
+              [
+                77.7451238,
+                12.9775048
+              ],
+              [
+                77.7449656,
+                12.9773088
+              ],
+              [
+                77.7447644,
+                12.97682
+              ],
+              [
+                77.7446759,
+                12.9765769
+              ],
+              [
+                77.7445123,
+                12.9762424
+              ],
+              [
+                77.7444479,
+                12.9759862
+              ],
+              [
+                77.7444318,
+                12.9758634
+              ],
+              [
+                77.7449897,
+                12.9758059
+              ],
+              [
+                77.7456522,
+                12.9756465
+              ],
+              [
+                77.7460894,
+                12.9754949
+              ],
+              [
+                77.7463308,
+                12.975267
+              ],
+              [
+                77.7463758,
+                12.9752125
+              ],
+              [
+                77.7464143,
+                12.9751498
+              ],
+              [
+                77.746468,
+                12.9750642
+              ],
+              [
+                77.7464981,
+                12.9749889
+              ],
+              [
+                77.746533,
+                12.9749199
+              ],
+              [
+                77.7465904,
+                12.9748802
+              ],
+              [
+                77.746623,
+                12.9748802
+              ],
+              [
+                77.7466784,
+                12.9749302
+              ],
+              [
+                77.746732,
+                12.9750139
+              ],
+              [
+                77.7467576,
+                12.9752104
+              ]
+            ]
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:ed9a7866dbef87af2f0e769131a4ca98c5b020f62d2f2ae81a876f76ad0d721c"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:16b8f75cb40af1ca6ff6c99f769b7c4f5310bf464f3f0a9c43bb22110c7ad150:nearby_lakes",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_lakes",
+        "value": {
+          "type": "Text",
+          "data": "Nallurahalli Lake is 1100 m from this home"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:16b8f75cb40af1ca6ff6c99f769b7c4f5310bf464f3f0a9c43bb22110c7ad150"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": null,
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 1.0
+      },
+      "target": {
+        "entityId": "obs:16b8f75cb40af1ca6ff6c99f769b7c4f5310bf464f3f0a9c43bb22110c7ad150:nearby_lakes",
+        "name": "Nallurahalli Lake",
+        "point": null,
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                77.7374675,
+                12.9735267
+              ],
+              [
+                77.7371958,
+                12.9737397
+              ],
+              [
+                77.7370794,
+                12.9738303
+              ],
+              [
+                77.7369096,
+                12.9738612
+              ],
+              [
+                77.7364145,
+                12.9738957
+              ],
+              [
+                77.7360686,
+                12.9738461
+              ],
+              [
+                77.7354327,
+                12.9735239
+              ],
+              [
+                77.7350342,
+                12.973056
+              ],
+              [
+                77.7348448,
+                12.9728862
+              ],
+              [
+                77.7346898,
+                12.9728584
+              ],
+              [
+                77.7346096,
+                12.9728928
+              ],
+              [
+                77.7345753,
+                12.9729651
+              ],
+              [
+                77.7345577,
+                12.9734347
+              ],
+              [
+                77.7345369,
+                12.973718
+              ],
+              [
+                77.7344268,
+                12.9740356
+              ],
+              [
+                77.7341501,
+                12.9744841
+              ],
+              [
+                77.7338412,
+                12.9749067
+              ],
+              [
+                77.7336733,
+                12.9752339
+              ],
+              [
+                77.7337001,
+                12.975579
+              ],
+              [
+                77.7342443,
+                12.9758077
+              ],
+              [
+                77.7356866,
+                12.9758893
+              ],
+              [
+                77.7359189,
+                12.9759042
+              ],
+              [
+                77.7361785,
+                12.9759083
+              ],
+              [
+                77.7364735,
+                12.9758665
+              ],
+              [
+                77.7365969,
+                12.9757149
+              ],
+              [
+                77.7367471,
+                12.9753176
+              ],
+              [
+                77.7368937,
+                12.9749976
+              ],
+              [
+                77.7371167,
+                12.9747599
+              ],
+              [
+                77.7373848,
+                12.9744672
+              ],
+              [
+                77.737633,
+                12.9742159
+              ],
+              [
+                77.7378368,
+                12.9740636
+              ],
+              [
+                77.7383618,
+                12.9738487
+              ],
+              [
+                77.7388461,
+                12.9737148
+              ],
+              [
+                77.7392845,
+                12.9736448
+              ],
+              [
+                77.7395466,
+                12.9736281
+              ],
+              [
+                77.7395604,
+                12.9735331
+              ],
+              [
+                77.7394631,
+                12.9735162
+              ],
+              [
+                77.7388086,
+                12.9734221
+              ],
+              [
+                77.7383993,
+                12.9734566
+              ],
+              [
+                77.7380384,
+                12.9734432
+              ],
+              [
+                77.7377143,
+                12.9734326
+              ],
+              [
+                77.7376003,
+                12.9734562
+              ],
+              [
+                77.7374675,
+                12.9735267
+              ]
+            ]
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:16b8f75cb40af1ca6ff6c99f769b7c4f5310bf464f3f0a9c43bb22110c7ad150"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:07d36547286096130b1ca37c4ad270a509ddb2324a9e0b667e42b65478b472d9:nearby_lakes",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_lakes",
+        "value": {
+          "type": "Text",
+          "data": "Sheelavathana Kere is 1900 m from this home"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:07d36547286096130b1ca37c4ad270a509ddb2324a9e0b667e42b65478b472d9"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": null,
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 1.0
+      },
+      "target": {
+        "entityId": "obs:07d36547286096130b1ca37c4ad270a509ddb2324a9e0b667e42b65478b472d9:nearby_lakes",
+        "name": "Sheelavathana Kere",
+        "point": null,
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                77.7423639,
+                12.9633855
+              ],
+              [
+                77.7421465,
+                12.963252
+              ],
+              [
+                77.7419611,
+                12.963183
+              ],
+              [
+                77.7418732,
+                12.9631574
+              ],
+              [
+                77.741796,
+                12.9632036
+              ],
+              [
+                77.741758,
+                12.9632709
+              ],
+              [
+                77.7417633,
+                12.9633865
+              ],
+              [
+                77.7417678,
+                12.9634735
+              ],
+              [
+                77.7417574,
+                12.9637166
+              ],
+              [
+                77.7417083,
+                12.9638726
+              ],
+              [
+                77.7417531,
+                12.964031
+              ],
+              [
+                77.7418489,
+                12.964201
+              ],
+              [
+                77.7419921,
+                12.9647663
+              ],
+              [
+                77.7422566,
+                12.9652361
+              ],
+              [
+                77.7423424,
+                12.9653302
+              ],
+              [
+                77.742498,
+                12.9654859
+              ],
+              [
+                77.7427128,
+                12.9655993
+              ],
+              [
+                77.7428502,
+                12.9656451
+              ],
+              [
+                77.7429062,
+                12.9656741
+              ],
+              [
+                77.7429271,
+                12.9656247
+              ],
+              [
+                77.7430274,
+                12.9653618
+              ],
+              [
+                77.7431674,
+                12.9651767
+              ],
+              [
+                77.7435107,
+                12.9651851
+              ],
+              [
+                77.7438659,
+                12.9651838
+              ],
+              [
+                77.7443165,
+                12.9651734
+              ],
+              [
+                77.7448422,
+                12.9651525
+              ],
+              [
+                77.744942,
+                12.9649752
+              ],
+              [
+                77.745166,
+                12.9648419
+              ],
+              [
+                77.7453905,
+                12.964788
+              ],
+              [
+                77.7455251,
+                12.9647663
+              ],
+              [
+                77.7456166,
+                12.9647608
+              ],
+              [
+                77.7456791,
+                12.9646759
+              ],
+              [
+                77.7456938,
+                12.9646278
+              ],
+              [
+                77.7456278,
+                12.9646077
+              ],
+              [
+                77.7454924,
+                12.9646124
+              ],
+              [
+                77.7451617,
+                12.964644
+              ],
+              [
+                77.7449173,
+                12.9647029
+              ],
+              [
+                77.7447917,
+                12.9647096
+              ],
+              [
+                77.7445931,
+                12.9647203
+              ],
+              [
+                77.7442846,
+                12.9647206
+              ],
+              [
+                77.7441019,
+                12.9647656
+              ],
+              [
+                77.7436942,
+                12.9647552
+              ],
+              [
+                77.7436835,
+                12.9646088
+              ],
+              [
+                77.7435655,
+                12.9642324
+              ],
+              [
+                77.7434046,
+                12.963971
+              ],
+              [
+                77.7430505,
+                12.9637096
+              ],
+              [
+                77.7427394,
+                12.9635946
+              ],
+              [
+                77.7425248,
+                12.9635005
+              ],
+              [
+                77.7423639,
+                12.9633855
+              ]
+            ]
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:07d36547286096130b1ca37c4ad270a509ddb2324a9e0b667e42b65478b472d9"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    },
+    {
+      "fact": {
+        "id": "obs:c3ab080b7b7e1429fff0c1bb2341aff5826001301d4f0de76d1881f084a50b7a:nearby_lakes",
+        "entityId": "society:prestige-waterford",
+        "factKey": "nearby_lakes",
+        "value": {
+          "type": "Text",
+          "data": "Hoodi Lake is 2200 m from this home"
+        },
+        "evidence": {
+          "snapshot_identity": "renderer-fixture-v1",
+          "subject_entity_id": "society:prestige-waterford",
+          "evidence_id": {
+            "kind": "observation",
+            "id": "obs:c3ab080b7b7e1429fff0c1bb2341aff5826001301d4f0de76d1881f084a50b7a"
+          }
+        },
+        "sourceType": "Renderer fixture",
+        "sourceUrl": null,
+        "observedAt": "2026-09-13T00:00:00Z",
+        "confidence": 1.0
+      },
+      "target": {
+        "entityId": "obs:c3ab080b7b7e1429fff0c1bb2341aff5826001301d4f0de76d1881f084a50b7a:nearby_lakes",
+        "name": "Hoodi Lake",
+        "point": null,
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                77.7217617,
+                12.9889312
+              ],
+              [
+                77.722002,
+                12.9889312
+              ],
+              [
+                77.722105,
+                12.9882789
+              ],
+              [
+                77.7223625,
+                12.9879694
+              ],
+              [
+                77.7225771,
+                12.9879694
+              ],
+              [
+                77.723238,
+                12.9879443
+              ],
+              [
+                77.7238646,
+                12.9880112
+              ],
+              [
+                77.7241821,
+                12.9884712
+              ],
+              [
+                77.7246971,
+                12.9884963
+              ],
+              [
+                77.7246613,
+                12.9881443
+              ],
+              [
+                77.7245497,
+                12.9877886
+              ],
+              [
+                77.7243603,
+                12.9871676
+              ],
+              [
+                77.7242991,
+                12.9861912
+              ],
+              [
+                77.7239085,
+                12.985982
+              ],
+              [
+                77.723445,
+                12.9856276
+              ],
+              [
+                77.7233228,
+                12.9854144
+              ],
+              [
+                77.7230867,
+                12.9854343
+              ],
+              [
+                77.7225546,
+                12.9855503
+              ],
+              [
+                77.7223625,
+                12.985544
+              ],
+              [
+                77.7213326,
+                12.9860207
+              ],
+              [
+                77.7210777,
+                12.9865252
+              ],
+              [
+                77.7215471,
+                12.9871749
+              ],
+              [
+                77.7217617,
+                12.9879694
+              ],
+              [
+                77.7217617,
+                12.9889312
+              ]
+            ]
+          ]
+        },
+        "geometrySource": null,
+        "geometryEvidence": [
+          {
+            "snapshot_identity": "renderer-fixture-v1",
+            "subject_entity_id": "society:prestige-waterford",
+            "evidence_id": {
+              "kind": "observation",
+              "id": "obs:c3ab080b7b7e1429fff0c1bb2341aff5826001301d4f0de76d1881f084a50b7a"
+            }
+          }
+        ]
+      },
+      "attributes": [],
+      "distance": null
+    }
+  ],
+  "truncated": false,
+  "matchedProof": null
+}

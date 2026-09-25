@@ -14,15 +14,18 @@ use crate::serving::ServingFactIndex;
 
 pub const PROJECT_PLAN_FRAMES_FACT_KEY: &str = "media.project_plan_frames";
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ProjectPlansView {
     pub provider: String,
     pub coverage_quality: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub source_url: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub registration_number: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "SiteOverviewPlan")]
     pub site_overview: Option<SiteOverviewPlan>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub floor_plans: Vec<FloorPlanVariant>,
@@ -30,61 +33,76 @@ pub struct ProjectPlansView {
     pub filed_plan_previews: Vec<FiledPlanPreview>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SiteOverviewPlan {
     pub artifact_id: String,
     pub label: String,
     pub preview_url: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub thumbnail_url: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub source_url: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "u32")]
     pub page: Option<u32>,
     pub confidence: f64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FloorPlanVariant {
     pub id: String,
     pub artifact_id: String,
     pub configuration_type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub unit_type_label: Option<String>,
     pub bedroom_count: u32,
     pub tab_label: String,
     pub title: String,
     pub preview_url: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub thumbnail_url: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub source_url: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "u32")]
     pub page: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "u32")]
     pub carpet_area_sqft: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "f64")]
     pub carpet_area_sqm: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "u32")]
     pub sale_area_sqft: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "f64")]
     pub sale_area_sqm: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "f64")]
     pub usable_area_ratio: Option<f64>,
     pub confidence: f64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FiledPlanPreview {
     pub artifact_id: String,
     pub kind: String,
     pub label: String,
     pub preview_url: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub thumbnail_url: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub source_url: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "u32")]
     pub page: Option<u32>,
     pub confidence: f64,
 }
@@ -170,9 +188,7 @@ pub fn overlay_project_plans_on_card(
     else {
         return;
     };
-    let Some(matched) =
-        matched_floor_plan_for_listing(&plans, card.bhk, Some(card.carpet_area_sqft))
-    else {
+    let Some(matched) = matched_floor_plan_for_listing(&plans, card.bhk, None) else {
         return;
     };
     card.floor_plan_preview_url = Some(matched.preview_url.clone());

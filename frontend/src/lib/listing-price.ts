@@ -1,5 +1,5 @@
 export type ListingPriceFields = {
-  price: number;
+  price?: number;
   price_min?: number | null;
   price_max?: number | null;
 };
@@ -14,8 +14,8 @@ export function listingPriceBounds(listing: ListingPriceFields): {
   low: number;
   high: number;
 } {
-  const low = positiveNumber(listing.price_min) ?? listing.price;
-  const high = positiveNumber(listing.price_max) ?? listing.price;
+  const low = positiveNumber(listing.price_min) ?? listing.price ?? 0;
+  const high = positiveNumber(listing.price_max) ?? listing.price ?? 0;
   if (low <= 0 && high <= 0) return { low: 0, high: 0 };
   return low <= high ? { low, high } : { low: high, high: low };
 }

@@ -136,24 +136,32 @@ pub struct DiscoverySortConfig {
 
 /// Bounded landing-card projection built once with the immutable search runtime.
 /// It deliberately excludes evidence blobs, descriptions, tags, and source panels.
-#[derive(Clone, Debug, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Serialize)]
 pub struct BrowsePropertyCard {
+    pub availability: crate::models::property::InventoryAvailability,
     pub id: String,
     pub society_id: String,
     pub title: String,
     pub society_name: String,
     pub area: String,
     pub image: String,
+    #[serde(skip_serializing_if = "crate::models::property::is_zero")]
     pub bhk: u32,
+    #[serde(skip_serializing_if = "crate::models::property::is_zero")]
     pub price: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "u64")]
     pub price_min: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "u64")]
     pub price_max: Option<u64>,
+    #[serde(skip_serializing_if = "crate::models::property::is_zero")]
     pub sqft: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "f64")]
     pub google_rating: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "u32")]
     pub google_review_count: Option<u32>,
     #[serde(skip_serializing)]
     pub signals: BTreeMap<String, f64>,
@@ -191,6 +199,7 @@ impl BrowsePropertyCard {
             property.hero_image.clone()
         };
         Self {
+            availability: property.inventory_availability(),
             id: property.id.clone(),
             society_id: society_entity_id,
             title: property.title.clone(),
@@ -201,7 +210,7 @@ impl BrowsePropertyCard {
             price: property.price,
             price_min: property.price_min,
             price_max: property.price_max,
-            sqft: property.super_builtup_sqft.max(property.carpet_area_sqft),
+            sqft: property.listed_area_sqft(),
             google_rating: reviews.rating,
             google_review_count: reviews.review_count,
             signals,

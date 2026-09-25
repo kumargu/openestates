@@ -192,9 +192,9 @@ function SavedHomesPanel({
               >
                 <strong>{name}</strong>
                 <span>
-                  {[home.area, home.bhk > 0 ? `${home.bhk}BHK` : null]
+                  {[home.area, home.bhk !== undefined && home.bhk > 0 ? `${home.bhk}BHK` : null]
                     .filter(Boolean)
-                    .join(" · ")} · {formatCompactPrice(home.price)}
+                    .join(" · ")} · {home.price === undefined ? "" : formatCompactPrice(home.price)}
                 </span>
                 {state ? <em>{state}</em> : null}
               </button>

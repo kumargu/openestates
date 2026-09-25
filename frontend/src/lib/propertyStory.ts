@@ -256,17 +256,9 @@ function identityFacts(data: PropertyDetailResponse): StoryIdentityFact[] {
     hasKnownNumber(property.bhk)
       ? { key: "configuration", value: `${property.bhk} BHK` }
       : null,
-    hasKnownNumber(property.carpet_area_sqft)
-      ? {
-          key: "size",
-          value: `${property.carpet_area_sqft.toLocaleString("en-IN")} sqft carpet`,
-        }
-      : hasKnownNumber(property.super_builtup_sqft)
-        ? {
-            key: "size",
-            value: `${property.super_builtup_sqft.toLocaleString("en-IN")} sqft super built-up`,
-          }
-        : null,
+    property.area_measurement
+      ? { key: "size", value: `${property.area_measurement.value.toLocaleString("en-IN")} sqft listed area` }
+      : null,
     compactStatus(data)
       ? { key: "status", value: compactStatus(data) ?? "" }
       : null,
@@ -327,7 +319,7 @@ function projectMedia(
       sourceType: supplied?.sourceType ?? "unknown",
       lifecycle: supplied?.lifecycle ?? "unknown",
       capturedAt: supplied?.capturedAt,
-      sourceUrl: supplied?.sourceUrl ?? sourceUrl(data.property.source_reference),
+      sourceUrl: supplied?.sourceUrl,
       focalPoint: focalPoint(supplied?.focalPoint),
     } satisfies StoryMediaFrame;
   });

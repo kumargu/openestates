@@ -613,6 +613,7 @@ fn property(id: &str, area: &str, society_id: &str, bhk: u32, price: u64) -> Pro
         price_per_sqft: 12_000,
         carpet_area_sqft: 1_200,
         super_builtup_sqft: 1_550,
+        area_measurement: None,
         floor: 8,
         total_floors: 20,
         facing: "East".to_string(),
@@ -638,7 +639,7 @@ fn property(id: &str, area: &str, society_id: &str, bhk: u32, price: u64) -> Pro
         images: Vec::new(),
         hero_image: String::new(),
         description_summary: "Local quality harness listing".to_string(),
-        transparency_tags: Vec::new(),
+
         source_reference: "search-quality-contract".to_string(),
     }
 }

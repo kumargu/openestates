@@ -76,15 +76,6 @@ fn build_search_output(
         .iter()
         .map(|result| result.card.id.clone())
         .collect();
-    // Look up area context if the intent identified an area.
-    let area_context = parsed_intent.area.as_ref().and_then(|area_name| {
-        snapshot
-            .areas
-            .iter()
-            .find(|a| a.name.eq_ignore_ascii_case(area_name))
-            .cloned()
-    });
-
     let results_returned = results.len();
     let (graph_nodes_hit, mut enrichment_gaps) = {
         let mut matched_society_ids: Vec<String> = Vec::new();
@@ -124,7 +115,6 @@ fn build_search_output(
         result_sets,
         ordered_result_ids,
         total_matches,
-        area_context,
         state: if total_matches == 0 {
             "no_matches".to_string()
         } else {
@@ -142,6 +132,11 @@ fn build_search_output(
 
 pub(crate) fn search_runtime_version(snapshot: &SearchRuntimeSnapshot) -> SearchRuntimeVersion {
     SearchRuntimeVersion {
+        snapshot_identity: snapshot
+            .bundle
+            .manifest
+            .proof_snapshot_identity()
+            .to_string(),
         serving_bundle_version: snapshot.version_key.serving_bundle_version.clone(),
         scoring_policy_version: snapshot.version_key.scoring_policy_version,
         search_engine_version: snapshot.version_key.search_engine_version.clone(),
@@ -549,7 +544,7 @@ mod tests {
             result_sets: Vec::new(),
             ordered_result_ids: Vec::new(),
             total_matches: 0,
-            area_context: None,
+
             state: "no_matches".to_string(),
             search_guidance: None,
         };
@@ -757,6 +752,7 @@ mod tests {
             price_per_sqft: 7500,
             carpet_area_sqft: 1200,
             super_builtup_sqft: 1500,
+            area_measurement: None,
             floor: 5,
             total_floors: 20,
             facing: "East".into(),
@@ -782,7 +778,7 @@ mod tests {
             images: vec![],
             hero_image: String::new(),
             description_summary: "Test property".into(),
-            transparency_tags: vec![],
+
             source_reference: "test".into(),
         };
 
@@ -803,12 +799,14 @@ mod tests {
         let inventory_options = std::collections::HashMap::from([(
             "no-kg-prop".to_string(),
             InventoryOption {
+                confidence: 1.0,
                 property_id: "no-kg-prop".to_string(),
                 society_id: society_entity_id.to_string(),
                 bhk: Some(3),
                 price_min: Some(10_000_000),
                 price_max: Some(10_000_000),
                 size_sqft: Some(1_500),
+                area_measurement: None,
                 evidence_reference: Some(EvidenceRef::for_observation(
                     snapshot_identity,
                     &observation,
@@ -853,6 +851,7 @@ mod tests {
             intent: &compiled_query.intent,
             constraints: &compiled_query.constraints,
             evaluation: SearchEvaluationContext {
+                identities: None,
                 options: &inventory_options,
                 spatial_matches: &std::collections::HashMap::new(),
                 snapshot_identity,
@@ -892,7 +891,7 @@ pub(crate) fn guarded_search_output(
             result_sets: Vec::new(),
             ordered_result_ids: Vec::new(),
             total_matches: 0,
-            area_context: None,
+
             state: "no_matches".to_string(),
             search_guidance: guidance,
         }),

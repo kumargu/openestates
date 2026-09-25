@@ -1,27 +1,7 @@
 {
   "version": 3,
-  "engine_version": "scoring-v1",
-  "missing_data": {
-    "default_behavior": "skip",
-    "log_gap": true,
-    "never_zero_fill": true
-  },
-  "area_tracker": {
-    "min_listing_count": 2,
-    "ready_possession_statuses": ["ready"],
-    "near_metro_max_minutes": 15,
-    "demand": {
-      "search_count_normalizer": 10.0,
-      "search_count_cap": 0.7,
-      "evidence_gap_normalizer": 20.0,
-      "evidence_gap_cap": 0.2,
-      "listing_count_normalizer": 50.0,
-      "listing_count_cap": 0.1
-    }
-  },
   "search_ranking": {
     "min_support_evidence_confidence": 0.6,
-    "min_llm_evidence_confidence": 0.75,
     "negative_no_data_penalty_multiplier": 1.2,
     "broad_local_recall_multiplier": 4,
     "broad_local_recall_min_extra": 64,
@@ -125,7 +105,16 @@
     "max_score_with_positive_evidence": 0.45,
     "min_score_with_risk_only_evidence": 0.1,
     "min_score_with_constraint_only": 0.01,
-    "fact_coverage_threshold": 25.0
+    "fact_coverage_threshold": 25.0,
+    "evidence_confidence_by_source": {
+      "rera": 0.5,
+      "computed": 0.5,
+      "llm": 0.75
+    },
+    "excluded_evidence_scoring_methods": [
+      "local",
+      "local-risk"
+    ]
   },
   "fact_groups": {
     "rera": ["rera_*"],
@@ -171,8 +160,7 @@
         "listing_price_per_sqft_range_4bhk"
       ],
       "method": "lower_is_better_relative_to_area",
-      "weight": 1.4,
-      "missing": "skip"
+      "weight": 1.4
     },
     {
       "id": "proof_strength",
@@ -184,8 +172,7 @@
         "home_state"
       ],
       "method": "evidence_coverage",
-      "weight": 1.2,
-      "missing": "skip"
+      "weight": 1.2
     },
     {
       "id": "access_strength",
@@ -197,8 +184,7 @@
         "access.metro_good"
       ],
       "method": "text_or_distance_presence",
-      "weight": 1.1,
-      "missing": "skip"
+      "weight": 1.1
     },
     {
       "id": "legal_timeline_safety",
@@ -208,8 +194,7 @@
         "legal.oc_status"
       ],
       "method": "risk_lower_is_better",
-      "weight": 1.3,
-      "missing": "skip"
+      "weight": 1.3
     },
     {
       "id": "living_fit",
@@ -224,37 +209,9 @@
         "positive.open_space"
       ],
       "method": "text_or_distance_presence",
-      "weight": 0.9,
-      "missing": "skip"
+      "weight": 0.9
     }
   ],
-  "surfaces": {
-    "search": {
-      "enabled_signals": [
-        "price_value",
-        "proof_strength",
-        "access_strength",
-        "legal_timeline_safety",
-        "living_fit"
-      ]
-    },
-    "detail": {
-      "enabled_signals": [
-        "proof_strength",
-        "legal_timeline_safety",
-        "living_fit"
-      ]
-    },
-    "recommendations": {
-      "enabled_signals": [
-        "price_value",
-        "proof_strength",
-        "access_strength",
-        "legal_timeline_safety",
-        "living_fit"
-      ]
-    }
-  },
   "recommendation_recall": {
     "candidate_limit": 80,
     "branch_limit": 5,

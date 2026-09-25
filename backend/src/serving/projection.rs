@@ -256,6 +256,9 @@ fn projected_fact<T>(fact: &ServingFactRecord, value: T) -> ProjectedFact<T> {
 }
 
 fn society_entity_id_candidates(society_id: &str) -> Vec<String> {
+    if society_id.starts_with("society:") {
+        return vec![society_id.to_string()];
+    }
     let raw = society_id.trim().to_lowercase().replace(['_', ' '], "-");
     let slug = raw
         .strip_prefix("society:")

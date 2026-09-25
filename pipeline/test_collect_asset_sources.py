@@ -1756,24 +1756,20 @@ class CollectAssetSourcesTest(unittest.TestCase):
             listing["source_url"],
             "https://www.magicbricks.com/project-example-green-for-sale-in-bangalore-pppfs",
         )
-        self.assertEqual(listing["price"], 30_000_000)
-        self.assertEqual(listing["price_min"], 25_000_000)
-        self.assertEqual(listing["price_max"], 35_000_000)
-        self.assertEqual(listing["price_display"], "₹2.5 Cr - ₹3.5 Cr")
-        self.assertEqual(listing["area_sqft"], 2215)
-        self.assertEqual(listing["area_sqft_min"], 2000)
-        self.assertEqual(listing["area_sqft_max"], 2400)
-        self.assertEqual(listing["area_display"], "2000-2400 sqft")
-        self.assertEqual(listing["price_per_sqft_min"], 12500)
-        self.assertEqual(listing["price_per_sqft_max"], 14583)
-        self.assertEqual(listing["price_per_sqft_display"], "₹12,500-14,583 per sqft")
+        records = output["external_listings_weekly"]["records"]
+        self.assertEqual(len(records), 2)
+        self.assertEqual(
+            {(row["price"], row["area_sqft"], row["area_type"]) for row in records},
+            {(25_000_000, 2000, "carpet"), (35_000_000, 2400, "super built-up")},
+        )
+        for row in records:
+            self.assertEqual(row["price_min"], row["price"])
+            self.assertEqual(row["price_max"], row["price"])
+            self.assertEqual(row["area_sqft_min"], row["area_sqft"])
+            self.assertEqual(row["area_sqft_max"], row["area_sqft"])
         self.assertEqual(listing["configuration"], "3 BHK")
-        self.assertEqual(listing["area_type"], "mixed listed area")
         self.assertEqual(listing["bhk"], 3.0)
-        self.assertEqual(listing["bathrooms"], 3.5)
-        self.assertEqual(listing["floor"], "12 out of 20")
         self.assertEqual(listing["society"], "Example Green")
-        self.assertEqual(listing["locality"], "Hoodi, Whitefield")
         self.assertEqual(listing["observed_at"], "2026-07-16T09:30:00Z")
         self.assertNotIn("confidence", listing)
 

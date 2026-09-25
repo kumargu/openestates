@@ -425,9 +425,9 @@ fn derived_nearby_fact(
     ServingFactRecord {
         entity_id: society.entity_id.clone(),
         fact_key: candidate.spec.fact_key.clone(),
-        value_type: "text".to_string(),
-        value_text: Some(display.clone()),
-        value: FactValue::Text(display),
+        value_type: "numeric".to_string(),
+        value_text: Some(display),
+        value: FactValue::Numeric(candidate.distance_km),
         confidence: candidate.confidence,
         source_type: DERIVED_SOURCE_TYPE.to_string(),
         source_url: candidate.place.source_url.clone(),

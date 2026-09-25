@@ -213,7 +213,13 @@ pub struct NumericConstraintSchema {
     pub label: String,
     pub fact_keys: Vec<String>,
     #[serde(default)]
-    pub runtime_field: Option<String>,
+    pub measurement_basis: Option<String>,
+    #[serde(default = "enabled_numeric_capability")]
+    pub supported: bool,
+    #[serde(default)]
+    pub query_requires: Vec<String>,
+    #[serde(default)]
+    pub query_excludes: Vec<String>,
     pub query_units: Vec<QueryUnit>,
     #[serde(default)]
     pub qualitative_bounds: Vec<QualitativeNumericBound>,
@@ -225,6 +231,10 @@ pub struct NumericConstraintSchema {
     pub zero_is_max: bool,
     pub proof_sources: Vec<SourceType>,
     pub scoring_method: String,
+}
+
+fn enabled_numeric_capability() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -240,7 +250,6 @@ pub struct QualitativeNumericBound {
 pub enum NumericFactValueKind {
     #[default]
     Numeric,
-    DistanceKmInText,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
@@ -851,6 +860,18 @@ fn detect_numeric_constraint_matches(
     schema: &NumericConstraintSchema,
 ) -> Vec<HardConstraintTokenMatch> {
     let mut matches = Vec::new();
+    if (!schema.query_requires.is_empty()
+        && !schema
+            .query_requires
+            .iter()
+            .any(|term| !phrase_ranges(tokens, term).is_empty()))
+        || schema
+            .query_excludes
+            .iter()
+            .any(|term| !phrase_ranges(tokens, term).is_empty())
+    {
+        return matches;
+    }
     for number_start in 0..tokens.len() {
         let Some((value, number_len, has_plus)) = parse_number_phrase(tokens, number_start) else {
             continue;

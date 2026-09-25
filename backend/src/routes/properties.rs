@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 
 use axum::body::Body;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::{header, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
@@ -20,11 +20,7 @@ use crate::recommendations::{
     RecommendationEnvelope, RecommendationResponse, RecommendationStatus,
     RECOMMENDATION_ENGINE_VERSION,
 };
-use crate::scoring::{
-    compute_transparency_score, score_property_for_surface, scoring_policy, TransparencyScore,
-};
-use crate::search::text::compute_confidence_for_detail;
-use crate::search::ConfidenceScore;
+use crate::scoring::scoring_policy;
 use crate::serving::{
     GoogleReviewEvidence, LoadedServingBundle, ReraEvidenceEntity, ReraEvidenceEvent,
     ReraEvidenceSeries, ReraEvidenceSource, ReraRegulatoryCoverage, ServingFactIndex,
@@ -39,24 +35,32 @@ use crate::community::{
 };
 use crate::dag_config::{
     evidence_sections_config, fact_registry_index_config, rera_report_surface_config,
-    ui_surfaces_config, ContextFactDefinition, EvidenceSectionDefinition,
-    EvidenceSectionPresentation, FactRegistryIndex, ReraReportSurfaceFile,
+    ContextFactDefinition, EvidenceSectionDefinition, EvidenceSectionPresentation,
+    FactRegistryIndex, ReraReportSurfaceFile,
 };
-use crate::knowledge::node::NodeType;
-use crate::knowledge::{google_reviews_url_from_facts, FactValue, SourcedFact};
+use crate::knowledge::FactValue;
 use crate::livability_brief::{
     compose_livability_brief, filter_reddit_evidence, LivabilityBrief, LivabilityBriefInput,
     LivabilityLens, StructuredFactSignal,
 };
 
 use super::enrichment::{
-    enrich_area, enrich_property_card, enrich_society, extract_area_intelligence,
-    extract_builder_trust, extract_rera_info, kg_entity_refs_for_property,
     overlay_project_scale_facts, rera_affidavit_only_visible, rera_decision_cards,
-    rera_document_groups, society_node_id, AreaIntelligence, BuilderTrust, DataFreshness,
-    ReraComplaintScopeSummary, ReraDocumentManifestItem, ReraInfo, ReraScheduleSection,
+    rera_document_groups, society_node_id, ReraComplaintScopeSummary, ReraDocumentManifestItem,
+    ReraInfo, ReraScheduleSection,
 };
-use super::property_map::property_map_context_from_surface_scene;
+
+pub(crate) fn property_card(
+    property: &crate::models::Property,
+    societies: &[crate::models::Society],
+) -> PropertyCard {
+    let name = societies
+        .iter()
+        .find(|society| society_node_id(&society.id) == society_node_id(&property.society_id))
+        .map(|society| society.name.as_str())
+        .unwrap_or("");
+    property.to_card(name)
+}
 
 /// GET /api/properties — returns UI-ready property cards.
 pub async fn list_properties(State(state): State<Arc<AppState>>) -> Result<Response, StatusCode> {
@@ -74,7 +78,6 @@ pub async fn list_properties(State(state): State<Arc<AppState>>) -> Result<Respo
         }
     }
 
-    let graph = state.knowledge.read().await.clone();
     let bytes = state
         .execution
         .run_customer_compute(move || {
@@ -84,7 +87,7 @@ pub async fn list_properties(State(state): State<Arc<AppState>>) -> Result<Respo
                 .iter()
                 .filter(|property| property.is_listable())
                 .map(|property| {
-                    let card = enrich_property_card(property, &runtime.societies, &graph);
+                    let card = property_card(property, &runtime.societies);
                     overlay_serving_google_reviews(card, &property.society_id, Some(serving_facts))
                 })
                 .collect();
@@ -96,6 +99,81 @@ pub async fn list_properties(State(state): State<Arc<AppState>>) -> Result<Respo
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     *cache = Some((version, bytes.clone()));
     Ok(serialized_catalog_response(bytes))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PropertySummaryRequest {
+    pub property_ids: Vec<String>,
+    pub snapshot_identity: Option<String>,
+}
+
+#[derive(schemars::JsonSchema, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PropertySummaries {
+    pub contract_version: u32,
+    pub snapshot_identity: String,
+    pub items: Vec<PropertyCard>,
+    pub missing_ids: Vec<String>,
+}
+
+pub async fn property_summaries(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<PropertySummaryRequest>,
+) -> Result<Json<PropertySummaries>, (StatusCode, Json<ErrorResponse>)> {
+    let runtime = state.search_runtime.load_full();
+    let limits = &crate::security::security_tuning().context_requests;
+    let error = |status, code: &str| {
+        (
+            status,
+            Json(ErrorResponse {
+                error: code.to_string(),
+            }),
+        )
+    };
+    if request.property_ids.len() > limits.batch_property_limit
+        || request
+            .property_ids
+            .iter()
+            .any(|id| id.is_empty() || id.len() > limits.max_property_id_bytes)
+    {
+        return Err(error(StatusCode::BAD_REQUEST, "invalid_property_ids"));
+    }
+    let snapshot_identity = runtime.bundle.manifest.proof_snapshot_identity();
+    if request
+        .snapshot_identity
+        .as_deref()
+        .is_some_and(|expected| expected != snapshot_identity)
+    {
+        return Err(error(StatusCode::CONFLICT, "stale_snapshot"));
+    }
+    let mut items = Vec::new();
+    let mut missing_ids = Vec::new();
+    let mut seen = HashSet::new();
+    for id in request.property_ids {
+        if !seen.insert(id.clone()) {
+            continue;
+        }
+        if let Some(property) = runtime
+            .property_by_id
+            .get(&id)
+            .and_then(|index| runtime.properties.get(*index))
+        {
+            items.push(overlay_serving_google_reviews(
+                property_card(property, &runtime.societies),
+                &property.society_id,
+                Some(&runtime.bundle.fact_index),
+            ));
+        } else {
+            missing_ids.push(id);
+        }
+    }
+    Ok(Json(PropertySummaries {
+        contract_version: 1,
+        snapshot_identity: snapshot_identity.to_string(),
+        items,
+        missing_ids,
+    }))
 }
 
 fn serialized_catalog_response(bytes: Bytes) -> Response {
@@ -111,9 +189,12 @@ fn serialized_catalog_response(bytes: Bytes) -> Response {
     response
 }
 
-#[derive(Serialize)]
+#[derive(schemars::JsonSchema, Serialize)]
 pub struct PropertyDetail {
-    pub property: crate::models::Property,
+    pub availability: crate::models::property::InventoryAvailability,
+    pub contract_version: u32,
+    pub snapshot_identity: String,
+    pub property: crate::public_contract::PropertyAttributes,
     /// Stable graph IDs the UI can dereference to render dynamic KG-backed sections.
     pub entity_refs: KgEntityRefs,
     /// Canonical UI read model for dynamic proof-backed cards on the property page.
@@ -123,10 +204,7 @@ pub struct PropertyDetail {
     /// `source_panels` below is retained as a compatibility field for the
     /// current frontend while it migrates.
     pub evidence: PropertyEvidenceResponse,
-    pub society: Option<crate::models::Society>,
-    pub area: Option<crate::models::AreaProfile>,
-    /// Similar properties from locally precomputed society embeddings.
-    pub similar_properties: Vec<PropertyCard>,
+    pub society: Option<crate::public_contract::SocietySummary>,
     /// Counterfactual branches — why you might consider an alternative instead.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub recommendation_branches: Vec<RecommendationBranch>,
@@ -144,12 +222,6 @@ pub struct PropertyDetail {
     /// Grouped project-check read model for the buyer-facing detail page.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub decision_check_summary: Option<DecisionCheckSummary>,
-    /// Area intelligence from Reddit and other sources (None if not yet enriched).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub area_intelligence: Option<AreaIntelligence>,
-    /// Composite transparency score (0-100) with breakdown — internal only, not buyer-facing.
-    #[serde(skip_serializing)]
-    pub transparency_score: TransparencyScore,
     /// Lowest price_per_sqft among properties in the same area.
     pub area_price_range_low: Option<u64>,
     /// Highest price_per_sqft among properties in the same area.
@@ -168,18 +240,9 @@ pub struct PropertyDetail {
     /// Machine-readable project status: "ready_to_move", "under_construction", etc.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project_status: Option<String>,
-    /// Builder delivery track record from knowledge graph
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub builder_trust: Option<BuilderTrust>,
     /// Other locally tracked projects tied to the same normalized legal promoter name.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub builder_portfolio: Option<BuilderPortfolio>,
-    /// Data freshness — how recently and richly the society data was updated
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub data_freshness: Option<DataFreshness>,
-    /// Data confidence score — how trustworthy is this property's data? Internal only.
-    #[serde(skip_serializing)]
-    pub confidence_score: Option<ConfidenceScore>,
     /// Current external review evidence projected from the Parquet serving bundle.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub external_reviews: Option<ExternalReviews>,
@@ -189,15 +252,13 @@ pub struct PropertyDetail {
     /// Receipt-backed livability diligence brief composed from DAG facts and mined themes.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub livability_brief: Option<LivabilityBrief>,
-    /// Schematic neighborhood plate: home pin, nearby POIs, optional water context.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub map_context: Option<crate::routes::property_map::PropertyMapContext>,
+    pub context: crate::property_context::PropertyContext,
     /// Buyer-facing site overview + floor plans (RERA brochure promotions).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub plans: Option<crate::plans::ProjectPlansView>,
 }
 
-#[derive(Serialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(schemars::JsonSchema, Serialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ReraEvidenceAvailability {
     Available,
@@ -205,7 +266,7 @@ pub enum ReraEvidenceAvailability {
     Unavailable,
 }
 
-#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+#[derive(schemars::JsonSchema, Serialize, Clone, Debug, PartialEq, Eq)]
 pub struct ReraReportRef {
     pub registration_ids: Vec<String>,
     pub href: String,
@@ -371,35 +432,42 @@ pub struct ReraReportSurfaceSectionResponse {
     pub empty_behavior: String,
 }
 
-#[derive(Serialize, Clone, Debug, PartialEq)]
+#[derive(schemars::JsonSchema, Serialize, Clone, Debug, PartialEq)]
 pub struct ExternalReviews {
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "f64")]
     pub google_rating: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "u32")]
     pub google_review_count: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub google_reviews_url: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reviews: Vec<ExternalReviewCard>,
 }
 
-#[derive(Serialize, Clone, Debug, PartialEq)]
+#[derive(schemars::JsonSchema, Serialize, Clone, Debug, PartialEq)]
 pub struct ExternalReviewCard {
     pub id: String,
     pub source: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub author: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "f64")]
     pub rating: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub date_label: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "u32")]
     pub helpful_count: Option<u32>,
     pub text: String,
     pub tone: ReviewTone,
 }
 
-#[derive(Serialize, Clone, Debug, PartialEq)]
+#[derive(schemars::JsonSchema, Serialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum ReviewTone {
     Positive,
@@ -429,16 +497,17 @@ struct RankedReview {
     source_order: usize,
 }
 
-#[derive(Serialize, Clone, Debug, PartialEq)]
+#[derive(schemars::JsonSchema, Serialize, Clone, Debug, PartialEq)]
 pub struct DetailSignal {
     pub key: String,
     pub label: String,
     pub icon: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "u32")]
     pub count: Option<u32>,
 }
 
-#[derive(Serialize, Clone, Debug)]
+#[derive(schemars::JsonSchema, Serialize, Clone, Debug)]
 pub struct BuilderPortfolio {
     pub builder_name: String,
     pub tracked_projects: usize,
@@ -446,31 +515,40 @@ pub struct BuilderPortfolio {
     pub delayed_projects: usize,
     pub complaint_projects: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "i32")]
     pub revocations: Option<i32>,
     pub projects: Vec<BuilderProjectRecord>,
 }
 
-#[derive(Serialize, Clone, Debug)]
+#[derive(schemars::JsonSchema, Serialize, Clone, Debug)]
 pub struct BuilderProjectRecord {
     pub property_id: String,
     pub project_name: String,
     pub area: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub rera_number: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub rera_portal_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub rera_status: Option<String>,
     pub rera_registered: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub start_date: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub completion_date: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "i32")]
     pub delay_months: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "i32")]
     pub complaints_count: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub project_status_display: Option<String>,
     pub current: bool,
 }
@@ -494,19 +572,22 @@ pub struct SourcePanel {
     pub community_pulse: Option<CommunityPulse>,
 }
 
-#[derive(Serialize, Clone, Debug)]
+#[derive(schemars::JsonSchema, Serialize, Clone, Debug)]
 pub struct SourceItem {
+    pub evidence: Vec<crate::serving::EvidenceRef>,
     pub entity_id: String,
     pub key: String,
     pub label: String,
     pub value: String,
     pub scope: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub relationship: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub values: Vec<String>,
     pub source_type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub source_url: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub attributions: Vec<SourceAttribution>,
@@ -515,10 +596,12 @@ pub struct SourceItem {
     pub learned_at: String,
 }
 
-#[derive(Serialize, Clone, Debug, PartialEq)]
+#[derive(schemars::JsonSchema, Serialize, Clone, Debug, PartialEq)]
 pub struct SourceAttribution {
+    pub evidence: crate::serving::EvidenceRef,
     pub value: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub source_url: Option<String>,
     pub source_type: String,
     #[serde(skip_serializing)]
@@ -528,7 +611,7 @@ pub struct SourceAttribution {
 
 const APPROACH_ROAD_MEDIA_FRAME_LIMIT: usize = 6;
 
-#[derive(Serialize, Clone, Debug, PartialEq)]
+#[derive(schemars::JsonSchema, Serialize, Clone, Debug, PartialEq)]
 pub struct EvidenceMediaStrip {
     pub kind: String,
     pub provider: String,
@@ -539,7 +622,7 @@ pub struct EvidenceMediaStrip {
     pub frames: Vec<EvidenceMediaFrame>,
 }
 
-#[derive(Serialize, Clone, Debug, PartialEq)]
+#[derive(schemars::JsonSchema, Serialize, Clone, Debug, PartialEq)]
 pub struct EvidenceMediaFrame {
     pub label: String,
     pub distance_from_gate_m: u32,
@@ -580,16 +663,17 @@ struct ApproachRoadVisualFrameRecord {
     image_url: Option<String>,
 }
 
-#[derive(Serialize, Clone, Debug)]
+#[derive(schemars::JsonSchema, Serialize, Clone, Debug)]
 pub struct PropertyEvidenceResponse {
     pub property_id: String,
     pub entity_refs: KgEntityRefs,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub serving_bundle_version: Option<String>,
     pub sections: Vec<EvidenceSection>,
 }
 
-#[derive(Serialize, Clone, Debug)]
+#[derive(schemars::JsonSchema, Serialize, Clone, Debug)]
 pub struct EvidenceSection {
     pub kind: String,
     pub title: String,
@@ -597,6 +681,7 @@ pub struct EvidenceSection {
     pub subtitle: String,
     pub scope: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub relationship: Option<String>,
     pub priority: u32,
     pub constellation: String,
@@ -610,44 +695,20 @@ pub struct EvidenceSection {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub media: Vec<EvidenceMediaStrip>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "CommunityPulse")]
     pub community_pulse: Option<CommunityPulse>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(schemars::JsonSchema, Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct EvidencePresentation {
     pub variant: String,
     pub density: String,
     pub max_preview_items: usize,
 }
 
-#[derive(Deserialize)]
-pub struct PropertyEvidenceBatchRequest {
-    pub property_ids: Vec<String>,
-    pub limit: Option<usize>,
-}
-
-#[derive(Serialize)]
-pub struct PropertyEvidenceBatchResponse {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub serving_bundle_version: Option<String>,
-    pub results: Vec<PropertyEvidenceResponse>,
-    pub missing_property_ids: Vec<String>,
-}
-
 #[derive(Serialize)]
 pub struct ErrorResponse {
     pub error: String,
-}
-
-fn canonical_property_id(id: &str) -> &str {
-    match id {
-        "discovered" => "discovered-sumadhura-eden-garden-3bhk",
-        "fixture-prestige-lakeside-3bhk" => "discovered-prestige-lakeside-habitat-3bhk",
-        "fixture-samadhura-capitol-3bhk" => "discovered-sumadhura-capitol-residences-3bhk",
-        "fixture-vaswani-starlight-3bhk" => "discovered-vaswani-starlight-3bhk",
-        "fixture-prestige-city-3bhk" => "discovered-the-prestige-city-3bhk",
-        _ => id,
-    }
 }
 
 fn recommendation_cache_key(property_id: &str, serving_bundle_version: Option<&str>) -> String {
@@ -675,45 +736,28 @@ fn recommendation_envelope_for(
 fn area_median_ppsf_for(
     property: &crate::models::Property,
     properties: &[crate::models::Property],
-    areas: &[crate::models::AreaProfile],
 ) -> Option<u64> {
-    areas
+    let measurement = property.area_measurement.as_ref()?;
+    let mut values = properties
         .iter()
-        .find(|area| {
-            area_lookup_key(&area.id) == area_lookup_key(&property.area_id)
-                || area_lookup_key(&area.name) == area_lookup_key(&property.area)
-        })
-        .map(|area| area.median_price_per_sqft)
-        .or_else(|| {
-            let mut values = properties
-                .iter()
-                .filter(|candidate| {
-                    candidate.area_id == property.area_id && candidate.price_per_sqft > 0
+        .filter(|candidate| {
+            candidate.area_id == property.area_id
+                && candidate.area_measurement.as_ref().is_some_and(|other| {
+                    other.basis == measurement.basis && other.unit == measurement.unit
                 })
-                .map(|candidate| candidate.price_per_sqft)
-                .collect::<Vec<_>>();
-            if values.is_empty() {
-                return None;
-            }
-            values.sort_unstable();
-            Some(values[values.len() / 2])
         })
+        .filter_map(|candidate| (candidate.price_per_sqft > 0).then_some(candidate.price_per_sqft))
+        .collect::<Vec<_>>();
+    values.sort_unstable();
+    values.get(values.len() / 2).copied()
 }
 
 fn find_property_by_request_id<'a>(
     properties: &'a [crate::models::Property],
     id: &str,
 ) -> Option<&'a crate::models::Property> {
-    let canonical_id = canonical_property_id(id);
+    let canonical_id = id;
     properties.iter().find(|p| p.id == canonical_id)
-}
-
-fn normalized_promoter_identity(name: &str) -> String {
-    name.to_lowercase()
-        .split(|c: char| !c.is_ascii_alphanumeric())
-        .filter(|token| !token.is_empty())
-        .collect::<Vec<_>>()
-        .join(" ")
 }
 
 fn project_name_for(property: &crate::models::Property) -> String {
@@ -728,32 +772,12 @@ fn project_name_for(property: &crate::models::Property) -> String {
 }
 
 fn project_status_display_for(
-    graph: &crate::knowledge::KnowledgeGraph,
+    facts: Option<&ServingFactIndex>,
     society_id: &str,
 ) -> Option<String> {
-    let node = graph.get_node(&society_node_id(society_id))?;
-    node.facts
-        .iter()
-        .filter(|fact| fact.key == "project_status")
-        .max_by_key(|fact| fact.version)
-        .and_then(|fact| {
-            fact.display_template.clone().map(|template| {
-                if let (true, FactValue::Text(value)) = (template.contains("{value}"), &fact.value)
-                {
-                    template.replace("{value}", value)
-                } else {
-                    template
-                }
-            })
-        })
-}
-
-fn area_lookup_key(id_or_name: &str) -> String {
-    let normalized = id_or_name.to_lowercase().replace(['_', ' '], "-");
-    normalized
-        .strip_prefix("area-")
-        .unwrap_or(&normalized)
-        .to_string()
+    SocietyFactProjection::from_index(facts?, society_id)
+        .project_status(None, None)
+        .display
 }
 
 fn fact_value_display(value: &FactValue) -> String {
@@ -776,132 +800,6 @@ fn fact_value_display(value: &FactValue) -> String {
         FactValue::Tags(tags) => tags.join(", "),
         FactValue::Score { value, explanation } => format!("{value:.1}: {explanation}"),
     }
-}
-
-fn fact_display(fact: &SourcedFact) -> String {
-    let value = fact_value_display(&fact.value);
-    fact.display_template
-        .as_ref()
-        .map(|template| template.replace("{value}", &value))
-        .unwrap_or(value)
-}
-
-fn latest_fact<'a>(
-    graph: &'a crate::knowledge::KnowledgeGraph,
-    node_id: &str,
-    key: &str,
-) -> Option<&'a SourcedFact> {
-    graph.get_node(node_id)?.get_fact(key)
-}
-
-fn source_item(
-    graph: &crate::knowledge::KnowledgeGraph,
-    node_id: &str,
-    key: &str,
-    label: &str,
-) -> Option<SourceItem> {
-    if key == "google_reviews_url" {
-        if let Some(item) = google_reviews_url_source_item(graph, node_id, key, label) {
-            return Some(item);
-        }
-    }
-    let fact = latest_fact(graph, node_id, key)?;
-    source_item_from_fact(node_id, fact, key, key, label)
-}
-
-fn google_reviews_url_source_item(
-    graph: &crate::knowledge::KnowledgeGraph,
-    node_id: &str,
-    key: &str,
-    label: &str,
-) -> Option<SourceItem> {
-    let node = graph.get_node(node_id)?;
-    let url = google_reviews_url_from_facts(&node.facts, &node.name)?;
-    Some(SourceItem {
-        entity_id: node_id.to_string(),
-        key: key.to_string(),
-        label: label.to_string(),
-        value: url.clone(),
-        scope: entity_scope(node_id).to_string(),
-        relationship: None,
-        values: Vec::new(),
-        source_type: "Google".to_string(),
-        source_url: Some(url),
-        attributions: Vec::new(),
-        confidence_pct: 60,
-        learned_at: node
-            .facts
-            .iter()
-            .filter(|fact| fact.source.source_type == crate::knowledge::fact::SourceType::Google)
-            .map(|fact| fact.learned_at)
-            .max()
-            .unwrap_or_else(chrono::Utc::now)
-            .to_rfc3339(),
-    })
-}
-
-fn source_item_from_fact(
-    entity_id: &str,
-    fact: &SourcedFact,
-    fact_key: &str,
-    display_key: &str,
-    label: &str,
-) -> Option<SourceItem> {
-    let values = match &fact.value {
-        FactValue::Tags(tags) => tags.clone(),
-        _ => Vec::new(),
-    };
-    let value = match (&fact.value, fact_key) {
-        (FactValue::Numeric(n), "rera_complaints_count") if (*n - 1.0).abs() < f64::EPSILON => {
-            "1 complaint filed".to_string()
-        }
-        (FactValue::Numeric(n), "rera_complaints_count") => {
-            format!("{} complaints filed", *n as i64)
-        }
-        (FactValue::Numeric(n), "rera_delay_months") if (*n - 1.0).abs() < f64::EPSILON => {
-            "1 month delay".to_string()
-        }
-        (FactValue::Numeric(n), "rera_delay_months") => {
-            format!("{} month delay", *n as i64)
-        }
-        (FactValue::Numeric(n), "reddit_thread_count") if (*n - 1.0).abs() < f64::EPSILON => {
-            "1 thread".to_string()
-        }
-        (FactValue::Numeric(n), "reddit_thread_count") => {
-            format!("{} threads", *n as i64)
-        }
-        (FactValue::Numeric(n), "reddit_total_comments") if (*n - 1.0).abs() < f64::EPSILON => {
-            "1 comment counted".to_string()
-        }
-        (FactValue::Numeric(n), "reddit_total_comments") => {
-            format!("{} comments counted", *n as i64)
-        }
-        (FactValue::Numeric(n), "reddit_total_score") => {
-            format!("{} community score", *n as i64)
-        }
-        (FactValue::Tags(tags), "google_review_snippets") => {
-            format!("{} Google review highlights", tags.len())
-        }
-        (FactValue::Tags(tags), "reddit_threads") => tags.join("\n"),
-        _ => fact_display(fact),
-    };
-    if is_low_signal_source_value(display_key, &value) {
-        return None;
-    }
-    Some(SourceItem {
-        entity_id: entity_id.to_string(),
-        key: display_key.to_string(),
-        label: label.to_string(),
-        value,
-        scope: entity_scope(entity_id).to_string(),
-        relationship: None,
-        values,
-        source_type: format!("{:?}", fact.source.source_type),
-        source_url: fact.source.url.clone(),
-        attributions: Vec::new(),
-        confidence_pct: (fact.confidence * 100.0).round().clamp(0.0, 100.0) as u8,
-        learned_at: fact.learned_at.to_rfc3339(),
-    })
 }
 
 fn is_low_signal_source_value(key: &str, value: &str) -> bool {
@@ -927,27 +825,40 @@ fn is_low_signal_source_value(key: &str, value: &str) -> bool {
 }
 
 fn serving_source_item(
+    snapshot_identity: &str,
     projection: &SocietyFactProjection<'_>,
     key: &str,
     label: &str,
 ) -> Option<SourceItem> {
-    serving_source_item_with_display_key(projection, key, key, label)
+    serving_source_item_with_display_key(snapshot_identity, projection, key, key, label)
 }
 
 fn serving_source_item_with_display_key(
+    snapshot_identity: &str,
     projection: &SocietyFactProjection<'_>,
     fact_key: &str,
     display_key: &str,
     label: &str,
 ) -> Option<SourceItem> {
-    let fact = projection.latest_record(fact_key)?;
+    let fact = projection
+        .records(fact_key)
+        .into_iter()
+        .find(|fact| eligible_source_observation(fact).is_some())?;
     let display_template = projection
         .search_metadata(fact_key)
         .and_then(|metadata| metadata.display_template.as_deref());
-    source_item_from_serving_fact(fact, fact_key, display_key, label, display_template)
+    source_item_from_serving_fact(
+        snapshot_identity,
+        fact,
+        fact_key,
+        display_key,
+        label,
+        display_template,
+    )
 }
 
 fn serving_entity_source_item(
+    snapshot_identity: &str,
     facts: &ServingFactIndex,
     entity_id: &str,
     fact_key: &str,
@@ -958,7 +869,7 @@ fn serving_entity_source_item(
     let fact = rows
         .facts
         .iter()
-        .filter(|fact| fact.fact_key == fact_key)
+        .filter(|fact| fact.fact_key == fact_key && eligible_source_observation(fact).is_some())
         .max_by(|left, right| {
             left.confidence.total_cmp(&right.confidence).then_with(|| {
                 left.stable_selection_key()
@@ -969,16 +880,34 @@ fn serving_entity_source_item(
         .search_metadata_for_fact_key(fact_key)
         .next()
         .and_then(|metadata| metadata.display_template.as_deref());
-    source_item_from_serving_fact(fact, fact_key, display_key, label, display_template)
+    source_item_from_serving_fact(
+        snapshot_identity,
+        fact,
+        fact_key,
+        display_key,
+        label,
+        display_template,
+    )
+}
+
+fn eligible_source_observation(
+    fact: &crate::serving::ServingFactRecord,
+) -> Option<&crate::serving::SourceObservation> {
+    fact.observation.as_ref().filter(|observation| {
+        observation.subject_entity_id == fact.entity_id && observation.validate().is_ok()
+    })
 }
 
 fn source_item_from_serving_fact(
+    snapshot_identity: &str,
     fact: &crate::serving::ServingFactRecord,
     fact_key: &str,
     display_key: &str,
     label: &str,
     display_template: Option<&str>,
 ) -> Option<SourceItem> {
+    let observation = eligible_source_observation(fact)?;
+    let evidence = crate::serving::EvidenceRef::for_observation(snapshot_identity, observation);
     let values = match &fact.value {
         FactValue::Tags(tags) => tags.clone(),
         _ => Vec::new(),
@@ -995,6 +924,7 @@ fn source_item_from_serving_fact(
         return None;
     }
     Some(SourceItem {
+        evidence: vec![evidence],
         entity_id: fact.entity_id.clone(),
         key: display_key.to_string(),
         label: label.to_string(),
@@ -1012,6 +942,7 @@ fn source_item_from_serving_fact(
 
 #[derive(Clone)]
 struct SourceValue {
+    evidence: crate::serving::EvidenceRef,
     value: String,
     source_url: Option<String>,
     source_type: String,
@@ -1020,6 +951,7 @@ struct SourceValue {
 }
 
 fn serving_multi_source_item(
+    snapshot_identity: &str,
     projection: &SocietyFactProjection<'_>,
     fact_key: &str,
     label: &str,
@@ -1027,8 +959,13 @@ fn serving_multi_source_item(
 ) -> Option<SourceItem> {
     let mut values = Vec::<SourceValue>::new();
     for fact in projection.records(fact_key) {
+        let Some(observation) = eligible_source_observation(fact) else {
+            continue;
+        };
+        let evidence = crate::serving::EvidenceRef::for_observation(snapshot_identity, observation);
         match &fact.value {
             FactValue::Text(value) if !value.trim().is_empty() => values.push(SourceValue {
+                evidence: evidence.clone(),
                 value: value.trim().to_string(),
                 source_url: fact.source_url.clone(),
                 source_type: fact.source_type.clone(),
@@ -1042,6 +979,7 @@ fn serving_multi_source_item(
                     .filter(|value| !value.is_empty())
                 {
                     values.push(SourceValue {
+                        evidence: evidence.clone(),
                         value: value.to_string(),
                         source_url: fact.source_url.clone(),
                         source_type: fact.source_type.clone(),
@@ -1054,10 +992,9 @@ fn serving_multi_source_item(
         }
     }
     values.sort_by(|left, right| {
-        nearby_distance_key(&left.value)
-            .partial_cmp(&nearby_distance_key(&right.value))
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then_with(|| right.confidence_pct.cmp(&left.confidence_pct))
+        right
+            .confidence_pct
+            .cmp(&left.confidence_pct)
             .then_with(|| left.value.cmp(&right.value))
     });
     values.dedup_by(|left, right| left.value == right.value && left.source_url == right.source_url);
@@ -1080,6 +1017,7 @@ fn serving_multi_source_item(
     let attributions = values
         .iter()
         .map(|value| SourceAttribution {
+            evidence: value.evidence.clone(),
             value: value.value.clone(),
             source_url: value.source_url.clone(),
             source_type: value.source_type.clone(),
@@ -1098,6 +1036,7 @@ fn serving_multi_source_item(
     };
 
     Some(SourceItem {
+        evidence: values.iter().map(|value| value.evidence.clone()).collect(),
         entity_id: projection
             .records(fact_key)
             .first()
@@ -1117,89 +1056,27 @@ fn serving_multi_source_item(
     })
 }
 
-fn nearby_distance_key(value: &str) -> f64 {
-    let Some(open_index) = value.find('(') else {
-        return f64::INFINITY;
-    };
-    let tail = &value[open_index + 1..];
-    let Some(km_index) = tail.find(" km") else {
-        return f64::INFINITY;
-    };
-    tail[..km_index]
-        .trim()
-        .parse::<f64>()
-        .unwrap_or(f64::INFINITY)
-}
-
 fn collect_community_evidence_records(
-    graph: &crate::knowledge::KnowledgeGraph,
-    society_id: &str,
-    area_name: Option<&str>,
     projection: Option<&SocietyFactProjection<'_>>,
 ) -> Vec<crate::community::CommunityEvidenceRecord> {
-    // Source-backed community keys. UI summaries are composed at request time
-    // from these facts instead of reading precomputed lake text.
-    const PRIMARY_FACT_KEYS: &[&str] = &[
+    const KEYS: &[&str] = &[
         "google_rating",
         "google_review_count",
         "google_review_snippets",
         "google_reviews_url",
         "resident_discussion",
     ];
-    // Legacy pre-DAG keys, only consulted when no primary facts exist, so stale
-    // generated quotes never leak alongside current evidence.
-    const LEGACY_FALLBACK_KEYS: &[&str] = &[
-        "resident_sentiment",
-        "sentiment_summary",
-        "best_quote",
-        "common_positives",
-        "common_complaints",
-        "google_sentiment",
-        "google_top_positives",
-        "google_top_negatives",
-        "google_common_themes",
-    ];
-
-    let mut records =
-        collect_community_records_for_keys(graph, society_id, projection, PRIMARY_FACT_KEYS);
-    if records.is_empty() {
-        records =
-            collect_community_records_for_keys(graph, society_id, projection, LEGACY_FALLBACK_KEYS);
-    }
-    records.extend(collect_area_community_records(
-        graph,
-        area_name.map(super::enrichment::area_node_id),
-    ));
-    filter_reddit_evidence(records)
-}
-
-fn collect_area_community_records(
-    graph: &crate::knowledge::KnowledgeGraph,
-    area_id: Option<String>,
-) -> Vec<crate::community::CommunityEvidenceRecord> {
-    let Some(area_id) = area_id else {
-        return Vec::new();
-    };
-    const AREA_FACT_KEYS: &[&str] = &[
-        "traffic_reality",
-        "waterlogging_detail",
-        "waterlogging_risk",
-        "lake_waterlogging_context",
-        "resident_discussion",
-        "google_review_snippets",
-    ];
-    collect_community_records_for_keys(graph, &area_id, None, AREA_FACT_KEYS)
+    filter_reddit_evidence(collect_community_records_for_keys(projection, KEYS))
 }
 
 fn collect_structured_livability_facts(
-    graph: &crate::knowledge::KnowledgeGraph,
     property: &crate::models::Property,
     projection: Option<&SocietyFactProjection<'_>>,
     serving_facts: Option<&ServingFactIndex>,
     graph_index: Option<&crate::graph::GraphIndex>,
 ) -> Vec<StructuredFactSignal> {
     let society_id = society_node_id(&property.society_id);
-    let area_id = super::enrichment::area_node_id(&property.area);
+    let area_id = property.area_id.clone();
 
     let mut signals = Vec::new();
     for fact in buyer_context_definitions()
@@ -1222,19 +1099,25 @@ fn collect_structured_livability_facts(
                     .iter()
                     .any(|entity_id| {
                         facts.entity(entity_id).is_some_and(|rows| {
-                            rows.facts
-                                .iter()
-                                .any(|serving_fact| serving_fact.fact_key == fact.key)
+                            rows.facts.iter().any(|serving_fact| {
+                                serving_fact.fact_key == fact.key
+                                    && eligible_source_observation(serving_fact).is_some()
+                            })
                         })
                     })
             })
         } else {
             projection
                 .and_then(|projection| projection.latest_record(&fact.key))
+                .and_then(eligible_source_observation)
                 .is_some()
-                || graph.get_node(entity_id).is_some_and(|node| {
-                    node.facts.iter().any(|node_fact| node_fact.key == fact.key)
-                })
+                || serving_facts
+                    .and_then(|facts| facts.entity(entity_id))
+                    .is_some_and(|rows| {
+                        rows.facts.iter().any(|row| {
+                            row.fact_key == fact.key && eligible_source_observation(row).is_some()
+                        })
+                    })
         };
         if has_fact {
             signals.push(StructuredFactSignal {
@@ -1263,7 +1146,6 @@ fn livability_lens_from_config(value: &str) -> LivabilityLens {
 
 #[allow(clippy::too_many_arguments)]
 fn build_livability_brief(
-    graph: &crate::knowledge::KnowledgeGraph,
     property: &crate::models::Property,
     society_name: &str,
     projection: Option<&SocietyFactProjection<'_>>,
@@ -1283,13 +1165,8 @@ fn build_livability_brief(
         .and_then(|projection| projection.latest_text("home_timeline_state"))
         .map(|fact| fact.value);
     let home_timeline_ref = home_timeline_state.as_deref();
-    let structured_facts = collect_structured_livability_facts(
-        graph,
-        property,
-        projection,
-        serving_facts,
-        graph_index,
-    );
+    let structured_facts =
+        collect_structured_livability_facts(property, projection, serving_facts, graph_index);
     let (community_positives, community_concerns, source_urls) =
         if let Some(pulse) = community_pulse {
             // Brief owns synthesized themes; pulse keeps review receipts only.
@@ -1312,71 +1189,25 @@ fn build_livability_brief(
     })
 }
 
-fn enrich_community_pulse_source_urls(
-    graph: &crate::knowledge::KnowledgeGraph,
-    society_id: &str,
-    pulse: &mut CommunityPulse,
-) {
-    if let Some(node) = graph.get_node(society_id) {
-        if let Some(url) = google_reviews_url_from_facts(&node.facts, &node.name) {
-            if !pulse.source_urls.iter().any(|existing| existing == &url) {
-                pulse.source_urls.push(url);
-            }
-        }
-    }
-    pulse.source_urls.sort();
-    pulse.source_urls.dedup();
-    pulse.source_urls.truncate(5);
-}
-
 fn collect_community_records_for_keys(
-    graph: &crate::knowledge::KnowledgeGraph,
-    society_id: &str,
     projection: Option<&SocietyFactProjection<'_>>,
     keys: &[&str],
 ) -> Vec<crate::community::CommunityEvidenceRecord> {
-    let mut records = Vec::new();
-    for key in keys {
-        if let Some(record) = projection
-            .and_then(|projection| projection.latest_record(key))
-            .and_then(|fact| {
-                community_evidence_from_fact_value(
-                    &fact.entity_id,
-                    &fact.source_type,
-                    fact.source_url.clone(),
-                    key,
-                    &fact.value,
-                    fact.confidence,
-                    fact.learned_at,
-                )
-            })
-        {
-            records.push(record);
-            continue;
-        }
-
-        if let Some(node) = graph.get_node(society_id) {
-            if let Some(fact) = node
-                .facts
-                .iter()
-                .filter(|fact| fact.key == *key)
-                .max_by_key(|fact| fact.version)
-            {
-                if let Some(record) = community_evidence_from_fact_value(
-                    society_id,
-                    &format!("{:?}", fact.source.source_type),
-                    fact.source.url.clone(),
-                    key,
-                    &fact.value,
-                    fact.confidence,
-                    fact.learned_at,
-                ) {
-                    records.push(record);
-                }
-            }
-        }
-    }
-    records
+    keys.iter()
+        .filter_map(|key| {
+            let fact = projection?.latest_record(key)?;
+            eligible_source_observation(fact)?;
+            community_evidence_from_fact_value(
+                &fact.entity_id,
+                &fact.source_type,
+                fact.source_url.clone(),
+                key,
+                &fact.value,
+                fact.confidence,
+                fact.learned_at,
+            )
+        })
+        .collect()
 }
 
 fn entity_scope(entity_id: &str) -> &'static str {
@@ -1549,49 +1380,6 @@ fn capture_date_label(frames: &[EvidenceMediaFrame]) -> String {
         .unwrap_or_else(|| "Street View".to_string())
 }
 
-fn evidence_media_source_item(media: &EvidenceMediaStrip) -> SourceItem {
-    let learned_at = media
-        .frames
-        .iter()
-        .filter_map(|frame| {
-            chrono::NaiveDate::parse_from_str(&format!("{}-01", frame.capture_date), "%Y-%m-%d")
-                .ok()
-        })
-        .max()
-        .and_then(|date| date.and_hms_opt(0, 0, 0))
-        .map(|date| date.and_utc().to_rfc3339())
-        .unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
-    let source_url = media.frames.first().map(|frame| frame.source_url.clone());
-    let value = match media.kind.as_str() {
-        "street_view_strip" => format!("{} outside road views", media.frames.len()),
-        _ => format!("{} visual receipts", media.frames.len()),
-    };
-    let values = media
-        .frames
-        .iter()
-        .map(|frame| frame.label.clone())
-        .collect::<Vec<_>>();
-
-    SourceItem {
-        entity_id: "road_segment:approach-road".to_string(),
-        key: format!("{}_available", media.kind),
-        label: media.title.clone(),
-        value,
-        scope: "road_segment".to_string(),
-        relationship: Some("gate approach".to_string()),
-        values,
-        source_type: "Google".to_string(),
-        source_url,
-        attributions: Vec::new(),
-        confidence_pct: if media.coverage_quality == "strong" {
-            85
-        } else {
-            72
-        },
-        learned_at,
-    }
-}
-
 fn evidence_section_definition(kind: &str) -> Option<&'static EvidenceSectionDefinition> {
     buyer_context_definitions()
         .iter()
@@ -1611,15 +1399,15 @@ fn buyer_context_definitions() -> &'static [EvidenceSectionDefinition] {
 }
 
 fn build_configured_evidence_panels(
-    graph: &crate::knowledge::KnowledgeGraph,
+    snapshot_identity: &str,
     property: &crate::models::Property,
     projection: Option<&SocietyFactProjection<'_>>,
     serving_facts: Option<&ServingFactIndex>,
     graph_index: Option<&crate::graph::GraphIndex>,
 ) -> Vec<SourcePanel> {
     build_configured_evidence_panels_from_definitions(
+        snapshot_identity,
         buyer_context_definitions(),
-        graph,
         property,
         projection,
         serving_facts,
@@ -1628,8 +1416,8 @@ fn build_configured_evidence_panels(
 }
 
 fn build_configured_evidence_panels_from_definitions(
+    snapshot_identity: &str,
     definitions: &[EvidenceSectionDefinition],
-    graph: &crate::knowledge::KnowledgeGraph,
     property: &crate::models::Property,
     projection: Option<&SocietyFactProjection<'_>>,
     serving_facts: Option<&ServingFactIndex>,
@@ -1639,10 +1427,10 @@ fn build_configured_evidence_panels_from_definitions(
         .iter()
         .filter_map(|definition| {
             if definition.derived.is_some() {
-                return build_derived_evidence_panel(graph, property, projection, definition);
+                return build_derived_evidence_panel(property, projection, definition);
             }
-            let mut items = collect_buyer_context_items(
-                graph,
+            let items = collect_buyer_context_items(
+                snapshot_identity,
                 property,
                 projection,
                 serving_facts,
@@ -1654,9 +1442,6 @@ fn build_configured_evidence_panels_from_definitions(
                 .iter()
                 .filter_map(|media_kind| {
                     context_media_for(media_kind, property, serving_facts, graph_index)
-                })
-                .inspect(|media| {
-                    items.push(evidence_media_source_item(media));
                 })
                 .collect::<Vec<_>>();
             (!items.is_empty() || !media.is_empty()).then(|| SourcePanel {
@@ -1678,40 +1463,31 @@ fn build_configured_evidence_panels_from_definitions(
 }
 
 fn build_derived_evidence_panel(
-    graph: &crate::knowledge::KnowledgeGraph,
     property: &crate::models::Property,
     projection: Option<&SocietyFactProjection<'_>>,
     definition: &EvidenceSectionDefinition,
 ) -> Option<SourcePanel> {
     match definition.derived.as_deref()? {
-        "community_pulse" => build_community_pulse_panel(graph, property, projection, definition),
+        "community_pulse" => build_community_pulse_panel(property, projection, definition),
         _ => None,
     }
 }
 
 fn build_community_pulse_panel(
-    graph: &crate::knowledge::KnowledgeGraph,
-    property: &crate::models::Property,
+    _property: &crate::models::Property,
     projection: Option<&SocietyFactProjection<'_>>,
     definition: &EvidenceSectionDefinition,
 ) -> Option<SourcePanel> {
-    let society_id = society_node_id(&property.society_id);
-    let community_records = collect_community_evidence_records(
-        graph,
-        &society_id,
-        Some(property.area.as_str()),
-        projection,
-    );
+    let community_records = collect_community_evidence_records(projection);
     if community_records.is_empty() {
         return None;
     }
 
-    let mut pulse = deterministic_community_summarizer()
+    let pulse = deterministic_community_summarizer()
         .summarize(&community_records)
         .into_iter()
         .next()
         .map(|summary| community_pulse_from_summary(&summary))?;
-    enrich_community_pulse_source_urls(graph, &society_id, &mut pulse);
 
     let mut missing = definition.missing.clone();
     if pulse.positives.is_empty() && pulse.concerns.is_empty() {
@@ -1738,54 +1514,60 @@ fn build_community_pulse_panel(
 }
 
 fn collect_buyer_context_items(
-    graph: &crate::knowledge::KnowledgeGraph,
+    snapshot_identity: &str,
     property: &crate::models::Property,
     projection: Option<&SocietyFactProjection<'_>>,
     serving_facts: Option<&ServingFactIndex>,
     graph_index: Option<&crate::graph::GraphIndex>,
     facts: &[ContextFactDefinition],
 ) -> Vec<SourceItem> {
-    let society_id = society_node_id(&property.society_id);
-    let area_id = super::enrichment::area_node_id(&property.area);
+    let area_id = property.area_id.clone();
     let mut items = Vec::new();
     let mut seen = HashSet::new();
 
     for fact in facts {
         let scoped = match fact.scope.as_str() {
-            "area" | "waterbody" | "poi" => source_item(graph, &area_id, &fact.key, &fact.label)
+            "area" | "waterbody" | "poi" => serving_facts
+                .and_then(|facts| {
+                    serving_entity_source_item(
+                        snapshot_identity,
+                        facts,
+                        &area_id,
+                        &fact.key,
+                        &fact.key,
+                        &fact.label,
+                    )
+                })
                 .or_else(|| {
                     projection.and_then(|projection| {
-                        serving_source_item(projection, &fact.key, &fact.label)
+                        serving_source_item(snapshot_identity, projection, &fact.key, &fact.label)
                     })
                 }),
             "road_segment" => serving_road_segment_source_item(
+                snapshot_identity,
                 property,
                 serving_facts,
                 graph_index,
                 &fact.key,
                 &fact.label,
-            )
-            .or_else(|| source_item(graph, &society_id, &fact.key, &fact.label)),
+            ),
             _ => fact
                 .max_values
                 .and_then(|max_values| {
                     projection.and_then(|projection| {
-                        serving_multi_source_item(projection, &fact.key, &fact.label, max_values)
+                        serving_multi_source_item(
+                            snapshot_identity,
+                            projection,
+                            &fact.key,
+                            &fact.label,
+                            max_values,
+                        )
                     })
                 })
                 .or_else(|| {
                     projection.and_then(|projection| {
-                        serving_source_item(projection, &fact.key, &fact.label)
+                        serving_source_item(snapshot_identity, projection, &fact.key, &fact.label)
                     })
-                })
-                .or_else(|| source_item(graph, &society_id, &fact.key, &fact.label))
-                .or_else(|| {
-                    serving_related_society_source_item(
-                        property,
-                        serving_facts,
-                        &fact.key,
-                        &fact.label,
-                    )
                 }),
         };
         if let Some(item) = scoped.map(|item| with_context_scope(item, fact)) {
@@ -1799,108 +1581,8 @@ fn collect_buyer_context_items(
     items
 }
 
-fn serving_related_society_source_item(
-    property: &crate::models::Property,
-    serving_facts: Option<&ServingFactIndex>,
-    fact_key: &str,
-    label: &str,
-) -> Option<SourceItem> {
-    if !fact_key.starts_with("environment.") {
-        return None;
-    }
-    let facts = serving_facts?;
-    let target_names = related_society_match_names(property);
-    if target_names.is_empty() {
-        return None;
-    }
-
-    facts.rows().find_map(|(entity_id, rows)| {
-        if !entity_id.starts_with("society:") {
-            return None;
-        }
-        if !rows.facts.iter().any(|fact| fact.fact_key == fact_key) {
-            return None;
-        }
-        if !serving_society_rows_match_names(rows, &target_names) {
-            return None;
-        }
-        serving_entity_source_item(facts, entity_id, fact_key, fact_key, label)
-    })
-}
-
-fn related_society_match_names(property: &crate::models::Property) -> Vec<String> {
-    let mut names = vec![project_name_for(property), property.society_id.clone()];
-    names.sort();
-    names.dedup();
-    names
-        .into_iter()
-        .filter_map(|name| normalized_project_name(&name))
-        .collect()
-}
-
-fn serving_society_rows_match_names(
-    rows: &crate::serving::ServingEntityFactRows,
-    target_names: &[String],
-) -> bool {
-    const NAME_FACT_KEYS: &[&str] = &["listing_society", "title", "rera_project_name"];
-    rows.facts.iter().any(|fact| {
-        NAME_FACT_KEYS.contains(&fact.fact_key.as_str())
-            && match &fact.value {
-                FactValue::Text(value) => normalized_project_name(value).is_some_and(|name| {
-                    target_names
-                        .iter()
-                        .any(|target| project_names_compatible(target, &name))
-                }),
-                _ => false,
-            }
-    })
-}
-
-fn project_names_compatible(left: &str, right: &str) -> bool {
-    if left == right {
-        return true;
-    }
-    let left_tokens = left.split_whitespace().collect::<Vec<_>>();
-    let right_tokens = right.split_whitespace().collect::<Vec<_>>();
-    if left_tokens.is_empty() || right_tokens.is_empty() {
-        return false;
-    }
-    let (smaller, larger) = if left_tokens.len() <= right_tokens.len() {
-        (&left_tokens, &right_tokens)
-    } else {
-        (&right_tokens, &left_tokens)
-    };
-    let mut start = 0usize;
-    for token in smaller {
-        match larger[start..]
-            .iter()
-            .position(|candidate| candidate == token)
-        {
-            Some(index) => start += index + 1,
-            None => return false,
-        }
-    }
-    true
-}
-
-fn normalized_project_name(value: &str) -> Option<String> {
-    let normalized = value
-        .to_lowercase()
-        .replace('&', " and ")
-        .split(|character: char| !character.is_ascii_alphanumeric())
-        .filter(|token| {
-            !token.is_empty()
-                && !matches!(
-                    *token,
-                    "soc" | "society" | "rera" | "project" | "phase" | "the"
-                )
-        })
-        .collect::<Vec<_>>()
-        .join(" ");
-    (!normalized.is_empty()).then_some(normalized)
-}
-
 fn serving_road_segment_source_item(
+    snapshot_identity: &str,
     property: &crate::models::Property,
     serving_facts: Option<&ServingFactIndex>,
     graph_index: Option<&crate::graph::GraphIndex>,
@@ -1911,7 +1593,14 @@ fn serving_road_segment_source_item(
     road_segment_entity_ids(property, facts, graph_index)
         .iter()
         .find_map(|entity_id| {
-            serving_entity_source_item(facts, entity_id, fact_key, fact_key, label)
+            serving_entity_source_item(
+                snapshot_identity,
+                facts,
+                entity_id,
+                fact_key,
+                fact_key,
+                label,
+            )
         })
 }
 
@@ -1934,7 +1623,7 @@ fn context_media_for(
 }
 
 pub(crate) fn build_source_panels(
-    graph: &crate::knowledge::KnowledgeGraph,
+    snapshot_identity: &str,
     property: &crate::models::Property,
     serving_facts: Option<&ServingFactIndex>,
     graph_index: Option<&crate::graph::GraphIndex>,
@@ -1942,7 +1631,7 @@ pub(crate) fn build_source_panels(
     let projection =
         serving_facts.map(|facts| SocietyFactProjection::from_index(facts, &property.society_id));
     let panels = build_configured_evidence_panels(
-        graph,
+        snapshot_identity,
         property,
         projection.as_ref(),
         serving_facts,
@@ -1958,13 +1647,15 @@ pub(crate) fn build_source_panels(
 }
 
 fn build_property_evidence_response(
-    graph: &crate::knowledge::KnowledgeGraph,
+    entity_refs: KgEntityRefs,
     property: &crate::models::Property,
     serving_bundle: Option<&LoadedServingBundle>,
 ) -> PropertyEvidenceResponse {
-    let entity_refs = kg_entity_refs_for_property(property, graph);
+    let snapshot_identity = serving_bundle
+        .map(|bundle| bundle.manifest.proof_snapshot_identity())
+        .unwrap_or("");
     let source_panels = build_source_panels(
-        graph,
+        snapshot_identity,
         property,
         serving_bundle.map(|bundle| &bundle.fact_index),
         serving_bundle.map(|bundle| &bundle.graph_index),
@@ -2264,13 +1955,13 @@ fn unique_sorted(mut values: Vec<String>) -> Vec<String> {
 }
 
 fn build_builder_portfolio(
-    graph: &crate::knowledge::KnowledgeGraph,
     properties: &[crate::models::Property],
     current: &crate::models::Property,
     serving_facts: Option<&ServingFactIndex>,
+    graph_index: &crate::graph::GraphIndex,
 ) -> Option<BuilderPortfolio> {
-    let builder_key = normalized_promoter_identity(&current.builder_name);
-    if builder_key.is_empty() {
+    let builders = graph_index.targets_out(&society_node_id(&current.society_id), &["built_by"]);
+    if builders.is_empty() {
         return None;
     }
 
@@ -2282,13 +1973,16 @@ fn build_builder_portfolio(
     let mut revocations: Option<i32> = None;
 
     for property in properties {
-        if normalized_promoter_identity(&property.builder_name) != builder_key
+        if !graph_index
+            .targets_out(&society_node_id(&property.society_id), &["built_by"])
+            .iter()
+            .any(|id| builders.contains(id))
             || !seen_societies.insert(property.society_id.clone())
         {
             continue;
         }
 
-        let rera = rera_info_for(&property.society_id, graph, serving_facts);
+        let rera = rera_info_for(&property.society_id, serving_facts);
         if rera.as_ref().is_some_and(|record| record.registered) {
             rera_registered_projects += 1;
         }
@@ -2330,7 +2024,7 @@ fn build_builder_portfolio(
                 .and_then(|record| record.completion_date.clone()),
             delay_months: rera.as_ref().and_then(|record| record.delay_months),
             complaints_count: rera.as_ref().and_then(|record| record.complaints_count),
-            project_status_display: project_status_display_for(graph, &property.society_id),
+            project_status_display: project_status_display_for(serving_facts, &property.society_id),
             current: property.society_id == current.society_id,
         });
     }
@@ -2363,8 +2057,10 @@ fn build_builder_portfolio(
 pub async fn get_property_evidence(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
+    Query(query): Query<PropertySnapshotQuery>,
 ) -> Result<Json<PropertyEvidenceResponse>, (StatusCode, Json<ErrorResponse>)> {
     let runtime = state.search_runtime.load_full();
+    check_property_snapshot(&runtime, query.snapshot_identity.as_deref())?;
     let property = find_property_by_request_id(&runtime.properties, &id).ok_or_else(|| {
         (
             StatusCode::NOT_FOUND,
@@ -2373,64 +2069,12 @@ pub async fn get_property_evidence(
             }),
         )
     })?;
-    let graph = state.knowledge.read().await;
 
     Ok(Json(build_property_evidence_response(
-        &graph,
+        runtime.entity_refs_for_property(property),
         property,
         Some(runtime.bundle.as_ref()),
     )))
-}
-
-const MAX_EVIDENCE_BATCH_SIZE: usize = 20;
-
-/// POST /api/properties/evidence/batch — returns evidence sections for a bounded
-/// set of property IDs so search/list/compare views can prefetch dynamic cards.
-pub async fn get_property_evidence_batch(
-    State(state): State<Arc<AppState>>,
-    Json(request): Json<PropertyEvidenceBatchRequest>,
-) -> Json<PropertyEvidenceBatchResponse> {
-    let limit = request
-        .limit
-        .unwrap_or(MAX_EVIDENCE_BATCH_SIZE)
-        .clamp(1, MAX_EVIDENCE_BATCH_SIZE);
-    let mut requested = Vec::new();
-    for id in request.property_ids {
-        if requested.len() >= limit {
-            break;
-        }
-        let canonical = canonical_property_id(&id).to_string();
-        if !requested.iter().any(|existing| existing == &canonical) {
-            requested.push(canonical);
-        }
-    }
-
-    let runtime = state.search_runtime.load_full();
-    let graph = state.knowledge.read().await;
-    let mut results = Vec::new();
-    let mut missing_property_ids = Vec::new();
-
-    for property_id in requested {
-        if let Some(property) = runtime
-            .properties
-            .iter()
-            .find(|property| property.id == property_id)
-        {
-            results.push(build_property_evidence_response(
-                &graph,
-                property,
-                Some(runtime.bundle.as_ref()),
-            ));
-        } else {
-            missing_property_ids.push(property_id);
-        }
-    }
-
-    Json(PropertyEvidenceBatchResponse {
-        serving_bundle_version: Some(runtime.bundle.manifest.bundle_version.clone()),
-        results,
-        missing_property_ids,
-    })
 }
 
 /// GET /api/properties/:id/recommendations — computes serving-native branches
@@ -2440,8 +2084,10 @@ pub async fn get_property_evidence_batch(
 pub async fn get_property_recommendations(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
+    Query(query): Query<PropertySnapshotQuery>,
 ) -> Result<Json<RecommendationResponse>, (StatusCode, Json<ErrorResponse>)> {
     let runtime = state.search_runtime.load_full();
+    check_property_snapshot(&runtime, query.snapshot_identity.as_deref())?;
     let property = find_property_by_request_id(&runtime.properties, &id)
         .cloned()
         .ok_or_else(|| {
@@ -2473,14 +2119,15 @@ pub async fn get_property_recommendations(
         return Ok(Json(cached));
     }
 
-    let graph = state.knowledge.read().await;
-    let evidence =
-        build_property_evidence_response(&graph, &property, Some(runtime.bundle.as_ref()));
-    let area_median_ppsf = area_median_ppsf_for(&property, &runtime.properties, &runtime.areas);
+    let evidence = build_property_evidence_response(
+        runtime.entity_refs_for_property(&property),
+        &property,
+        Some(runtime.bundle.as_ref()),
+    );
+    let area_median_ppsf = area_median_ppsf_for(&property, &runtime.properties);
     let items = build_recommendation_branches(RecommendationBranchInputs {
         current: &property,
         current_evidence: &evidence,
-        graph: &graph,
         properties: &runtime.properties,
         societies: &runtime.societies,
         serving_bundle: Some(runtime.bundle.as_ref()),
@@ -2504,13 +2151,38 @@ pub async fn get_property_recommendations(
 
 /// GET /api/properties/:id — returns joined property + society + area,
 /// enriched from the knowledge graph.
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PropertySnapshotQuery {
+    pub snapshot_identity: Option<String>,
+}
+
+fn check_property_snapshot(
+    runtime: &crate::state::SearchRuntimeSnapshot,
+    expected: Option<&str>,
+) -> Result<(), (StatusCode, Json<ErrorResponse>)> {
+    if expected
+        .is_some_and(|expected| expected != runtime.bundle.manifest.proof_snapshot_identity())
+    {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: "stale_snapshot".to_string(),
+            }),
+        ));
+    }
+    Ok(())
+}
+
 pub async fn get_property(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
+    Query(query): Query<PropertySnapshotQuery>,
 ) -> Result<Json<PropertyDetail>, (StatusCode, Json<ErrorResponse>)> {
     // Use the immutable serving snapshot so no async lock guard survives the
     // interest-file read later in this handler.
     let runtime = state.search_runtime.load_full();
+    check_property_snapshot(&runtime, query.snapshot_identity.as_deref())?;
     let serving_bundle = Some(runtime.bundle.clone());
     let properties = &runtime.properties;
     let property = find_property_by_request_id(properties, &id)
@@ -2532,98 +2204,23 @@ pub async fn get_property(
         ));
     }
 
-    let graph = state.knowledge.read().await.clone();
-    let areas = &runtime.areas;
     let societies = &runtime.societies;
 
     // Enrich society from KG
     let society_key = super::enrichment::to_slug(&property.society_id);
-    let mut society = societies
+    let society = societies
         .iter()
         .find(|s| super::enrichment::to_slug(&s.id) == society_key)
         .cloned();
-    if let Some(ref mut soc) = society {
-        enrich_society(soc, &graph);
-    }
 
     let external_reviews = external_reviews_for(
         &property.society_id,
-        society.as_ref(),
-        &graph,
         serving_bundle.as_ref().map(|bundle| &bundle.fact_index),
     );
-
-    // Enrich area from KG
-    let area_key = area_lookup_key(&property.area_id);
-    let mut area = areas
-        .iter()
-        .find(|a| area_lookup_key(&a.id) == area_key || area_lookup_key(&a.name) == area_key)
-        .cloned();
-    if let Some(ref mut ap) = area {
-        enrich_area(ap, &graph);
-    }
-
-    // Find similar properties via local embedding similarity on the society node,
-    // then fill with same-area same-BHK homes so the page still has alternatives
-    // when society embeddings are sparse.
-    let similar_properties = {
-        let soc_node_id = society_node_id(&property.society_id);
-        let similar_societies = graph.similar_to(&soc_node_id, 8, Some(NodeType::Society));
-        let serving_facts = serving_bundle.as_ref().map(|bundle| &bundle.fact_index);
-        let mut seen = std::collections::HashSet::new();
-        seen.insert(property.id.clone());
-
-        let mut similar = Vec::new();
-        for sim_soc in &similar_societies {
-            if sim_soc.similarity < 0.28 {
-                continue;
-            }
-            if let Some(prop) = properties.iter().find(|p| {
-                society_node_id(&p.society_id) == sim_soc.node_id
-                    && p.bhk == property.bhk
-                    && !seen.contains(&p.id)
-            }) {
-                seen.insert(prop.id.clone());
-                let card = enrich_property_card(prop, societies, &graph);
-                similar.push(overlay_serving_google_reviews(
-                    card,
-                    &prop.society_id,
-                    serving_facts,
-                ));
-                if similar.len() >= 6 {
-                    break;
-                }
-            }
-        }
-
-        if similar.len() < 4 {
-            let mut area_props: Vec<&crate::models::Property> = properties
-                .iter()
-                .filter(|p| {
-                    p.id != property.id
-                        && p.area_id == property.area_id
-                        && p.bhk == property.bhk
-                        && !seen.contains(&p.id)
-                })
-                .collect();
-            area_props.sort_by_key(|p| p.price_per_sqft.abs_diff(property.price_per_sqft.max(1)));
-            for prop in area_props.into_iter().take(6 - similar.len()) {
-                seen.insert(prop.id.clone());
-                let card = enrich_property_card(prop, societies, &graph);
-                similar.push(overlay_serving_google_reviews(
-                    card,
-                    &prop.society_id,
-                    serving_facts,
-                ));
-            }
-        }
-        similar
-    };
 
     // Extract RERA info from the society's KG node
     let rera = rera_info_for(
         &property.society_id,
-        &graph,
         serving_bundle.as_ref().map(|bundle| &bundle.fact_index),
     );
     let rera_report_ref = rera_report_ref_for_property(&property, serving_bundle.as_deref());
@@ -2642,18 +2239,6 @@ pub async fn get_property(
         } else {
             (Vec::new(), None)
         };
-
-    // Extract area intelligence from the area's KG node
-    let area_intelligence = extract_area_intelligence(&graph, &property.area);
-
-    let detail_score = score_property_for_surface(
-        &property,
-        serving_bundle.as_ref().map(|bundle| bundle.as_ref()),
-        None,
-        "detail",
-    );
-    let transparency_score =
-        compute_transparency_score(&property, rera.as_ref(), Some(&detail_score));
 
     // Compute area price range from all properties in the same area
     let (area_price_range_low, area_price_range_high) = {
@@ -2682,71 +2267,31 @@ pub async fn get_property(
         count_interest_lines(&file_path).await
     };
 
-    // Extract root_source, project_status, and project_status_display from society KG node
-    let (root_source, project_status, project_status_display) = {
-        let soc_node_id = society_node_id(&property.society_id);
-        if let Some(node) = graph.get_node(&soc_node_id) {
-            let rs = node.root_source.map(|r| r.as_str().to_string());
-            // Get machine-readable project_status
-            let ps = node
-                .facts
-                .iter()
-                .filter(|f| f.key == "project_status")
-                .max_by_key(|f| f.version)
-                .and_then(|f| match &f.value {
-                    crate::knowledge::FactValue::Text(s) => Some(s.clone()),
-                    _ => None,
-                });
-            // Get display_template for project_status fact
-            let ps_display = node
-                .facts
-                .iter()
-                .filter(|f| f.key == "project_status")
-                .max_by_key(|f| f.version)
-                .and_then(|f| {
-                    f.display_template.clone().map(|tmpl| {
-                        if tmpl.contains("{value}") {
-                            if let crate::knowledge::FactValue::Text(ref val) = f.value {
-                                tmpl.replace("{value}", val)
-                            } else {
-                                tmpl
-                            }
-                        } else {
-                            tmpl
-                        }
-                    })
-                });
-            (rs, ps, ps_display)
-        } else {
-            (None, None, None)
-        }
-    };
-    let (project_status, project_status_display) =
-        if let Some(serving_bundle) = serving_bundle.as_ref() {
-            let projection =
-                SocietyFactProjection::from_index(&serving_bundle.fact_index, &property.society_id)
-                    .project_status(project_status, project_status_display);
-            (projection.status, projection.display)
-        } else {
-            (project_status, project_status_display)
-        };
+    let root_source = runtime
+        .search_index
+        .society_entity_id_for_property(&property.id)
+        .and_then(|id| runtime.search_index.entity_root_source(id))
+        .map(str::to_string);
+    let status =
+        SocietyFactProjection::from_index(&runtime.bundle.fact_index, &property.society_id)
+            .project_status(None, None);
+    let (project_status, project_status_display) = (status.status, status.display);
     let home_state_display = serving_bundle.as_ref().and_then(|bundle| {
         SocietyFactProjection::from_index(&bundle.fact_index, &property.society_id)
             .project_home_state()
             .display
     });
 
-    // Extract builder trust from KG
-    let builder_trust = extract_builder_trust(&graph, &property.society_id);
     let builder_portfolio = build_builder_portfolio(
-        &graph,
         properties,
         &property,
         serving_bundle.as_ref().map(|bundle| &bundle.fact_index),
+        &runtime.bundle.graph_index,
     );
-    let entity_refs = kg_entity_refs_for_property(&property, &graph);
+    let entity_refs = runtime.entity_refs_for_property(&property);
+    let snapshot_identity = runtime.bundle.manifest.proof_snapshot_identity();
     let mut source_panels = build_source_panels(
-        &graph,
+        snapshot_identity,
         &property,
         serving_bundle.as_ref().map(|bundle| &bundle.fact_index),
         serving_bundle.as_ref().map(|bundle| &bundle.graph_index),
@@ -2758,18 +2303,12 @@ pub async fn get_property(
     let society_projection = serving_bundle
         .as_ref()
         .map(|bundle| SocietyFactProjection::from_index(&bundle.fact_index, &property.society_id));
-    let community_records = collect_community_evidence_records(
-        &graph,
-        &society_node_id(&property.society_id),
-        Some(property.area.as_str()),
-        society_projection.as_ref(),
-    );
+    let community_records = collect_community_evidence_records(society_projection.as_ref());
     let society_display_name = society
         .as_ref()
         .map(|society| society.name.as_str())
         .unwrap_or(property.society_id.as_str());
     let livability_brief = build_livability_brief(
-        &graph,
         &property,
         society_display_name,
         society_projection.as_ref(),
@@ -2795,39 +2334,13 @@ pub async fn get_property(
             .map(|bundle| bundle.manifest.bundle_version.clone()),
     );
 
-    let data_freshness: Option<DataFreshness> = None;
-
-    // Compute confidence score for detail page (uses fact-quality instead of match_quality)
-    let confidence_score = compute_confidence_for_detail(Some(&graph), &property.society_id);
-    let legacy_map_context = crate::routes::property_map::build_property_map_context(
+    let context = crate::property_context::build_property_context(
         &property,
-        society.as_ref().map(|society| society.name.as_str()),
-        serving_bundle.as_ref().map(|bundle| &bundle.fact_index),
-        Some(state.map_overlays.as_ref()),
+        entity_refs.clone(),
+        &runtime.bundle,
+        &runtime.context_lookup,
+        None,
     );
-    let map_context = serving_bundle
-        .as_ref()
-        .and_then(|bundle| {
-            let surface = around_this_home_surface_config()?;
-            crate::surfaces::build_surface_scene(
-                &property,
-                society.as_ref().map(|society| society.name.as_str()),
-                entity_refs.clone(),
-                bundle,
-                surface,
-            )
-        })
-        .and_then(|scene| property_map_context_from_surface_scene(&scene))
-        .map(|mut context| {
-            if let Some(legacy) = legacy_map_context.as_ref() {
-                context.water = legacy.water.clone();
-                context.metro_lines = legacy.metro_lines.clone();
-                context.green_patches = legacy.green_patches.clone();
-                context.lakes = legacy.lakes.clone();
-            }
-            context
-        })
-        .or(legacy_map_context);
     let detail_signals = detail_signals_for(external_reviews.as_ref(), society.as_ref());
     let plans = crate::plans::project_plans_for_society(
         &entity_refs.society_entity_id,
@@ -2835,20 +2348,23 @@ pub async fn get_property(
         serving_bundle.as_ref().map(|bundle| &bundle.fact_index),
     );
     Ok(Json(PropertyDetail {
+        availability: property.inventory_availability(),
+        contract_version: 1,
+        snapshot_identity: runtime
+            .bundle
+            .manifest
+            .proof_snapshot_identity()
+            .to_string(),
         entity_refs,
         evidence,
-        property,
-        society,
-        area,
-        similar_properties,
+        property: (&property).into(),
+        society: society.as_ref().map(Into::into),
         recommendation_branches: Vec::new(),
         recommendations,
         rera,
         rera_report_ref,
         decision_labels,
         decision_check_summary,
-        area_intelligence,
-        transparency_score,
         area_price_range_low,
         area_price_range_high,
         interest_count,
@@ -2856,24 +2372,13 @@ pub async fn get_property(
         project_status_display,
         home_state_display,
         project_status,
-        builder_trust,
         builder_portfolio,
-        data_freshness,
-        confidence_score,
         external_reviews,
         detail_signals,
         livability_brief,
-        map_context,
+        context,
         plans,
     }))
-}
-
-fn around_this_home_surface_config() -> Option<&'static crate::dag_config::UiSurfaceConfig> {
-    ui_surfaces_config()
-        .ok()?
-        .surfaces
-        .iter()
-        .find(|surface| surface.id == "around_this_home")
 }
 
 fn google_review_cards_for(
@@ -3166,27 +2671,12 @@ fn push_theme_signal(
 
 fn external_reviews_for(
     society_id: &str,
-    society: Option<&crate::models::Society>,
-    graph: &crate::knowledge::KnowledgeGraph,
     serving_facts: Option<&ServingFactIndex>,
 ) -> Option<ExternalReviews> {
-    let node_id = society_node_id(society_id);
-    let fallback = GoogleReviewEvidence {
-        rating: super::enrichment::kg_numeric(graph, &node_id, "google_rating")
-            .filter(|rating| (0.0..=5.0).contains(rating)),
-        review_count: super::enrichment::kg_numeric(graph, &node_id, "google_review_count")
-            .filter(|count| count.is_finite() && *count >= 0.0 && *count <= u32::MAX as f64)
-            .map(|count| count.round() as u32),
-        reviews_url: society.and_then(|society| society.google_reviews_url.clone()),
-    };
-    let evidence = serving_facts
-        .map(|facts| {
-            SocietyFactProjection::from_index(facts, society_id)
-                .project_google_reviews(fallback.clone())
-        })
-        .unwrap_or(fallback);
-    let reviews = google_review_cards_for(society_id, serving_facts);
-
+    let facts = serving_facts?;
+    let evidence = SocietyFactProjection::from_index(facts, society_id)
+        .project_google_reviews(GoogleReviewEvidence::default());
+    let reviews = google_review_cards_for(society_id, Some(facts));
     (!evidence.is_empty() || !reviews.is_empty()).then_some(ExternalReviews {
         google_rating: evidence.rating,
         google_review_count: evidence.review_count,
@@ -3804,8 +3294,10 @@ fn rera_society_entity_id_candidates(society_id: &str) -> Vec<String> {
 pub async fn get_property_rera(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
+    Query(query): Query<PropertySnapshotQuery>,
 ) -> Result<Json<ReraEvidenceReportResponse>, (StatusCode, Json<ErrorResponse>)> {
     let runtime = state.search_runtime.load_full();
+    check_property_snapshot(&runtime, query.snapshot_identity.as_deref())?;
     let property = find_property_by_request_id(&runtime.properties, &id).ok_or_else(|| {
         (
             StatusCode::NOT_FOUND,
@@ -3823,12 +3315,7 @@ pub async fn get_property_rera(
         )
     })?;
     let surface = rera_surface_response(config);
-    let graph = state.knowledge.read().await;
-    let project_record = rera_info_for(
-        &property.society_id,
-        &graph,
-        Some(&runtime.bundle.fact_index),
-    );
+    let project_record = rera_info_for(&property.society_id, Some(&runtime.bundle.fact_index));
     let evidence_record = rera_evidence_for_property(&runtime.bundle, property);
     let buyer_report = ReraBuyerReport {
         fact_sections: rera_buyer_fact_sections_for_society(
@@ -3837,10 +3324,10 @@ pub async fn get_property_rera(
             config,
         ),
         builder_portfolio: build_builder_portfolio(
-            &graph,
             &runtime.properties,
             property,
             Some(&runtime.bundle.fact_index),
+            &runtime.bundle.graph_index,
         ),
         complaints: rera_buyer_complaints(project_record.as_ref(), evidence_record),
         schedules: project_record
@@ -3948,15 +3435,8 @@ fn empty_rera_evidence_projection(
     }
 }
 
-fn rera_info_for(
-    society_id: &str,
-    graph: &crate::knowledge::KnowledgeGraph,
-    serving_facts: Option<&ServingFactIndex>,
-) -> Option<ReraInfo> {
-    let fallback = extract_rera_info(graph, society_id);
-    let Some(serving_facts) = serving_facts else {
-        return fallback;
-    };
+fn rera_info_for(society_id: &str, serving_facts: Option<&ServingFactIndex>) -> Option<ReraInfo> {
+    let serving_facts = serving_facts?;
     let projection = SocietyFactProjection::from_index(serving_facts, society_id);
     let has_serving_rera = projection.latest_bool("rera_registered").is_some()
         || projection.latest_text("rera_number").is_some()
@@ -3968,10 +3448,9 @@ fn rera_info_for(
             .latest_text("rera_plan_artifact_manifest")
             .is_some();
     if !has_serving_rera {
-        return fallback;
+        return None;
     }
-
-    let mut info = fallback.unwrap_or_default();
+    let mut info = ReraInfo::default();
     if let Some(fact) = projection.latest_bool("rera_registered") {
         info.registered = fact.value;
     }
@@ -4122,10 +3601,7 @@ mod serving_state_tests {
     use chrono::{TimeZone, Utc};
 
     use super::*;
-    use crate::knowledge::fact::{FactSource, SourceType};
-    use crate::knowledge::node::{Node, NodeType};
     use crate::models::{Property, Society};
-    use crate::routes::enrichment::enrich_property_card;
     use crate::serving::{ServingFactRecord, ServingSearchMetadataRecord};
 
     #[test]
@@ -4287,7 +3763,6 @@ mod serving_state_tests {
 
     #[test]
     fn builder_portfolio_is_limited_to_unique_projects_in_the_local_catalog() {
-        let graph = legacy_graph();
         let current = property();
         let mut sibling = property();
         sibling.id = "sibling-3bhk".to_string();
@@ -4298,11 +3773,21 @@ mod serving_state_tests {
         duplicate_configuration.id = "sibling-2bhk".to_string();
         duplicate_configuration.bhk = 2;
 
+        let graph_index = crate::graph::GraphIndex::from_serving_edges(
+            &["society:sample", "society:sibling"].map(|id| crate::serving::ServingEdgeRecord {
+                from_entity_id: id.to_string(),
+                to_entity_id: "builder:shared".to_string(),
+                edge_type: "built_by".to_string(),
+                confidence: 1.0,
+                source_type: "Rera".to_string(),
+                derivation: None,
+            }),
+        );
         let portfolio = build_builder_portfolio(
-            &graph,
             &[current.clone(), sibling, duplicate_configuration],
             &current,
             None,
+            &graph_index,
         )
         .expect("two catalog projects from one builder should be projected");
 
@@ -4344,20 +3829,18 @@ mod serving_state_tests {
 
     #[test]
     fn search_card_and_property_detail_project_the_same_current_review_facts() {
-        let graph = legacy_graph();
         let property = property();
         let society = society();
         let serving = serving_index();
 
-        let mut card = enrich_property_card(&property, std::slice::from_ref(&society), &graph);
+        let mut card = property_card(&property, std::slice::from_ref(&society));
         crate::search::text::enrich_card_from_serving_facts(
             &mut card,
             &serving,
             &property.society_id,
         );
-        let detail =
-            external_reviews_for(&property.society_id, Some(&society), &graph, Some(&serving))
-                .expect("review evidence should be present");
+        let detail = external_reviews_for(&property.society_id, Some(&serving))
+            .expect("review evidence should be present");
 
         assert_eq!(detail.google_rating, card.google_rating);
         assert_eq!(detail.google_review_count, card.google_review_count);
@@ -4371,22 +3854,12 @@ mod serving_state_tests {
     }
 
     #[test]
-    fn property_detail_keeps_legacy_review_fallback_without_serving_facts() {
-        let graph = legacy_graph();
-        let detail = external_reviews_for("sample", Some(&society()), &graph, None)
-            .expect("legacy evidence should remain available");
-
-        assert_eq!(detail.google_rating, Some(3.8));
-        assert_eq!(detail.google_review_count, Some(87));
-        assert_eq!(
-            detail.google_reviews_url.as_deref(),
-            Some("https://example.com/legacy")
-        );
+    fn property_detail_withholds_reviews_without_serving_facts() {
+        assert!(external_reviews_for("sample", None).is_none());
     }
 
     #[test]
     fn property_detail_review_cards_rank_helpful_recent_reviews_and_keep_concerns() {
-        let graph = legacy_graph();
         let serving = ServingFactIndex::from_records(
             vec![serving_fact(
                 "google_review_cards",
@@ -4424,8 +3897,8 @@ mod serving_state_tests {
             Vec::<ServingSearchMetadataRecord>::new(),
         );
 
-        let detail = external_reviews_for("sample", Some(&society()), &graph, Some(&serving))
-            .expect("review cards should be exposed");
+        let detail =
+            external_reviews_for("sample", Some(&serving)).expect("review cards should be exposed");
 
         assert_eq!(detail.reviews.len(), 3);
         assert_eq!(detail.reviews[0].author.as_deref(), Some("Most Helpful"));
@@ -4543,7 +4016,6 @@ mod serving_state_tests {
 
     #[test]
     fn property_detail_projects_current_rera_facts_and_exposes_acreage() {
-        let graph = crate::knowledge::KnowledgeGraph::new();
         let serving = ServingFactIndex::from_records(
             vec![
                 serving_fact("rera_registered", FactValue::Bool(true), 10),
@@ -4634,7 +4106,7 @@ mod serving_state_tests {
             Vec::<ServingSearchMetadataRecord>::new(),
         );
 
-        let detail = rera_info_for("sample", &graph, Some(&serving))
+        let detail = rera_info_for("sample", Some(&serving))
             .expect("serving RERA facts should create detail evidence");
 
         assert!(detail.registered);
@@ -4675,7 +4147,6 @@ mod serving_state_tests {
 
     #[test]
     fn source_panels_project_current_serving_land_area_and_review_link() {
-        let graph = legacy_graph();
         let property = property();
         let serving = ServingFactIndex::from_records(
             vec![
@@ -4693,7 +4164,7 @@ mod serving_state_tests {
             Vec::<ServingSearchMetadataRecord>::new(),
         );
 
-        let panels = build_source_panels(&graph, &property, Some(&serving), None);
+        let panels = build_source_panels("test-snapshot", &property, Some(&serving), None);
         let keys = panels
             .iter()
             .flat_map(|panel| panel.items.iter().map(|item| item.key.as_str()))
@@ -4717,8 +4188,24 @@ mod serving_state_tests {
     }
 
     #[test]
+    fn source_panels_withhold_claims_without_observations() {
+        let mut fact = serving_fact_with_url(
+            "rera_total_land_area_sqm",
+            FactValue::Numeric(112_652.0),
+            "https://rera.example/project",
+            10,
+        );
+        fact.observation = None;
+        let serving = ServingFactIndex::from_records(vec![fact], Vec::new());
+        let panels = build_source_panels("test-snapshot", &property(), Some(&serving), None);
+        assert!(
+            panels.iter().all(|panel| panel.items.is_empty()),
+            "a source URL alone cannot establish a receipt"
+        );
+    }
+
+    #[test]
     fn source_panels_include_dynamic_nearby_items_when_backed_by_facts() {
-        let graph = legacy_graph();
         let property = property();
         let serving = ServingFactIndex::from_records(
             vec![
@@ -4737,7 +4224,7 @@ mod serving_state_tests {
             Vec::<ServingSearchMetadataRecord>::new(),
         );
 
-        let panels = build_source_panels(&graph, &property, Some(&serving), None);
+        let panels = build_source_panels("test-snapshot", &property, Some(&serving), None);
         let nearby = panels
             .iter()
             .find(|panel| panel.kind == "nearby")
@@ -4747,12 +4234,12 @@ mod serving_state_tests {
         assert_eq!(
             nearby.items[0].values,
             vec![
-                "Greenwood High (1.2 km, 4.3 rating)".to_string(),
                 "Far School (4.0 km, 4.5 rating)".to_string(),
+                "Greenwood High (1.2 km, 4.3 rating)".to_string(),
             ]
         );
         assert_eq!(
-            nearby.items[0].attributions[0].source_url.as_deref(),
+            nearby.items[0].attributions[1].source_url.as_deref(),
             Some("https://maps.google.com/greenwood")
         );
         assert!(nearby.missing.is_empty());
@@ -4760,19 +4247,6 @@ mod serving_state_tests {
 
     #[test]
     fn source_panels_merge_google_reviews_into_community_pulse() {
-        let mut graph = legacy_graph();
-        let node = graph
-            .nodes
-            .get_mut("society:sample")
-            .expect("fixture society exists");
-        node.add_fact(legacy_fact(
-            "best_quote",
-            FactValue::Text("Resident says: stale generated quote".to_string()),
-        ));
-        node.add_fact(legacy_fact(
-            "google_top_positives",
-            FactValue::Tags(vec!["stale generated review theme".to_string()]),
-        ));
         let property = property();
         let serving = ServingFactIndex::from_records(
             vec![
@@ -4790,7 +4264,7 @@ mod serving_state_tests {
             Vec::<ServingSearchMetadataRecord>::new(),
         );
 
-        let panels = build_source_panels(&graph, &property, Some(&serving), None);
+        let panels = build_source_panels("test-snapshot", &property, Some(&serving), None);
         let community = panels
             .iter()
             .find(|panel| panel.kind == "community")
@@ -4823,7 +4297,6 @@ mod serving_state_tests {
 
     #[test]
     fn source_panels_do_not_derive_approach_road_signal_from_review_snippets() {
-        let graph = legacy_graph();
         let property = property();
         let serving = ServingFactIndex::from_records(
             vec![serving_fact(
@@ -4838,7 +4311,7 @@ mod serving_state_tests {
             Vec::<ServingSearchMetadataRecord>::new(),
         );
 
-        let panels = build_source_panels(&graph, &property, Some(&serving), None);
+        let panels = build_source_panels("test-snapshot", &property, Some(&serving), None);
         assert!(panels
             .iter()
             .filter(|panel| panel.kind == "approach_road")
@@ -4848,7 +4321,6 @@ mod serving_state_tests {
 
     #[test]
     fn source_panels_include_approach_road_fact_from_served_road_segment() {
-        let graph = legacy_graph();
         let property = property();
         let serving = ServingFactIndex::from_records(
             vec![serving_fact_for_entity(
@@ -4872,7 +4344,12 @@ mod serving_state_tests {
                 derivation: None,
             }]);
 
-        let panels = build_source_panels(&graph, &property, Some(&serving), Some(&graph_index));
+        let panels = build_source_panels(
+            "test-snapshot",
+            &property,
+            Some(&serving),
+            Some(&graph_index),
+        );
         let approach = panels
             .iter()
             .find(|panel| panel.kind == "approach_road")
@@ -4898,7 +4375,6 @@ mod serving_state_tests {
 
     #[test]
     fn source_panels_expose_six_approach_road_frames() {
-        let graph = legacy_graph();
         let property = property();
         let frames = (0..6)
             .map(|index| {
@@ -4943,7 +4419,12 @@ mod serving_state_tests {
                 derivation: None,
             }]);
 
-        let panels = build_source_panels(&graph, &property, Some(&serving), Some(&graph_index));
+        let panels = build_source_panels(
+            "test-snapshot",
+            &property,
+            Some(&serving),
+            Some(&graph_index),
+        );
         let approach = panels
             .iter()
             .find(|panel| panel.kind == "approach_road")
@@ -4953,55 +4434,42 @@ mod serving_state_tests {
             .first()
             .expect("approach-road panel should include a media strip");
 
+        assert!(
+            approach.items.is_empty(),
+            "visual media must not synthesize buyer claims"
+        );
         assert_eq!(strip.frames.len(), 6);
         assert_eq!(strip.frames[4].distance_from_gate_m, 80);
         assert_eq!(strip.frames[5].distance_from_gate_m, 160);
     }
 
     #[test]
-    fn source_panels_build_review_link_from_google_review_facts_without_explicit_url() {
-        let graph = legacy_graph_without_review_url();
-        let property = property();
-
-        let panels = build_source_panels(&graph, &property, None, None);
-        let community = panels
-            .iter()
-            .find(|panel| panel.kind == "community")
-            .expect("Google review facts should produce a community pulse");
-        let pulse = community
-            .community_pulse
-            .as_ref()
-            .expect("community pulse should expose review source links");
-        assert!(
-            pulse.source_urls.iter().any(|url| {
-                url == "https://www.google.com/maps/search/?api=1&query=Sample%20Society"
-            }),
-            "Google review facts should expose a navigable Maps search link: {:?}",
-            pulse.source_urls
-        );
-    }
-
-    #[test]
     fn property_evidence_sections_are_backend_shaped_for_dynamic_ui() {
-        let mut graph = legacy_graph();
-        let node = graph
-            .nodes
-            .get_mut("society:sample")
-            .expect("fixture society exists");
-        node.add_fact(legacy_fact(
-            "rera_number",
-            FactValue::Text("PRM-UI-CONTRACT".to_string()),
-        ));
-        node.add_fact(legacy_fact(
-            "nearby_schools",
-            FactValue::Tags(vec![
-                "Greenwood High (1.2 km, 4.3 rating)".to_string(),
-                "Inventure Academy (2.1 km, 4.1 rating)".to_string(),
-            ]),
-        ));
-
-        let response = build_property_evidence_response(&graph, &property(), None);
-
+        let serving = ServingFactIndex::from_records(
+            vec![
+                serving_fact(
+                    "rera_number",
+                    FactValue::Text("PRM-UI-CONTRACT".to_string()),
+                    1,
+                ),
+                serving_fact(
+                    "nearby_schools",
+                    FactValue::Tags(vec![
+                        "Greenwood High (1.2 km, 4.3 rating)".to_string(),
+                        "Inventure Academy (2.1 km, 4.1 rating)".to_string(),
+                    ]),
+                    1,
+                ),
+            ],
+            vec![],
+        );
+        let property = property();
+        let response = build_property_evidence_response_from_panels(
+            property.id.clone(),
+            property.to_card("").kg_entity_refs,
+            None,
+            build_source_panels("test-snapshot", &property, Some(&serving), None),
+        );
         assert_eq!(response.property_id, "sample-3bhk");
         assert_eq!(response.entity_refs.society_entity_id, "society:sample");
         assert!(response.sections.len() >= 2);
@@ -5025,9 +4493,9 @@ mod serving_state_tests {
             .expect("RERA section should be produced when RERA facts exist");
         assert_eq!(rera.priority, 10);
         assert_eq!(rera.constellation, "trust");
-        assert_eq!(rera.header_meta, "1 facts · Google");
+        assert_eq!(rera.header_meta, "1 facts · Rera");
         assert_eq!(rera.summary, "Registration: PRM-UI-CONTRACT");
-        assert_eq!(rera.source_types, vec!["Google".to_string()]);
+        assert_eq!(rera.source_types, vec!["Rera".to_string()]);
         assert_eq!(rera.entity_ids, vec!["society:sample".to_string()]);
         assert!(
             rera.items
@@ -5051,15 +4519,15 @@ mod serving_state_tests {
 
     #[test]
     fn property_evidence_adds_config_only_section_without_rust_branch() {
-        let mut graph = legacy_graph();
-        graph
-            .nodes
-            .get_mut("society:sample")
-            .expect("fixture society exists")
-            .add_fact(legacy_fact(
+        let serving = ServingFactIndex::from_records(
+            vec![serving_fact(
                 "test_config_only_signal",
                 FactValue::Text("Config-only proof".to_string()),
-            ));
+                1,
+            )],
+            vec![],
+        );
+        let projection = SocietyFactProjection::from_index(&serving, "sample");
         let property = property();
         let mut definitions = buyer_context_definitions().to_vec();
         definitions.push(EvidenceSectionDefinition {
@@ -5091,16 +4559,16 @@ mod serving_state_tests {
         });
 
         let panels = build_configured_evidence_panels_from_definitions(
+            "test-snapshot",
             &definitions,
-            &graph,
             &property,
-            None,
-            None,
+            Some(&projection),
+            Some(&serving),
             None,
         );
         let response = build_property_evidence_response_from_panels(
             property.id.clone(),
-            kg_entity_refs_for_property(&property, &graph),
+            property.to_card("").kg_entity_refs,
             None,
             panels,
         );
@@ -5119,7 +4587,6 @@ mod serving_state_tests {
 
     #[test]
     fn property_evidence_includes_groundwater_potential_water_context() {
-        let graph = legacy_graph();
         let property = property();
         let serving = ServingFactIndex::from_records(
             vec![typed_serving_fact(
@@ -5134,9 +4601,9 @@ mod serving_state_tests {
 
         let response = build_property_evidence_response_from_panels(
             property.id.clone(),
-            kg_entity_refs_for_property(&property, &graph),
+            property.to_card("").kg_entity_refs,
             None,
-            build_source_panels(&graph, &property, Some(&serving), None),
+            build_source_panels("test-snapshot", &property, Some(&serving), None),
         );
         let section = response
             .sections
@@ -5162,9 +4629,9 @@ mod serving_state_tests {
     }
 
     #[test]
-    fn property_evidence_finds_groundwater_on_matching_rera_society_entity() {
-        let graph = legacy_graph();
-        let property = property();
+    fn property_evidence_finds_groundwater_by_canonical_society_identity() {
+        let mut property = property();
+        property.society_id = "society:rera-sample".to_string();
         let serving = ServingFactIndex::from_records(
             vec![
                 serving_fact_for_entity(
@@ -5185,9 +4652,9 @@ mod serving_state_tests {
 
         let response = build_property_evidence_response_from_panels(
             property.id.clone(),
-            kg_entity_refs_for_property(&property, &graph),
+            property.to_card("").kg_entity_refs,
             None,
-            build_source_panels(&graph, &property, Some(&serving), None),
+            build_source_panels("test-snapshot", &property, Some(&serving), None),
         );
         let section = response
             .sections
@@ -5204,8 +4671,11 @@ mod serving_state_tests {
 
     #[test]
     fn property_evidence_omits_missing_only_sections() {
-        let graph = legacy_graph();
-        let response = build_property_evidence_response(&graph, &property(), None);
+        let response = build_property_evidence_response(
+            property().to_card("").kg_entity_refs,
+            &property(),
+            None,
+        );
 
         assert!(
             response.sections.iter().all(|section| {
@@ -5220,6 +4690,7 @@ mod serving_state_tests {
     #[test]
     fn evidence_summaries_do_not_repeat_self_labeled_values() {
         let item = SourceItem {
+            evidence: Vec::new(),
             entity_id: "society:sample".to_string(),
             key: "listing_source_name_3bhk".to_string(),
             label: "3BHK source name".to_string(),
@@ -5239,7 +4710,6 @@ mod serving_state_tests {
 
     #[test]
     fn market_trail_uses_configured_external_listing_facts() {
-        let graph = legacy_graph();
         let property = property();
         let serving = ServingFactIndex::from_records(
             vec![
@@ -5268,14 +4738,12 @@ mod serving_state_tests {
             Vec::<ServingSearchMetadataRecord>::new(),
         );
 
-        let market_panel = build_source_panels(&graph, &property, Some(&serving), None)
+        let market_panel = build_source_panels("test-snapshot", &property, Some(&serving), None)
             .into_iter()
             .find(|panel| panel.kind == "market")
             .expect("Market trail should render when builder or listing facts exist");
-        let market = evidence_section_from_panel(
-            market_panel,
-            &kg_entity_refs_for_property(&property, &graph),
-        );
+        let market =
+            evidence_section_from_panel(market_panel, &property.to_card("").kg_entity_refs);
 
         assert_eq!(market.source_types, vec!["ExternalListing".to_string()]);
         assert!(market.items.iter().any(|item| {
@@ -5290,50 +4758,6 @@ mod serving_state_tests {
                 && item.value == "INR 90K - 1.4L"
                 && item.source_type == "ExternalListing"
         }));
-    }
-
-    fn legacy_graph() -> crate::knowledge::KnowledgeGraph {
-        let mut graph = crate::knowledge::KnowledgeGraph::new();
-        let mut node = Node::new("society:sample", NodeType::Society, "Sample Society");
-        node.add_fact(legacy_fact("google_rating", FactValue::Numeric(3.8)));
-        node.add_fact(legacy_fact("google_review_count", FactValue::Numeric(87.0)));
-        node.add_fact(legacy_fact(
-            "google_reviews_url",
-            FactValue::Text("https://example.com/legacy".to_string()),
-        ));
-        graph.add_node(node);
-        graph
-    }
-
-    fn legacy_graph_without_review_url() -> crate::knowledge::KnowledgeGraph {
-        let mut graph = crate::knowledge::KnowledgeGraph::new();
-        let mut node = Node::new("society:sample", NodeType::Society, "Sample Society");
-        node.add_fact(legacy_fact(
-            "google_sentiment",
-            FactValue::Text("good".to_string()),
-        ));
-        graph.add_node(node);
-        graph
-    }
-
-    fn legacy_fact(key: &str, value: FactValue) -> SourcedFact {
-        SourcedFact {
-            key: key.to_string(),
-            value,
-            confidence: 0.8,
-            source: FactSource {
-                source_type: SourceType::Google,
-                url: None,
-                model: None,
-                skill_id: None,
-                triggered_by: None,
-            },
-            learned_at: Utc.timestamp_opt(1, 0).unwrap(),
-            version: 1,
-            display_template: None,
-            answers_preferences: Vec::new(),
-            scoring_hint: None,
-        }
     }
 
     fn serving_index() -> ServingFactIndex {
@@ -5368,6 +4792,7 @@ mod serving_state_tests {
     ) -> ServingFactRecord {
         let mut fact = serving_fact(key, value, learned_at);
         fact.entity_id = entity_id.to_string();
+        fact.observation = Some(test_observation(&fact));
         fact
     }
 
@@ -5406,7 +4831,7 @@ mod serving_state_tests {
         source_url: Option<&str>,
         learned_at: i64,
     ) -> ServingFactRecord {
-        ServingFactRecord {
+        let mut fact = ServingFactRecord {
             entity_id: "society:sample".to_string(),
             fact_key: key.to_string(),
             value_type: "test".to_string(),
@@ -5419,7 +4844,21 @@ mod serving_state_tests {
             skill_id: None,
             learned_at: Utc.timestamp_opt(learned_at, 0).unwrap(),
             observation: None,
-        }
+        };
+        fact.observation = Some(test_observation(&fact));
+        fact
+    }
+
+    fn test_observation(fact: &ServingFactRecord) -> crate::serving::SourceObservation {
+        crate::serving::SourceObservation::new(
+            &fact.source_type,
+            format!("fixture:{}:{}", fact.fact_key, fact.learned_at),
+            &fact.entity_id,
+            fact.learned_at,
+            fact.source_url.clone(),
+            vec!["fixture:property-evidence".into()],
+        )
+        .unwrap()
     }
 
     fn society() -> Society {
@@ -5462,6 +4901,7 @@ mod serving_state_tests {
             price_per_sqft: 10_000,
             carpet_area_sqft: 1_500,
             super_builtup_sqft: 2_000,
+            area_measurement: None,
             floor: 5,
             total_floors: 20,
             facing: "East".to_string(),
@@ -5487,7 +4927,7 @@ mod serving_state_tests {
             images: Vec::new(),
             hero_image: String::new(),
             description_summary: String::new(),
-            transparency_tags: Vec::new(),
+
             source_reference: String::new(),
         }
     }

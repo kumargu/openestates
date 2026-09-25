@@ -19,7 +19,11 @@
     "test:atlas-parity": "playwright test --config playwright.atlas.config.ts e2e/atlas/parity.spec.ts",
     "verify:dist": "node scripts/verify-dist.mjs",
     "smoke": "npm run build && npm run verify:dist && npm run test:smoke",
-    "preview": "node ./node_modules/vite/bin/vite.js preview"
+    "preview": "node ./node_modules/vite/bin/vite.js preview",
+    "contracts:generate": "cargo run --manifest-path ../backend/Cargo.toml --bin openestates-contract-schema && node scripts/generate-wire-types.mjs",
+    "contracts:check": "npm run contracts:generate && git diff --exit-code -- src/generated",
+    "test:contract-browser": "playwright test --config playwright.contracts.config.ts",
+    "test:promotion-browser": "playwright test --config playwright.promotion.config.ts"
   },
   "dependencies": {
     "maplibre-gl": "^5.24.0",
@@ -35,10 +39,12 @@
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
+    "ajv": "^8.20.0",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
+    "json-schema-to-typescript": "^15.0.4",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.48.0",
     "vite": "^7.3.1"

@@ -104,10 +104,10 @@ mod tests {
     #[tokio::test]
     async fn global_request_target_limit_rejects_non_search_amplification() {
         let app = Router::new()
-            .route("/api/societies/search", get(|| async { "ok" }))
+            .route("/api/search", get(|| async { "ok" }))
             .layer(middleware::from_fn(reject_oversized_request_target));
         let uri = format!(
-            "/api/societies/search?q={}",
+            "/api/search?q={}",
             "a".repeat(security_tuning().requests.max_request_target_bytes + 1)
         );
         let response = app

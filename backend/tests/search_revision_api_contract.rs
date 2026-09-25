@@ -10,7 +10,7 @@ use axum::http::{header, Method, Request, StatusCode};
 use axum::Router;
 use backend::api::build_app_router_with_lake;
 use backend::graph::GraphIndex;
-use backend::knowledge::{FactValue, KnowledgeGraph};
+use backend::knowledge::FactValue;
 use backend::lake::LakeStore;
 use backend::models::Property;
 use backend::search::geo::SpatialEntityIndex;
@@ -33,6 +33,243 @@ use tokio::sync::{mpsc, RwLock};
 use tower::ServiceExt;
 
 #[tokio::test]
+async fn discovery_router_has_no_retired_feature_endpoints() {
+    let app = test_app().await;
+    for (method, path) in [
+        (Method::POST, "/api/interests"),
+        (Method::GET, "/api/shortlist"),
+        (
+            Method::GET,
+            "/api/properties/fixture-home-3bhk/interests/count",
+        ),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(method)
+                    .uri(path)
+                    .extension(ConnectInfo(SocketAddr::from(([192, 0, 2, 230], 41000))))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+}
+
+#[tokio::test]
+async fn sitemap_uses_the_current_serving_snapshot() {
+    let (app, state) = test_app_with_state().await;
+    for replaced in [false, true] {
+        if replaced {
+            install_runtime_without_second_home(&state, "sitemap-next-snapshot");
+        }
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/sitemap.xml")
+                    .extension(ConnectInfo(SocketAddr::from(([192, 0, 2, 231], 41000))))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let xml = String::from_utf8(
+            to_bytes(response.into_body(), 1024 * 1024)
+                .await
+                .unwrap()
+                .to_vec(),
+        )
+        .unwrap();
+        assert!(xml.contains("/property/fixture-home-3bhk"));
+        assert_eq!(xml.contains("/property/second-home-3bhk"), !replaced);
+        assert_eq!(xml.contains("/property/fresh-home-3bhk"), replaced);
+    }
+}
+
+#[tokio::test]
+async fn named_identity_retains_a_durable_witness_after_recall() {
+    let app = test_app().await;
+    let search = get_search(&app, "3BHK in Fixture Home", 221).await;
+    assert_eq!(search.0, StatusCode::OK);
+    let results = search.1["active"]["results"]["resultSets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|set| set["results"].as_array().unwrap())
+        .collect::<Vec<_>>();
+    assert!(!results.is_empty());
+    let mut identity_receipts = 0;
+    for result in results {
+        for reason in result["reasons"].as_array().unwrap() {
+            let resolved = post_proof(
+                &app,
+                json!({"proofToken": reason["proofToken"], "propertyId": result["id"]}),
+                222,
+            )
+            .await;
+            assert_eq!(resolved.0, StatusCode::OK);
+            if resolved.1["factKey"] == "entity_identity" {
+                assert!(!resolved.1["catalogEvidence"].as_array().unwrap().is_empty());
+                identity_receipts += 1;
+            }
+        }
+    }
+    assert!(
+        identity_receipts > 0,
+        "named identity was admitted without a durable witness"
+    );
+}
+
+#[test]
+fn inventory_admission_requires_listing_evidence() {
+    let subject = "society:fixture-home";
+    let property = test_property(
+        "fixture-home-3bhk",
+        "Fixture Home",
+        "fixture-home",
+        10_000_000,
+    );
+    let mut valid = topology_fact(subject, "listing_3bhk", FactValue::Text(
+        json!({"listing_type":"sale","bhk":3,"price":10_000_000,"area_sqft":1000,"area_type":"built-up"}).to_string(),
+    ));
+    valid.source_type = "ExternalListing".into();
+    let selected = |fact: ServingFactRecord| {
+        backend::search::InventoryOption::from_serving_observation(
+            &property,
+            subject,
+            &ServingFactIndex::from_records(vec![fact], vec![]),
+            "admission",
+        )
+    };
+    assert!(selected(valid.clone()).is_some());
+    for (key, source, confidence) in [
+        ("unrelated_payload", "ExternalListing", 0.9),
+        ("listing_source_url_3bhk", "ExternalListing", 0.9),
+        ("listing_3bhk", "UnverifiedSource", 0.9),
+        ("listing_3bhk", "ExternalListing", 0.0),
+        ("listing_3bhk", "ExternalListing", -0.1),
+        ("listing_3bhk", "ExternalListing", f32::NAN),
+        ("listing_3bhk", "ExternalListing", 1.1),
+    ] {
+        let mut fact = valid.clone();
+        fact.fact_key = key.into();
+        fact.source_type = source.into();
+        fact.confidence = confidence;
+        assert!(
+            selected(fact).is_none(),
+            "admitted {key}/{source}/{confidence}"
+        );
+    }
+}
+
+#[test]
+fn catalog_membership_preserves_missing_negative_and_row_order_semantics() {
+    use backend::search::{identity::IdentityEvaluationIndex, EvaluationState};
+    let root = tempdir().unwrap();
+    let bundle = test_bundle_with_options(root.path(), true, "identity-states", false, true);
+    let snapshot = bundle.manifest.proof_snapshot_identity();
+    let index = IdentityEvaluationIndex::from_bundle(&bundle);
+    let positive = index.evaluate("society:second-home", "area:hoodi", snapshot);
+    assert_eq!(positive.state, EvaluationState::Satisfied);
+    assert!(!positive.verified_matches[0].evidence_refs.is_empty());
+    let negative = index
+        .evaluate("society:second-home", "area:sarjapur", snapshot)
+        .negated();
+    assert_eq!(negative.state, EvaluationState::Satisfied);
+    assert!(!negative.verified_matches[0].evidence_refs.is_empty());
+    let missing = IdentityEvaluationIndex::from_records(&bundle.entities, &[], snapshot);
+    assert_eq!(
+        missing
+            .evaluate("society:second-home", "area:sarjapur", snapshot)
+            .negated()
+            .state,
+        EvaluationState::Unknown
+    );
+    let mut edges = bundle.edges.clone();
+    edges.reverse();
+    let reordered = IdentityEvaluationIndex::from_records(&bundle.entities, &edges, snapshot);
+    assert_eq!(
+        positive.verified_matches,
+        reordered
+            .evaluate("society:second-home", "area:hoodi", snapshot)
+            .verified_matches
+    );
+    let mut conflicting = edges
+        .iter()
+        .find(|edge| {
+            edge.from_entity_id == "society:second-home" && edge.edge_type == "in_market_locality"
+        })
+        .unwrap()
+        .clone();
+    conflicting.to_entity_id = "area:sarjapur".to_string();
+    conflicting.derivation = None;
+    edges.push(conflicting);
+    let ambiguous = IdentityEvaluationIndex::from_records(&bundle.entities, &edges, snapshot);
+    for target in ["area:hoodi", "area:sarjapur"] {
+        assert_eq!(
+            ambiguous
+                .evaluate("society:second-home", target, snapshot)
+                .state,
+            EvaluationState::Unknown
+        );
+    }
+    assert_eq!(
+        ambiguous
+            .evaluate("society:second-home", "area:cell:hoodi", snapshot)
+            .negated()
+            .state,
+        EvaluationState::Unknown
+    );
+
+    let membership = bundle
+        .edges
+        .iter()
+        .find(|edge| {
+            edge.from_entity_id == "society:second-home" && edge.edge_type == "in_market_locality"
+        })
+        .unwrap();
+    for (source, confidence) in [
+        ("OpenStreetMap", 0.0),
+        ("OpenStreetMap", -0.1),
+        ("OpenStreetMap", f32::NAN),
+        ("OpenStreetMap", 1.1),
+        ("UnverifiedSource", 1.0),
+    ] {
+        let mut weak = membership.clone();
+        weak.source_type = source.into();
+        weak.confidence = confidence;
+        let weak_index = IdentityEvaluationIndex::from_records(&bundle.entities, &[weak], snapshot);
+        for target in ["area:hoodi", "area:sarjapur"] {
+            let result = weak_index.evaluate("society:second-home", target, snapshot);
+            assert_eq!(result.state, EvaluationState::Unknown);
+            assert_eq!(result.negated().state, EvaluationState::Unknown);
+        }
+    }
+
+    // A sourced boundary and a market locality are independent identity scopes.
+    let mut boundary = membership.clone();
+    boundary.edge_type = "in_area".into();
+    boundary.to_entity_id = "area:sarjapur".into();
+    boundary.derivation = None;
+    let mut scoped_edges = bundle.edges.clone();
+    scoped_edges.push(boundary);
+    let scoped = IdentityEvaluationIndex::from_records(&bundle.entities, &scoped_edges, snapshot);
+    for target in ["area:hoodi", "area:sarjapur"] {
+        assert_eq!(
+            scoped
+                .evaluate("society:second-home", target, snapshot)
+                .state,
+            EvaluationState::Satisfied
+        );
+    }
+}
+
+#[tokio::test]
 #[ignore = "requires OPENESTATES_TEST_LAKE_ROOT and the pinned proof_handoff_live bundle"]
 async fn pinned_live_bundle_resolves_search_receipts_into_visible_scene_evidence() {
     let bank: Value =
@@ -46,6 +283,13 @@ async fn pinned_live_bundle_resolves_search_receipts_into_visible_scene_evidence
     let lake =
         LakeStore::local(std::env::var("OPENESTATES_TEST_LAKE_ROOT").expect("test lake root"))
             .unwrap();
+    let promotion = backend::serving::validate_search_serving_candidate(
+        &lake,
+        suite["required_serving_bundle_version"].as_str().unwrap(),
+    )
+    .await
+    .unwrap();
+    assert!(promotion.passed, "pinned bundle is not eligible for promotion; rebuild source inventory before proof handoff: {:?}", promotion.issues.iter().take(5).collect::<Vec<_>>());
     let cache = tempdir().unwrap();
     let bundle = backend::serving::ServingBundleLoader::new(lake, cache.path())
         .load_search_bundle(suite["required_serving_bundle_version"].as_str().unwrap())
@@ -89,26 +333,11 @@ async fn pinned_live_bundle_resolves_search_receipts_into_visible_scene_evidence
                     continue;
                 }
                 assert_eq!(proof.1["targetLabel"], expected["target_label"]);
-                let default = get_surface(&app, id.as_str().unwrap(), None, 182).await;
-                let focused = get_surface(&app, id.as_str().unwrap(), Some(token), 183).await;
+                let default = get_context(&app, id.as_str().unwrap(), None, 182).await;
+                let focused = get_context(&app, id.as_str().unwrap(), Some(token), 183).await;
                 assert_eq!(focused.0, StatusCode::OK);
-                assert_eq!(focused.1["proofFocusStatus"], "applied", "{}", id);
-                let feature_id = &focused.1["proofFocus"]["featureId"];
-                let feature = focused.1["features"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .find(|feature| &feature["id"] == feature_id)
-                    .expect("focused feature is rendered");
-                assert_eq!(feature["label"], expected["target_label"]);
-                assert_eq!(
-                    feature["metrics"]["distanceM"].as_u64(),
-                    Some((proof.1["value"]["data"].as_f64().unwrap() * 1000.0).round() as u64)
-                );
-                assert_eq!(
-                    feature["receiptIds"][0],
-                    proof.1["derivationChain"][0]["derivation_id"]
-                );
+                assert_eq!(focused.1["matchedProof"], proof.1);
+                assert!(focused.1.get("surfaceId").is_none());
                 for feature in default.1["features"].as_array().unwrap() {
                     assert!(
                         focused.1["features"].as_array().unwrap().contains(feature),
@@ -280,7 +509,7 @@ async fn inventory_and_proof_use_proof_identity_independently_of_catalog_version
         .unwrap()["proofToken"]
         .as_str()
         .unwrap();
-    let surface = get_surface(&app, result["id"].as_str().unwrap(), Some(token), 204).await;
+    let surface = get_context(&app, result["id"].as_str().unwrap(), Some(token), 204).await;
     assert_eq!(surface.0, StatusCode::OK, "{}", surface.1);
 }
 
@@ -484,40 +713,37 @@ async fn regression_surface_keeps_exact_resolved_receipt() {
             Arc::new(bundle),
             properties,
             Vec::new(),
-            Vec::new(),
             search_index,
         )));
     let references = [EvidenceRef::for_observation(
         "review-exact",
         exact.observation.as_ref().unwrap(),
     )];
-    let token = issue_proof_token(ProofIssueRequest {
-        snapshot_identity: "review-exact",
-        semantic_fingerprint: "review",
-        property_id: "fixture-home-3bhk",
-        branch_id: "review-branch",
-        predicate_id: "review-predicate",
-        subject_entity_id: "society:fixture-home",
-        target_entity_id: Some("place:fixture-school-6"),
-        fact_key: "nearby_schools",
-        relation: "supports",
-        evidence_refs: &references,
-    })
+    let token = issue_proof_token(
+        &state.search_runtime.load_full(),
+        ProofIssueRequest {
+            claim: None,
+            constraint: None,
+            snapshot_identity: "review-exact",
+            semantic_fingerprint: "review",
+            property_id: "fixture-home-3bhk",
+            branch_id: "review-branch",
+            predicate_id: "review-predicate",
+            subject_entity_id: "society:fixture-home",
+            target_entity_id: Some("place:fixture-school-6"),
+            fact_key: "nearby_schools",
+            relation: "supports",
+            evidence_refs: &references,
+        },
+    )
     .unwrap();
     let resolved = post_proof(&app, json!({"proofToken":token}), 187).await;
     assert_eq!(resolved.0, StatusCode::OK);
-    let surface = get_surface(&app, "fixture-home-3bhk", Some(&token), 188).await;
+    let surface = get_context(&app, "fixture-home-3bhk", Some(&token), 188).await;
     assert_eq!(surface.0, StatusCode::OK);
-    let receipt_id = &surface.1["proofFocus"]["receiptId"];
-    let receipt = surface.1["receipts"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|receipt| &receipt["id"] == receipt_id)
-        .unwrap();
     assert_eq!(
-        receipt["sourceUrl"], resolved.1["sourceObservations"][0]["sourceUrl"],
-        "Focused receipt changed from the exact resolved source"
+        surface.1["matchedProof"], resolved.1,
+        "Context must preserve the exact resolved receipt independently of presentation"
     );
 }
 
@@ -983,8 +1209,8 @@ async fn exact_proof_resolution_and_surface_focus_share_one_identity() {
     assert_eq!(resolved.1["targetLabel"], "Fixture School 6");
     assert_eq!(resolved.1["sourceObservations"][0]["provider"], "Google");
 
-    let default_scene = get_surface(&app, "fixture-home-3bhk", None, 84).await;
-    let focused_scene = get_surface(&app, "fixture-home-3bhk", Some(&proof_token), 85).await;
+    let default_scene = get_context(&app, "fixture-home-3bhk", None, 84).await;
+    let focused_scene = get_context(&app, "fixture-home-3bhk", Some(&proof_token), 85).await;
     assert_eq!(
         default_scene.0,
         StatusCode::OK,
@@ -997,16 +1223,10 @@ async fn exact_proof_resolution_and_surface_focus_share_one_identity() {
         "response={}",
         focused_scene.1
     );
-    assert_eq!(
-        focused_scene.1["proofFocusStatus"], "applied",
-        "{}",
-        focused_scene.1
-    );
-    assert_eq!(default_scene.1["features"].as_array().unwrap().len(), 5);
-    assert_eq!(focused_scene.1["features"].as_array().unwrap().len(), 6);
-    assert_eq!(
-        focused_scene.1["proofFocus"]["entityId"],
-        "place:fixture-school-6"
+    assert_eq!(focused_scene.1["matchedProof"], resolved.1);
+    assert!(
+        default_scene.1["features"].as_array().unwrap().len() >= 6,
+        "Domain context must not apply a presentation cap"
     );
     for feature in default_scene.1["features"].as_array().unwrap() {
         assert!(focused_scene.1["features"]
@@ -1047,7 +1267,7 @@ async fn proof_tokens_reject_tampering_stale_snapshots_wrong_properties_and_miss
     let invalid = post_proof(&app, json!({"proofToken": tampered}), 93).await;
     assert_eq!(invalid.0, StatusCode::BAD_REQUEST);
     assert_eq!(invalid.1["code"], "invalid_proof_token");
-    let invalid_surface = get_surface(&app, "fixture-home-3bhk", Some(&tampered), 193).await;
+    let invalid_surface = get_context(&app, "fixture-home-3bhk", Some(&tampered), 193).await;
     assert_eq!(invalid_surface.0, StatusCode::BAD_REQUEST);
     assert_eq!(invalid_surface.1["error"], "invalid_proof_token");
 
@@ -1059,11 +1279,9 @@ async fn proof_tokens_reject_tampering_stale_snapshots_wrong_properties_and_miss
     .await;
     assert_eq!(wrong_property.0, StatusCode::CONFLICT);
     assert_eq!(wrong_property.1["code"], "proof_property_mismatch");
-    let wrong_surface = get_surface(&app, "second-home-3bhk", Some(&token), 95).await;
-    assert_eq!(wrong_surface.0, StatusCode::OK);
-    assert_eq!(wrong_surface.1["proofFocus"], Value::Null);
-    assert_eq!(wrong_surface.1["proofFocusStatus"], "mismatch");
-    assert!(wrong_surface.1["proofFocusMessage"].is_string());
+    let wrong_surface = get_context(&app, "second-home-3bhk", Some(&token), 95).await;
+    assert_eq!(wrong_surface.0, StatusCode::BAD_REQUEST);
+    assert_eq!(wrong_surface.1["error"], "proof_property_mismatch");
 
     let fake_observation = SourceObservation::new(
         "Google",
@@ -1075,26 +1293,47 @@ async fn proof_tokens_reject_tampering_stale_snapshots_wrong_properties_and_miss
     )
     .unwrap();
     let fake_reference = EvidenceRef::for_observation("journey-fixture-v1", &fake_observation);
-    let missing_token = issue_proof_token(ProofIssueRequest {
-        snapshot_identity: "journey-fixture-v1",
-        semantic_fingerprint: "sha256:missing-proof",
-        property_id: "fixture-home-3bhk",
-        branch_id: "branch-1",
-        predicate_id: "predicate:missing",
-        subject_entity_id: "society:fixture-home",
-        target_entity_id: None,
-        fact_key: "nearby_schools",
-        relation: "supports",
-        evidence_refs: &[fake_reference],
-    })
-    .unwrap();
-    let missing = post_proof(&app, json!({"proofToken": missing_token.clone()}), 96).await;
+    let refused = issue_proof_token(
+        &state.search_runtime.load_full(),
+        ProofIssueRequest {
+            claim: None,
+            constraint: None,
+            snapshot_identity: "journey-fixture-v1",
+            semantic_fingerprint: "sha256:missing-proof",
+            property_id: "fixture-home-3bhk",
+            branch_id: "branch-1",
+            predicate_id: "predicate:missing",
+            subject_entity_id: "society:fixture-home",
+            target_entity_id: None,
+            fact_key: "nearby_schools",
+            relation: "supports",
+            evidence_refs: &[fake_reference],
+        },
+    );
+    assert!(refused.is_err(), "issuer must reject absent evidence");
+
+    // A damaged snapshot must return a distinct missing-evidence outcome for an
+    // already-issued receipt, rather than reclassifying it as stale or invalid.
+    let intact = state.search_runtime.load_full();
+    let damaged_root = tempfile::tempdir().unwrap();
+    let mut damaged_bundle =
+        test_bundle_with_options(damaged_root.path(), true, "journey-fixture-v1", false, true);
+    damaged_bundle.evidence_index = backend::serving::ServingEvidenceIndex::default();
+    state
+        .search_runtime
+        .store(Arc::new(SearchRuntimeSnapshot::new(
+            Arc::new(damaged_bundle),
+            test_properties(false),
+            Vec::new(),
+            SearchIndex::build(&test_properties(false)),
+        )));
+    let missing = post_proof(&app, json!({"proofToken": token}), 96).await;
     assert_eq!(missing.0, StatusCode::NOT_FOUND);
-    assert_eq!(missing.1["code"], "proof_evidence_missing");
-    let retired_surface = get_surface(&app, "fixture-home-3bhk", Some(&missing_token), 196).await;
-    assert_eq!(retired_surface.0, StatusCode::OK);
-    assert_eq!(retired_surface.1["proofFocus"], Value::Null);
-    assert_eq!(retired_surface.1["proofFocusStatus"], "retired");
+    assert_eq!(missing.1["resolutionStatus"], "missingEvidence");
+    let retired_surface = get_context(&app, "fixture-home-3bhk", Some(&token), 196).await;
+    assert_eq!(retired_surface.0, StatusCode::NOT_FOUND);
+    assert_eq!(retired_surface.1["error"], "proof_evidence_missing");
+    state.search_runtime.store(intact);
 
     let current = state.search_runtime.load_full();
     let mut remapped_properties = test_properties(false);
@@ -1106,7 +1345,6 @@ async fn proof_tokens_reject_tampering_stale_snapshots_wrong_properties_and_miss
             current.bundle.clone(),
             remapped_properties,
             Vec::new(),
-            Vec::new(),
             remapped_index,
         )));
     let wrong_subject = post_proof(&app, json!({"proofToken": token}), 97).await;
@@ -1117,22 +1355,9 @@ async fn proof_tokens_reject_tampering_stale_snapshots_wrong_properties_and_miss
     let stale = post_proof(&app, json!({"proofToken": token}), 98).await;
     assert_eq!(stale.0, StatusCode::CONFLICT);
     assert_eq!(stale.1["code"], "stale_proof_snapshot");
-    let stale_surface = get_surface(&app, "fixture-home-3bhk", Some(&token), 99).await;
-    assert_eq!(
-        stale_surface.0,
-        StatusCode::OK,
-        "response={}",
-        stale_surface.1
-    );
-    assert_eq!(stale_surface.1["proofFocus"], Value::Null);
-    assert_eq!(stale_surface.1["proofFocusStatus"], "stale");
-    assert_eq!(
-        stale_surface.1["proofFocusMessage"],
-        "This evidence changed since your search."
-    );
-    let stale_list = get_surface_list(&app, "fixture-home-3bhk", &token, 199).await;
-    assert_eq!(stale_list.0, StatusCode::OK);
-    assert_eq!(stale_list.1["scenes"][0]["proofFocusStatus"], "stale");
+    let stale_surface = get_context(&app, "fixture-home-3bhk", Some(&token), 99).await;
+    assert_eq!(stale_surface.0, StatusCode::CONFLICT);
+    assert_eq!(stale_surface.1["error"], "stale_proof_snapshot");
 }
 
 #[tokio::test]
@@ -1298,7 +1523,6 @@ fn install_runtime(
             bundle,
             properties,
             Vec::new(),
-            Vec::new(),
             search_index,
         )));
 }
@@ -1322,13 +1546,17 @@ fn install_runtime_without_second_home(state: &Arc<AppState>, bundle_version: &s
             bundle,
             properties,
             Vec::new(),
-            Vec::new(),
             search_index,
         )));
 }
 
 fn runtime_version(snapshot: &SearchRuntimeSnapshot) -> SearchRuntimeVersion {
     SearchRuntimeVersion {
+        snapshot_identity: snapshot
+            .bundle
+            .manifest
+            .proof_snapshot_identity()
+            .to_string(),
         serving_bundle_version: snapshot.version_key.serving_bundle_version.clone(),
         scoring_policy_version: snapshot.version_key.scoring_policy_version,
         search_engine_version: snapshot.version_key.search_engine_version.clone(),
@@ -1381,13 +1609,7 @@ async fn test_app_fixture_with_identity(
     let properties = test_properties(false);
     let search_index =
         SearchIndex::build_with_serving_graph(&properties, &bundle.entities, &bundle.edges);
-    let runtime = SearchRuntimeSnapshot::new(
-        bundle.clone(),
-        properties.clone(),
-        Vec::new(),
-        Vec::new(),
-        search_index.clone(),
-    );
+    let runtime = SearchRuntimeSnapshot::new(bundle, properties, Vec::new(), search_index);
     let (search_event_tx, search_event_rx) = mpsc::channel(8);
     let state = Arc::new(AppState {
         execution: ExecutionLanes::current(),
@@ -1402,18 +1624,11 @@ async fn test_app_fixture_with_identity(
         property_catalog_cache: tokio::sync::Mutex::new(None),
         search_event_tx,
         search_log_dropped_count: AtomicU64::new(0),
-        properties: RwLock::new(properties),
-        search_index: RwLock::new(search_index),
         recommendation_cache: RwLock::new(HashMap::new()),
-        areas: RwLock::new(Vec::new()),
-        societies: RwLock::new(Vec::new()),
-        discovery_config: backend::discovery::load_discovery_config(),
+
         map_overlays: Arc::new(backend::routes::map_overlays::CityMapOverlays::default()),
-        knowledge: Arc::new(RwLock::new(KnowledgeGraph::new())),
         project_root: root,
         process_started_at: Utc::now(),
-        interest_counter: AtomicU64::new(0),
-        interest_write_lock: tokio::sync::Mutex::new(()),
     });
     (
         build_app_router_with_lake(state.clone(), lake),
@@ -1467,8 +1682,11 @@ fn test_bundle_with_options(
     ];
     facts.push(topology_fact(
         "society:fixture-home",
-        "controlled_inventory_option",
-        FactValue::Text(json!({"bhk": 3, "price": 23_000_000, "area_sqft": 1_550}).to_string()),
+        "listing_3bhk",
+        FactValue::Text(
+            json!({"listing_type":"sale","bhk": 3, "price": 23_000_000, "area_sqft": 1_550})
+                .to_string(),
+        ),
     ));
     facts.extend([
         topology_fact(
@@ -1483,8 +1701,11 @@ fn test_bundle_with_options(
         ),
         topology_fact(
             "society:second-home",
-            "controlled_inventory_option",
-            FactValue::Text(json!({"bhk": 3, "price": 24_000_000, "area_sqft": 1_600}).to_string()),
+            "listing_3bhk",
+            FactValue::Text(
+                json!({"listing_type":"sale","bhk": 3, "price": 24_000_000, "area_sqft": 1_600})
+                    .to_string(),
+            ),
         ),
     ]);
     if include_fresh_home {
@@ -1505,9 +1726,9 @@ fn test_bundle_with_options(
             ),
             topology_fact(
                 "society:fresh-home",
-                "controlled_inventory_option",
+                "listing_3bhk",
                 FactValue::Text(
-                    json!({"bhk": 3, "price": 22_000_000, "area_sqft": 1_500}).to_string(),
+                    json!({"listing_type":"sale","bhk": 3, "price": 22_000_000, "area_sqft": 1_500}).to_string(),
                 ),
             ),
         ]);
@@ -1564,12 +1785,8 @@ fn test_bundle_with_options(
         }
     }
 
-    let fixture_inventory = fact(
-        &facts,
-        "society:fixture-home",
-        "controlled_inventory_option",
-    );
-    let second_inventory = fact(&facts, "society:second-home", "controlled_inventory_option");
+    let fixture_inventory = fact(&facts, "society:fixture-home", "listing_3bhk");
+    let second_inventory = fact(&facts, "society:second-home", "listing_3bhk");
     let mut edges = vec![
         topology_edge(
             bundle_version,
@@ -1592,7 +1809,7 @@ fn test_bundle_with_options(
             "property:fresh-home-3bhk",
             "in_society",
             "society:fresh-home",
-            fact(&facts, "society:fresh-home", "controlled_inventory_option"),
+            fact(&facts, "society:fresh-home", "listing_3bhk"),
         ));
     }
     if include_schools {
@@ -1654,10 +1871,17 @@ fn test_bundle_with_options(
                 "society:fresh-home",
                 "in_market_locality",
                 "area:hoodi",
-                fact(&facts, "society:fresh-home", "controlled_inventory_option"),
+                fact(&facts, "society:fresh-home", "listing_3bhk"),
             ));
         }
     }
+    backend::serving::context_binding::materialize_context_bindings(
+        &entities,
+        &facts,
+        &mut edges,
+        bundle_version,
+    )
+    .unwrap();
     let fact_index = ServingFactIndex::from_records(facts.clone(), Vec::new());
     let evidence_index =
         backend::serving::ServingEvidenceIndex::from_records(fact_index.all_facts(), &edges)
@@ -1791,8 +2015,11 @@ fn install_collection_inventory(state: &Arc<AppState>, topology: bool) {
             ]);
             let inventory = topology_fact(
                 &society,
-                "controlled_inventory_option",
-                FactValue::Text(json!({"bhk":bhk,"price":price,"area_sqft":1550}).to_string()),
+                "listing_3bhk",
+                FactValue::Text(
+                    json!({"listing_type":"sale","bhk":bhk,"price":price,"area_sqft":1550})
+                        .to_string(),
+                ),
             );
             bundle.edges.push(topology_edge(
                 &identity,
@@ -1877,7 +2104,6 @@ fn install_collection_inventory(state: &Arc<AppState>, topology: bool) {
             Arc::new(bundle),
             properties,
             Vec::new(),
-            Vec::new(),
             search_index,
         )));
 }
@@ -1887,7 +2113,18 @@ fn serving_entity(entity_id: &str, entity_type: &str, name: &str) -> ServingEnti
         entity_id: entity_id.to_string(),
         entity_type: entity_type.to_string(),
         name: name.to_string(),
-        root_source: Some("revision_api_contract".to_string()),
+        root_source: Some(
+            if entity_type == "area" {
+                if entity_id.contains(":cell:") {
+                    "openstreetmap"
+                } else {
+                    "market_locality"
+                }
+            } else {
+                "rera"
+            }
+            .to_string(),
+        ),
         visibility: Default::default(),
         searchable_text: name.to_string(),
     }
@@ -1903,10 +2140,12 @@ fn topology_fact(entity_id: &str, fact_key: &str, value: FactValue) -> ServingFa
     ) || fact_key.starts_with("nearby_")
     {
         "Google"
+    } else if fact_key.starts_with("listing_") {
+        "ExternalListing"
     } else {
         "OpenStreetMap"
     };
-    ServingFactRecord {
+    backend::serving::measurements::normalize_distance_fact(ServingFactRecord {
         entity_id: entity_id.to_string(),
         fact_key: fact_key.to_string(),
         value_type: match &value {
@@ -1939,7 +2178,7 @@ fn topology_fact(entity_id: &str, fact_key: &str, value: FactValue) -> ServingFa
             )
             .expect("revision topology observation"),
         ),
-    }
+    })
 }
 
 fn topology_edge(
@@ -2084,6 +2323,7 @@ fn test_property(id: &str, title: &str, society_id: &str, price: u64) -> Propert
         price_per_sqft: 12_000,
         carpet_area_sqft: 1_200,
         super_builtup_sqft: 1_550,
+        area_measurement: None,
         floor: 8,
         total_floors: 20,
         facing: "East".to_string(),
@@ -2109,7 +2349,7 @@ fn test_property(id: &str, title: &str, society_id: &str, price: u64) -> Propert
         images: Vec::new(),
         hero_image: String::new(),
         description_summary: "Revision API contract fixture".to_string(),
-        transparency_tags: Vec::new(),
+
         source_reference: "revision_api_contract".to_string(),
     }
 }
@@ -2345,7 +2585,7 @@ async fn post_proof(app: &Router, payload: Value, peer: u8) -> (StatusCode, Valu
     .await
 }
 
-async fn get_surface(
+async fn get_context(
     app: &Router,
     property_id: &str,
     proof_token: Option<&str>,
@@ -2357,25 +2597,7 @@ async fn get_surface(
     send(
         app,
         Method::GET,
-        &format!("/api/properties/{property_id}/surfaces/around_this_home{suffix}"),
-        Body::empty(),
-        peer,
-    )
-    .await
-}
-
-async fn get_surface_list(
-    app: &Router,
-    property_id: &str,
-    proof_token: &str,
-    peer: u8,
-) -> (StatusCode, Value) {
-    send(
-        app,
-        Method::GET,
-        &format!(
-            "/api/properties/{property_id}/surfaces?ids=around_this_home&proofToken={proof_token}"
-        ),
+        &format!("/api/properties/{property_id}/context{suffix}"),
         Body::empty(),
         peer,
     )

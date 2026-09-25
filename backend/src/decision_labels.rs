@@ -9,7 +9,7 @@ use crate::dag_config::{
 use crate::knowledge::FactValue;
 use crate::serving::{ServingFactIndex, SocietyFactProjection};
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DecisionLabel {
     pub key: String,
@@ -18,10 +18,13 @@ pub struct DecisionLabel {
     pub scope: String,
     pub visual_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "f64")]
     pub value: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub value_text: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub unit: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub surfaces: Vec<String>,
@@ -32,23 +35,28 @@ pub struct DecisionLabel {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notebook_labels: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub compare_group: Option<String>,
     pub group_id: String,
     pub placement: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DecisionCheckSummary {
     pub tile_label: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub tile_caption: Option<String>,
     pub tone: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub registration_number: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub registration_number_compact: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub registry_url: Option<String>,
     pub primary_count: usize,
     pub total_count: usize,
@@ -58,7 +66,7 @@ pub struct DecisionCheckSummary {
     pub groups: Vec<DecisionLabelGroup>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DecisionLabelGroup {
     pub id: String,

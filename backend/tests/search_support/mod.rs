@@ -28,6 +28,7 @@ pub fn inventory_options(properties: &[Property]) -> HashMap<String, InventoryOp
             (
                 property.id.clone(),
                 InventoryOption {
+                    confidence: 1.0,
                     property_id: property.id.clone(),
                     society_id,
                     bhk: Some(property.bhk),
@@ -35,6 +36,7 @@ pub fn inventory_options(properties: &[Property]) -> HashMap<String, InventoryOp
                     price_max: property.price_max.or(exact_price),
                     size_sqft: (property.super_builtup_sqft > 0)
                         .then_some(property.super_builtup_sqft),
+                    area_measurement: None,
                     evidence_reference: Some(EvidenceRef::for_observation(
                         SNAPSHOT_IDENTITY,
                         &observation,
@@ -52,6 +54,7 @@ pub fn inventory_context(
     static SPATIAL_MATCHES: std::sync::OnceLock<HashMap<String, Vec<VerifiedMatch>>> =
         std::sync::OnceLock::new();
     SearchEvaluationContext {
+        identities: None,
         options,
         spatial_matches: SPATIAL_MATCHES.get_or_init(HashMap::new),
         snapshot_identity: SNAPSHOT_IDENTITY,
@@ -75,6 +78,8 @@ pub fn inventory_facts(properties: &[Property]) -> Vec<ServingFactRecord> {
             )
             .unwrap();
             let value = serde_json::json!({
+                "property_id": property.id,
+                "listing_type": "sale",
                 "bhk": property.bhk,
                 "price": property.price,
                 "area_sqft": property.super_builtup_sqft,
@@ -82,12 +87,12 @@ pub fn inventory_facts(properties: &[Property]) -> Vec<ServingFactRecord> {
             .to_string();
             ServingFactRecord {
                 entity_id,
-                fact_key: "controlled_inventory_option".to_string(),
+                fact_key: format!("listing_{}bhk", property.bhk),
                 value_type: "text".to_string(),
                 value_text: Some(value.clone()),
                 value: FactValue::Text(value),
                 confidence: 1.0,
-                source_type: "ControlledInventoryReceipt".to_string(),
+                source_type: "ExternalListing".to_string(),
                 source_url: observation.source_url.clone(),
                 model: None,
                 skill_id: Some("search_contract_fixture".to_string()),

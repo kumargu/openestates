@@ -12,11 +12,10 @@ use sha2::{Digest, Sha256};
 use tokio::sync::mpsc;
 use tokio::sync::RwLock;
 
-use crate::discovery::{BrowsePropertyCard, DiscoveryConfig};
-use crate::knowledge::KnowledgeGraph;
+use crate::discovery::BrowsePropertyCard;
 use crate::knowledge::SearchEvent;
 use crate::lake::{LakeKey, LakeStore};
-use crate::models::{AreaProfile, Property, Society};
+use crate::models::{Property, Society};
 use crate::recommendations::RecommendationResponse;
 use crate::routes::enrichment::society_node_id;
 use crate::scoring::scoring_policy;
@@ -29,27 +28,64 @@ pub const SEARCH_ENGINE_VERSION: &str = "openestates-search-runtime-v3";
 
 pub struct SearchRuntimeSnapshot {
     pub bundle: Arc<LoadedServingBundle>,
+    pub context_lookup: crate::property_context::ContextLookup,
     pub properties: Arc<[Property]>,
     pub property_by_id: HashMap<String, usize>,
     pub browse_cards: HashMap<String, BrowsePropertyCard>,
     pub discovery_shelves: Vec<crate::discovery::RankedDiscoveryShelf>,
     pub entity_by_id: HashMap<String, usize>,
+    pub identity_evaluation: crate::search::identity::IdentityEvaluationIndex,
     pub inventory_options: HashMap<String, InventoryOption>,
     pub search_index: SearchIndex,
     pub societies: Arc<[Society]>,
     pub society_names: HashMap<String, String>,
-    pub areas: Arc<[AreaProfile]>,
     pub geo_cell_max_hops: u8,
     pub geo_cell_max_distance_km: f64,
     pub version_key: RuntimeVersionKey,
 }
 
 impl SearchRuntimeSnapshot {
+    pub fn entity_refs_for_property(&self, property: &Property) -> crate::models::KgEntityRefs {
+        let property_entity_id = format!("property:{}", property.id);
+        let society_entity_id = self
+            .search_index
+            .society_entity_id_for_property(&property.id)
+            .unwrap_or(&property.society_id)
+            .to_string();
+        let area_entity_id = self
+            .search_index
+            .area_entity_id_for_property(&property.id)
+            .unwrap_or(&property.area_id)
+            .to_string();
+        let builder_entity_id = self
+            .search_index
+            .builder_entity_id_for_property(&property.id)
+            .map(str::to_string);
+        let mut source_entity_ids = [
+            Some(property_entity_id.clone()),
+            Some(society_entity_id.clone()),
+            Some(area_entity_id.clone()),
+            builder_entity_id.clone(),
+        ]
+        .into_iter()
+        .flatten()
+        .filter(|id| self.entity_by_id.contains_key(id))
+        .collect::<Vec<_>>();
+        source_entity_ids.sort();
+        source_entity_ids.dedup();
+        crate::models::KgEntityRefs {
+            property_entity_id,
+            society_entity_id,
+            area_entity_id,
+            builder_entity_id,
+            source_entity_ids,
+        }
+    }
+
     pub fn new(
         bundle: Arc<LoadedServingBundle>,
         properties: Vec<Property>,
         societies: Vec<Society>,
-        areas: Vec<AreaProfile>,
         search_index: SearchIndex,
     ) -> Self {
         let discovery_config = crate::discovery::load_discovery_config();
@@ -124,6 +160,10 @@ impl SearchRuntimeSnapshot {
             })
             .collect();
         Self {
+            identity_evaluation: crate::search::identity::IdentityEvaluationIndex::from_bundle(
+                &bundle,
+            ),
+            context_lookup: crate::property_context::ContextLookup::from_bundle(&bundle),
             bundle,
             properties: Arc::from(properties),
             property_by_id,
@@ -134,7 +174,6 @@ impl SearchRuntimeSnapshot {
             search_index,
             societies: Arc::from(societies),
             society_names,
-            areas: Arc::from(areas),
             geo_cell_max_hops: geo_cell_policy.geo_cell_max_hops,
             geo_cell_max_distance_km: geo_cell_policy.geo_cell_max_distance_km,
             version_key,
@@ -743,8 +782,8 @@ pub struct AppState {
     /// Explicit execution lanes keep customer request coordination isolated
     /// from CPU-heavy ranking and internal/background work.
     pub execution: ExecutionLanes,
-    /// Immutable search-serving snapshot. /api/search loads one Arc from here at
-    /// request start and never observes mixed bundle/index/property state.
+    /// Immutable serving snapshot shared by search, property reads and sitemap.
+    /// Each request loads one Arc and observes one bundle/index/property state.
     pub search_runtime: ArcSwap<SearchRuntimeSnapshot>,
     /// Bounded optimization cache for non-debug search responses.
     pub search_cache: SearchResponseCache,
@@ -757,29 +796,14 @@ pub struct AppState {
     pub search_event_tx: mpsc::Sender<SearchLogMessage>,
     /// Best-effort count of search log side effects dropped because the bounded queue was full.
     pub search_log_dropped_count: AtomicU64,
-    /// In-memory hot data loaded at startup. Routes can read directly from here
-    /// for fast access without going through storage/cache on every request.
-    pub properties: RwLock<Vec<Property>>,
-    /// Local recall index rebuilt from app-owned property data.
-    pub search_index: RwLock<SearchIndex>,
     /// In-process cache keyed by property + bundle + scoring policy + engine version.
     pub recommendation_cache: RwLock<std::collections::HashMap<String, RecommendationResponse>>,
-    pub areas: RwLock<Vec<AreaProfile>>,
-    pub societies: RwLock<Vec<Society>>,
-    /// Product-facing discovery copy and shelf metadata from app/config/product/discovery_home.json.
-    pub discovery_config: DiscoveryConfig,
     /// Offline city map overlays (metro / parks / lakes) clipped per property detail.
     pub map_overlays: Arc<crate::routes::map_overlays::CityMapOverlays>,
-    /// The knowledge graph — the brain that learns from every search.
-    pub knowledge: Arc<RwLock<KnowledgeGraph>>,
     /// Project root path (for persistence operations).
     pub project_root: PathBuf,
     /// Runtime start timestamp, exposed for stale-backend detection in development.
     pub process_started_at: DateTime<Utc>,
-    /// Monotonic counter for generating collision-free interest IDs.
-    pub interest_counter: AtomicU64,
-    /// Serializes bounded interest-file accounting and appends.
-    pub interest_write_lock: tokio::sync::Mutex<()>,
 }
 
 impl AppState {
@@ -814,7 +838,7 @@ mod tests {
                 result_sets: Vec::new(),
                 ordered_result_ids: Vec::new(),
                 total_matches: 0,
-                area_context: None,
+
                 state: "no_matches".to_string(),
                 search_guidance: None,
             }),
@@ -847,6 +871,7 @@ mod tests {
             },
         );
         let runtime_version = crate::search::SearchRuntimeVersion {
+            snapshot_identity: "test-bundle".to_string(),
             serving_bundle_version: "test-bundle".to_string(),
             scoring_policy_version: 1,
             search_engine_version: SEARCH_ENGINE_VERSION.to_string(),
@@ -1017,7 +1042,6 @@ mod tests {
         let written: SearchEvent = lake.get_json(&keys[0]).await.expect("event round trips");
         assert_eq!(written.query, event.query);
         assert_eq!(written.results_returned, event.results_returned);
-        assert_eq!(KnowledgeGraph::new().stats().search_events, 0);
     }
 
     #[tokio::test]

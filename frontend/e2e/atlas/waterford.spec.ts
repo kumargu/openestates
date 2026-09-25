@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-// Archived API facts; no screenshots, traces, video, or renderer mock.
+// Archived renderer fixture. Source admission and receipt completeness use the materialized API journey.
 test("captured facts, reviews and photos remain accessible without Google", async ({ page }, testInfo) => {
   await page.route("https://maps.googleapis.com/**", route => route.abort());
   await page.goto("/property/discovered-prestige-waterford-3bhk");
@@ -8,7 +8,8 @@ test("captured facts, reviews and photos remain accessible without Google", asyn
   await expect(canvas.getByRole("button", { name: "Retry map" })).toBeVisible();
   const facts = page.getByRole("region", { name: "Property information", exact: true });
   await expect(facts.getByRole("heading", { name: "Market trail", exact: true })).toBeVisible();
-  await expect(facts.locator("dd").first()).not.toBeEmpty();
+  await expect(facts.getByRole("link", { name: "Official record", exact: true }))
+    .toHaveAttribute("href", "/property/discovered-prestige-waterford-3bhk/rera");
   await expect(facts.locator("summary")).toHaveCount(0);
   await facts.screenshot({ path: testInfo.outputPath("market-trail.png") });
   const recordLinks = await facts.getByRole("navigation", { name: "Property reports" })
@@ -40,12 +41,13 @@ test("captured facts, reviews and photos remain accessible without Google", asyn
 
 test("missing mapped road is explicit and never creates a synthetic tour", async ({ page }) => {
   // Remove geometry from the existing contract fixture, without inventing a second society.
-  await page.route("**/api/properties/*/surfaces/arrival_story", async route => {
+  await page.route("**/api/properties/*/context", async route => {
     const response = await route.fetch();
     const scene = await response.json();
-    delete scene.anchor.boundary;
-    scene.features = scene.features.filter((feature: { layerId: string }) =>
-      feature.layerId !== "entrance" && feature.layerId !== "approach_road");
+    scene.anchor.geometry = null;
+    scene.anchor.geometrySource = null;
+    scene.features = scene.features.filter((feature: { fact: { factKey: string } }) =>
+      feature.fact.factKey !== "society.entrance_entity" && feature.fact.factKey !== "approach_road");
     await route.fulfill({ response, json: scene });
   });
   await page.route("https://maps.googleapis.com/**", route => route.abort());

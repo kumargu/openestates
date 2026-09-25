@@ -1,26 +1,22 @@
+import { projectPropertyContext } from "./property-context.ts";
+import { propertyMapContextFromSurfaceScene } from "./surfaceSceneProjection.ts";
+import type { PropertyContext } from "../generated/PropertyContext.ts";
+import type { ContextBatchResponse } from "../generated/PropertyContextBatch.ts";
+import journeyPolicy from "../../../app/config/ui/search-journey.json" with { type: "json" };
+import { validateWire } from "./wire.ts";
 import type {
   PropertyCard,
   PropertyDetailResponse,
   PropertyEvidenceResponse,
   ReraEvidenceReportResponse,
   ProofFocus,
-  PropertySurfacesResponse,
   RecommendationResponse,
-  AreaListItem,
-  AreaDetail,
-  AreaTrackerResponse,
   DiscoveryResponse,
   SearchResponse,
   SearchJourneyEnvelope,
   SearchRevisionTarget,
   SearchProofResolution,
-  SurfaceBatchResponse,
-  SurfaceSceneResponse,
 } from "./types.ts";
-import {
-  filterListableProperties,
-  isListableProperty,
-} from "./property-filters.ts";
 import { API_ORIGIN } from "./runtimeConfig.ts";
 import { projectSearchJourney } from "./search-journey.ts";
 
@@ -31,7 +27,7 @@ const ENABLE_DEV_FIXTURES = META_ENV.DEV === true
   && META_ENV.VITE_USE_FIXTURE_API === "true";
 const inFlightSearches = new Map<string, Promise<SearchResponse>>();
 const inFlightResumes = new Map<string, Promise<SearchJourneyEnvelope>>();
-const inFlightSurfaceBatches = new Map<string, Promise<SurfaceBatchResponse>>();
+const inFlightContextBatches = new Map<string, Promise<ContextBatchResponse>>();
 const PROPERTY_CATALOG_CACHE_MS = 60_000;
 const DISCOVERY_CACHE_MS = 60_000;
 let cachedPropertyCatalog: { loadedAt: number; value: PropertyCard[] } | null = null;
@@ -39,6 +35,7 @@ let inFlightPropertyCatalog: Promise<PropertyCard[]> | null = null;
 let cachedDiscovery: { loadedAt: number; value: DiscoveryResponse } | null = null;
 let inFlightDiscovery: Promise<DiscoveryResponse> | null = null;
 let propertyCatalogRequestGeneration = 0;
+let discoveryRequestGeneration = 0;
 const DEFAULT_API_TIMEOUT_MS = 4_000;
 const GET_ATTEMPT_COUNT = 2;
 const GET_RETRY_DELAY_MS = 200;
@@ -46,6 +43,7 @@ const GET_RETRY_DELAY_MS = 200;
 type ApiFetchOptions = {
   signal?: AbortSignal;
   timeoutMs?: number;
+  snapshotIdentity?: string;
 };
 
 type PropertyCatalogFetchOptions = ApiFetchOptions & {
@@ -98,6 +96,19 @@ function withCallerAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<
   });
 }
 
+function decodeWire<T>(path: string, value: unknown): T {
+  const route = path.split("?")[0];
+  if (["/api/search", "/api/search/revisions", "/api/search/resume"].includes(route)) return validateWire<T>("journey", value);
+  if (route === "/api/search/proofs/resolve") return validateWire<T>("proof", value);
+  if (route === "/api/properties") return validateWire<T>("catalog", value);
+  if (/^\/api\/properties\/[^/]+\/evidence$/.test(route)) return validateWire<T>("evidence", value);
+  if (route === "/api/properties/context/batch") return validateWire<T>("contextBatch", value);
+  if (route === "/api/properties/batch") return validateWire<T>("summaries", value);
+  if (/^\/api\/properties\/[^/]+$/.test(route)) return validateWire<T>("detail", value);
+  if (/^\/api\/properties\/[^/]+\/context$/.test(route)) return validateWire<T>("context", value);
+  return value as T;
+}
+
 async function fetchJson<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
   const localFixture = await getDevFixture<T>(path);
   if (options.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
@@ -107,15 +118,14 @@ async function fetchJson<T>(path: string, options: ApiFetchOptions = {}): Promis
       const res = await fetch(`${API_ORIGIN}${path}`, {
         signal: requestSignal(options),
       });
-      if (res.ok) return res.json();
+      if (res.ok) return decodeWire<T>(path, await res.json());
 
       const fixture = await getDevFixture<T>(path);
       if (fixture !== null) return fixture;
 
-      const text = await res.text().catch(() => "");
-      throw new Error(
-        `API ${res.status}: ${text || res.statusText}`
-      );
+      const payload = await res.json().catch(() => ({}));
+      if (res.status === 409) invalidateSnapshotCaches();
+      throw new ApiError(res.status, payload);
     } catch (error) {
       if (isAbortError(error) || options.signal?.aborted) throw error;
       const fixture = await getDevFixture<T>(path);
@@ -126,6 +136,27 @@ async function fetchJson<T>(path: string, options: ApiFetchOptions = {}): Promis
     }
   }
   throw new Error("API request failed");
+}
+
+function invalidateSnapshotCaches() {
+  cachedPropertyCatalog = null;
+  cachedDiscovery = null;
+  propertyCatalogRequestGeneration += 1;
+  discoveryRequestGeneration += 1;
+  inFlightDiscovery = null;
+  inFlightSearches.clear();
+  inFlightResumes.clear();
+  inFlightContextBatches.clear();
+}
+
+export class ApiError extends Error {
+  status: number;
+  code?: string;
+  constructor(status: number, payload: { code?: string; error?: string }) {
+    super(`API ${status}: ${payload.code ?? payload.error ?? "request_failed"}`);
+    this.status = status;
+    this.code = payload.code ?? payload.error;
+  }
 }
 
 async function postJson<T>(path: string, body: unknown, options: ApiFetchOptions = {}): Promise<T> {
@@ -145,10 +176,14 @@ async function postJson<T>(path: string, body: unknown, options: ApiFetchOptions
     const fixture = await getDevFixture<T>(path);
     if (fixture !== null) return fixture;
 
-    const text = await res.text().catch(() => "");
-    throw new Error(`API ${res.status}: ${text || res.statusText}`);
+    const payload = await res.json().catch(() => ({}));
+    if (res.status === 409) invalidateSnapshotCaches();
+    if (path === "/api/search/proofs/resolve" && "resolutionStatus" in payload) {
+      validateWire("proofFailure", payload);
+    }
+    throw new ApiError(res.status, payload);
   }
-  return res.json();
+  return decodeWire<T>(path, await res.json());
 }
 
 export function getHealth(): Promise<{
@@ -167,7 +202,6 @@ function requestPropertyCatalog(
   generation: number,
 ): Promise<PropertyCard[]> {
   return fetchJson<PropertyCard[]>("/api/properties", options)
-    .then(filterListableProperties)
     .then((value) => {
       if (generation === propertyCatalogRequestGeneration) {
         cachedPropertyCatalog = { loadedAt: Date.now(), value };
@@ -204,30 +238,47 @@ export function getProperties(options: PropertyCatalogFetchOptions = {}): Promis
   return withCallerAbort(request, options.signal);
 }
 
-export function getProperty(id: string, options?: ApiFetchOptions): Promise<PropertyDetailResponse> {
-  return fetchJson(`/api/properties/${encodeURIComponent(id)}`, options);
+export async function getPropertyCardsByIds(ids: readonly string[], options?: ApiFetchOptions): Promise<PropertyCard[]> {
+  const propertyIds = [...new Set(ids)].filter(Boolean);
+  if (propertyIds.length === 0) return [];
+  const items: PropertyCard[] = [];
+  let snapshotIdentity = options?.snapshotIdentity;
+  for (let start = 0; start < propertyIds.length; start += journeyPolicy.summaryBatchLimit) {
+    const response = await postJson<{ snapshotIdentity: string; items: PropertyCard[] }>(
+      "/api/properties/batch", { propertyIds: propertyIds.slice(start, start + journeyPolicy.summaryBatchLimit), snapshotIdentity }, options,
+    );
+    snapshotIdentity = response.snapshotIdentity;
+    items.push(...response.items);
+  }
+  return items;
 }
 
-export function getPropertyRecommendations(id: string): Promise<RecommendationResponse> {
-  return fetchJson(`/api/properties/${encodeURIComponent(id)}/recommendations`);
+export async function getProperty(id: string, options?: ApiFetchOptions): Promise<PropertyDetailResponse> {
+  const detail = await fetchJson<import("../generated/PropertyDetail.ts").PropertyDetail>(`/api/properties/${encodeURIComponent(id)}${options?.snapshotIdentity ? `?snapshotIdentity=${encodeURIComponent(options.snapshotIdentity)}` : ""}`, options);
+  return { ...detail, map_context: propertyMapContextFromSurfaceScene(projectPropertyContext(detail.context, "around_this_home")) };
 }
 
-export function getPropertyEvidence(id: string): Promise<PropertyEvidenceResponse> {
-  return fetchJson(`/api/properties/${encodeURIComponent(id)}/evidence`);
+export function getPropertyRecommendations(id: string, options?: ApiFetchOptions): Promise<RecommendationResponse> {
+  return fetchJson(`/api/properties/${encodeURIComponent(id)}/recommendations${options?.snapshotIdentity ? `?snapshotIdentity=${encodeURIComponent(options.snapshotIdentity)}` : ""}`, options);
 }
 
-export function getPropertyRera(id: string): Promise<ReraEvidenceReportResponse> {
-  return fetchJson(`/api/properties/${encodeURIComponent(id)}/rera`);
+export function getPropertyEvidence(id: string, options?: ApiFetchOptions): Promise<PropertyEvidenceResponse> {
+  return fetchJson(`/api/properties/${encodeURIComponent(id)}/evidence${options?.snapshotIdentity ? `?snapshotIdentity=${encodeURIComponent(options.snapshotIdentity)}` : ""}`, options);
 }
 
-export function getPropertySurface(
-  id: string,
-  surfaceId: string,
-  focus?: ProofFocus,
-): Promise<SurfaceSceneResponse> {
-  return fetchJson(propertySurfacePath(id, surfaceId, focus));
+export function getPropertyRera(id: string, options?: ApiFetchOptions): Promise<ReraEvidenceReportResponse> {
+  return fetchJson(`/api/properties/${encodeURIComponent(id)}/rera${options?.snapshotIdentity ? `?snapshotIdentity=${encodeURIComponent(options.snapshotIdentity)}` : ""}`, options);
 }
 
+export function getPropertyContext(id: string, proofToken?: string, options?: ApiFetchOptions): Promise<PropertyContext> {
+  return fetchJson(propertyContextPath(id, proofToken, options?.snapshotIdentity), options);
+}
+export function propertyContextPath(id: string, proofToken?: string, snapshotIdentity?: string): string {
+  const params = new URLSearchParams();
+  if (proofToken) params.set("proofToken", proofToken);
+  if (snapshotIdentity) params.set("snapshotIdentity", snapshotIdentity);
+  return `/api/properties/${encodeURIComponent(id)}/context${params.size ? `?${params}` : ""}`;
+}
 export function propertyDetailPath(
   id: string,
   focus?: ProofFocus,
@@ -242,49 +293,17 @@ export function propertyDetailPath(
   return `/property/${encodeURIComponent(id)}${suffix}`;
 }
 
-export function propertySurfacePath(id: string, surfaceId: string, focus?: ProofFocus): string {
-  const params = focus?.proofToken ? `?proofToken=${encodeURIComponent(focus.proofToken)}` : "";
-  return `/api/properties/${encodeURIComponent(id)}/surfaces/${encodeURIComponent(surfaceId)}${params}`;
-}
-
-export function getPropertySurfaces(
-  id: string,
-  surfaceIds: string[] = ["around_this_home"],
-): Promise<PropertySurfacesResponse> {
-  const ids = surfaceIds.join(",");
-  return fetchJson(
-    `/api/properties/${encodeURIComponent(id)}/surfaces?ids=${encodeURIComponent(ids)}`,
-  );
-}
-
-export function getPropertySurfacesBatch(
-  propertyIds: string[],
-  surfaceIds: string[] = ["around_this_home"],
-  options?: ApiFetchOptions,
-): Promise<SurfaceBatchResponse> {
-  const key = JSON.stringify([propertyIds, surfaceIds]);
-  const existing = inFlightSurfaceBatches.get(key);
+export function getPropertyContextsBatch(propertyIds: string[], options?: ApiFetchOptions): Promise<ContextBatchResponse> {
+  const key = JSON.stringify([propertyIds, options?.snapshotIdentity]);
+  const existing = inFlightContextBatches.get(key);
   if (existing) return withCallerAbort(existing, options?.signal);
-  const request = postJson<SurfaceBatchResponse>("/api/properties/surfaces/batch", {
-    propertyIds,
-    surfaceIds,
+  const request = postJson<ContextBatchResponse>("/api/properties/context/batch", {
+    propertyIds, snapshotIdentity: options?.snapshotIdentity,
   }, { timeoutMs: options?.timeoutMs }).finally(() => {
-    if (inFlightSurfaceBatches.get(key) === request) inFlightSurfaceBatches.delete(key);
+    if (inFlightContextBatches.get(key) === request) inFlightContextBatches.delete(key);
   });
-  inFlightSurfaceBatches.set(key, request);
+  inFlightContextBatches.set(key, request);
   return withCallerAbort(request, options?.signal);
-}
-
-export function getAreas(options?: ApiFetchOptions): Promise<AreaListItem[]> {
-  return fetchJson("/api/areas", options);
-}
-
-export function getArea(id: string): Promise<AreaDetail> {
-  return fetchJson(`/api/areas/${encodeURIComponent(id)}`);
-}
-
-export function getAreaTracker(options?: ApiFetchOptions): Promise<AreaTrackerResponse> {
-  return fetchJson("/api/areas/tracker", options);
 }
 
 export function searchProperties(
@@ -354,16 +373,13 @@ export function getDiscovery(options?: ApiFetchOptions): Promise<DiscoveryRespon
   if (cachedDiscovery && now - cachedDiscovery.loadedAt < DISCOVERY_CACHE_MS) {
     return withCallerAbort(Promise.resolve(cachedDiscovery.value), options?.signal);
   }
+  const generation = discoveryRequestGeneration;
   const request = inFlightDiscovery ?? fetchJson<DiscoveryResponse>("/api/discovery", {
     timeoutMs: options?.timeoutMs,
-  }).then((response) => ({
-    ...response,
-    shelves: response.shelves.map((shelf) => ({
-      ...shelf,
-      cards: shelf.cards.filter((card) => isListableProperty(card.property)),
-    })),
-  })).then((value) => {
-    cachedDiscovery = { loadedAt: Date.now(), value };
+  }).then((value) => {
+    if (generation === discoveryRequestGeneration) {
+      cachedDiscovery = { loadedAt: Date.now(), value };
+    }
     return value;
   });
   if (!inFlightDiscovery) {
@@ -374,24 +390,4 @@ export function getDiscovery(options?: ApiFetchOptions): Promise<DiscoveryRespon
     void request.then(clearRequest, clearRequest);
   }
   return withCallerAbort(request, options?.signal);
-}
-
-export type PlatformStats = {
-  properties: number;
-  societies: number;
-  areas: number;
-};
-
-export async function getStats(options?: ApiFetchOptions): Promise<PlatformStats> {
-  const [props, areas] = await Promise.all([
-    getProperties(options),
-    getAreas(options),
-  ]);
-  const societyCount = new Set(props.map((p) => p.society_name).filter(Boolean)).size;
-
-  return {
-    properties: props.length,
-    societies: societyCount,
-    areas: areas.length,
-  };
 }

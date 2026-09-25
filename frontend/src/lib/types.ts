@@ -1,71 +1,4 @@
-export type PropertyCard = {
-  id: string;
-  /**
-   * Stable serving-bundle handles for this card.
-   *
-   * Treat these as the bridge from a compact search/listing response into the
-   * richer property evidence responses. A result card should render its normal
-   * fast fields first, then use these IDs when the UI needs drill-down evidence,
-   * expandable cards, compare rows, or detail-page context.
-   *
-   * Typical UI flow:
-   * 1. Render the card from local fields such as price, BHK, area, match_reason.
-   * 2. On expand, hover, compare, or detail prefetch, fetch the property detail
-   *    or evidence endpoints for this card.
-   * 3. Build optional UI sections only from returned facts/source panels.
-   * 4. Hide sections with no confident facts instead of showing empty static
-   *    placeholders.
-   */
-  kg_entity_refs: KgEntityRefs;
-  title: string;
-  area: string;
-  price: number;
-  price_min?: number;
-  price_max?: number;
-  price_per_sqft: number;
-  bhk: number;
-  sqft: number;
-  carpet_area_sqft?: number;
-  super_builtup_sqft?: number;
-  society_name: string;
-  builder_name: string;
-  images?: string[];
-  hero_image: string | null;
-  transparency_tags: string[];
-  description_summary: string;
-  possession_status: string;
-  metro_distance_mins: number;
-  floor: number;
-  total_floors: number;
-  facing: string;
-  google_rating?: number;
-  google_review_count?: number;
-  google_reviews_url?: string;
-  /** RERA-backed project land extent; compare UI hides this dimension when absent. */
-  society_land_acres?: number;
-  /** Source-backed open or green-space share; compare UI hides this dimension when absent. */
-  open_space_pct?: number;
-  /** Delivery-record category supplied by a future DAG-backed buyer-surface view. */
-  builder_category?: "A" | "B" | "C";
-  root_source?: string;
-  project_status?: string;
-  /** Representative floor-plan preview for this listing BHK. */
-  floor_plan_preview_url?: string;
-  /** Plan carpet area for the matched configuration. */
-  plan_carpet_area_sqft?: number;
-  /** Plan sale area for usable-space compare. */
-  plan_sale_area_sqft?: number;
-  /** Matched configuration label, e.g. 3BHK. */
-  plan_configuration_type?: string;
-  project_status_display?: string;
-  home_state_display?: string;
-  builder_delivery_display?: string;
-  data_freshness?: DataFreshness;
-  /** Config-derived decision labels for compare, notes, and compact review surfaces. */
-  decision_labels?: DecisionLabel[];
-  /** Grouped compact checks for property details, notes, and compare. */
-  decision_check_summary?: DecisionCheckSummary;
-};
+export type PropertyCard = import("../generated/PropertySummaries.ts").PropertyCard;
 
 export type DecisionLabel = {
   key: string;
@@ -107,23 +40,7 @@ export type DecisionCheckSummary = {
 
 export type DiscoveryShelfCard = { property: BrowsePropertyCard };
 
-export type BrowsePropertyCard = {
-  id: string;
-  society_id: string;
-  title: string;
-  society_name: string;
-  area: string;
-  image: string;
-  bhk: number;
-  price: number;
-  price_min?: number;
-  price_max?: number;
-  sqft: number;
-  google_rating?: number;
-  google_review_count?: number;
-  detail_href: string;
-  save_id: string;
-};
+export type BrowsePropertyCard = import("../generated/SearchJourneyEnvelope.ts").BrowsePropertyCard;
 
 export type DiscoveryShelf = {
   id: string;
@@ -195,132 +112,7 @@ export type RecommendationResponse = {
   items: RecommendationBranch[];
 };
 
-export type PropertyDetailResponse = {
-  property: {
-    id: string;
-    title: string;
-    area: string;
-    area_id: string;
-    city: string;
-    society_id: string;
-    builder_name: string;
-    property_type: string;
-    listing_type: string;
-    bhk: number;
-    price: number;
-    price_min?: number;
-    price_max?: number;
-    price_per_sqft: number;
-    carpet_area_sqft: number;
-    super_builtup_sqft: number;
-    floor: number;
-    total_floors: number;
-    facing: string;
-    possession_status: string;
-    metro_distance_mins: number;
-    maintenance_cost_monthly: number;
-    society_quality_score: number | null;
-    builder_quality_score: number | null;
-    document_completeness_score: number | null;
-    litigation_risk: number | null;
-    noise_score: number | null;
-    sunlight_score: number | null;
-    airport_noise_score: number | null;
-    waterlogging_risk_score: number | null;
-    traffic_score: number | null;
-    days_on_market: number;
-    greenery_score?: number;
-    open_space_score?: number;
-    resale_strength_score?: number;
-    interest_level?: "high" | "moderate" | "low";
-    saves_last_7d?: number;
-    offers_last_7d?: number;
-    images: string[];
-    hero_image: string;
-    description_summary: string;
-    transparency_tags: string[];
-    source_reference: string;
-  };
-  /**
-   * The same graph handle set as `property.kg_entity_refs` on result cards.
-   *
-   * Detail pages should prefer this top-level field because the nested
-   * `property` object is the flat listing record, while `entity_refs` is the
-   * explicit graph contract. Use it to fetch nodes, neighbors, and subgraphs
-   * without guessing IDs from display names.
-   */
-  entity_refs: KgEntityRefs;
-  society: {
-    id: string;
-    name: string;
-    area: string;
-    city: string;
-    builder_name: string;
-    year_built: number;
-    total_units: number;
-    summary: string;
-    maintenance_sentiment: string;
-    livability_sentiment: string;
-    common_positives: string[];
-    common_complaints: string[];
-    review_summary: string;
-    google_reviews_url?: string;
-  } | null;
-  area: {
-    id: string;
-    name: string;
-    city: string;
-    median_price_per_sqft: number;
-    trend_direction: string;
-    trend_summary: string;
-    metro_access_summary: string;
-    traffic_summary: string;
-    waterlogging_summary: string;
-    livability_summary: string;
-    externality_tags: string[];
-    infrastructure_tags: string[];
-    community_notes: string;
-  } | null;
-  similar_properties: PropertyCard[];
-  recommendation_branches?: RecommendationBranch[];
-  recommendations?: RecommendationEnvelope;
-  rera?: ReraInfo;
-  rera_report_ref: ReraReportRef;
-  area_intelligence?: AreaIntelligence;
-  transparency_score?: TransparencyScore;
-  area_price_range_low?: number;
-  area_price_range_high?: number;
-  interest_count?: number;
-  root_source?: string;
-  project_status_display?: string;
-  project_status?: string;
-  home_state_display?: string;
-  builder_trust?: {
-    delivery_rate?: number;
-    project_count?: number;
-    delivery_display?: string;
-  };
-  builder_portfolio?: BuilderPortfolio;
-  data_freshness?: DataFreshness;
-  confidence_score?: ConfidenceScore;
-  evidence?: PropertyEvidenceResponse;
-  external_reviews?: {
-    google_rating?: number;
-    google_review_count?: number;
-    google_reviews_url?: string;
-    reviews?: ExternalReviewCard[];
-  };
-  detail_signals?: DetailSignal[];
-  /** Config-derived labels intended for notes and compare surfaces. */
-  decision_labels?: DecisionLabel[];
-  /** Grouped compact checks for property-detail decision labels. */
-  decision_check_summary?: DecisionCheckSummary;
-  livability_brief?: LivabilityBrief;
-  /** Schematic neighborhood plate projected from nearby + water facts. */
-  map_context?: PropertyMapContext;
-  /** Site overview + floor plans promoted from RERA brochure pages. */
-  plans?: ProjectPlansView;
-};
+export type PropertyDetailResponse = import("../generated/PropertyDetail.ts").PropertyDetail & { map_context?: PropertyMapContext | null };
 
 export type ExternalReviewCard = {
   id: string;
@@ -370,15 +162,7 @@ export type FloorPlanVariant = {
   confidence: number;
 };
 
-export type ProjectPlansView = {
-  provider: string;
-  coverage_quality: string;
-  source_url?: string;
-  registration_number?: string;
-  site_overview?: SiteOverviewPlan;
-  floor_plans: FloorPlanVariant[];
-  filed_plan_previews?: FiledPlanPreview[];
-};
+export type { ProjectPlansView } from "../generated/PropertyDetail";
 
 export type FiledPlanPreview = {
   artifact_id: string;
@@ -476,8 +260,8 @@ export type ArrivalSearchSociety = {
   proofFocus?: ProofFocus;
   preview: {
     area: string;
-    bhk: number;
-    price: number;
+    bhk?: number;
+    price?: number;
     title: string;
   };
   home: {
@@ -570,6 +354,7 @@ export type MapLayerExperience = {
 };
 
 export type SurfaceSceneResponse = {
+  snapshotIdentity: string;
   proofFocusStatus?: "notRequested" | "applied" | "stale" | "retired" | "mismatch" | "unavailable";
   proofFocusMessage?: string;
   contractVersion: 1;
@@ -606,23 +391,6 @@ export type ProofFocus = {
   requestedConstraint?: string;
   distanceM?: number;
   reason: string;
-};
-
-export type PropertySurfacesResponse = {
-  contractVersion: 1;
-  propertyId: string;
-  scenes: SurfaceSceneResponse[];
-  missing: SurfaceSceneMissing[];
-};
-
-export type SurfaceSceneMissing = {
-  surfaceId: string;
-  reason: string;
-};
-
-export type SurfaceBatchResponse = {
-  contractVersion: 1;
-  items: PropertySurfacesResponse[];
 };
 
 export type SceneAnchor = {
@@ -730,6 +498,7 @@ export type SceneCallout = {
 };
 
 export type SceneReceipt = {
+  evidence: import("../generated/PropertyContext").EvidenceRef;
   id: string;
   entityId: string;
   factKey: string;
@@ -835,19 +604,7 @@ export type SourcePanel = {
   media?: EvidenceMediaStrip[];
 };
 
-export type SourceItem = {
-  entity_id: string;
-  key?: string;
-  label: string;
-  value: string;
-  scope?: string;
-  relationship?: string;
-  values?: string[];
-  source_type: string;
-  source_url?: string;
-  attributions?: SourceAttribution[];
-  learned_at: string;
-};
+export type SourceItem = import("../generated/PropertyEvidence.ts").SourceItem;
 
 export type EvidenceMediaFrame = {
   label: string;
@@ -878,31 +635,9 @@ export type EvidenceConstellation =
   | "commute"
   | "investment";
 
-export type SourceAttribution = {
-  value: string;
-  source_url?: string;
-  source_type: string;
-  learned_at: string;
-};
+export type SourceAttribution = import("../generated/PropertyEvidence.ts").SourceAttribution;
 
-export type EvidenceSection = {
-  kind: string;
-  title: string;
-  summary: string;
-  subtitle: string;
-  scope?: string;
-  relationship?: string;
-  priority: number;
-  constellation?: EvidenceConstellation;
-  header_meta?: string;
-  source_types: string[];
-  entity_ids: string[];
-  presentation?: EvidencePresentation;
-  items: SourceItem[];
-  missing: string[];
-  media?: EvidenceMediaStrip[];
-  community_pulse?: CommunityPulse;
-};
+export type EvidenceSection = import('../generated/PropertyDetail.ts').EvidenceSection;
 
 export type LivabilityBriefBlock = {
   lens: string;
@@ -985,66 +720,6 @@ export type TransparencyScore = {
   overall: number;
   components: TransparencyComponent[];
   explainer: string;
-};
-
-export type AreaListItem = {
-  id: string;
-  name: string;
-  median_price_per_sqft: number;
-  trend_direction: string;
-  primary_signal: string;
-  signals?: string[];
-};
-
-export type AreaDetail = {
-  id: string;
-  name: string;
-  city: string;
-  median_price_per_sqft: number;
-  trend_direction: string;
-  trend_summary: string;
-  metro_access_summary: string;
-  traffic_summary: string;
-  waterlogging_summary: string;
-  livability_summary: string;
-  externality_tags: string[];
-  infrastructure_tags: string[];
-  community_notes: string;
-};
-
-export type AreaTrackerMarket = {
-  id: string;
-  name: string;
-  city: string;
-  listing_count: number;
-  avg_price_per_sqft: number;
-  price_min: number;
-  price_max: number;
-  bhks: number[];
-  ready_to_move: number;
-  near_metro: number;
-  top_builder: string;
-  societies: number;
-  median_price_per_sqft: number;
-  price_range_per_sqft: {
-    low: number;
-    high: number;
-  };
-  trend_direction: string;
-  primary_signal: string;
-  demand_score: number;
-  recent_searches: number;
-  last_searched_at?: string;
-  evidence_gap_count: number;
-  sample_size: number;
-  last_updated: string;
-};
-
-export type AreaTrackerResponse = {
-  generated_at: string;
-  total_areas: number;
-  total_listings: number;
-  markets: AreaTrackerMarket[];
 };
 
 export type UpcomingLaunchCard = {
@@ -1163,22 +838,6 @@ export type SearchResultItem = Omit<JourneyResultCard, "matchTier"> & {
   collectionTitle?: string;
 };
 
-export type SearchAreaContext = {
-  id: string;
-  name: string;
-  city: string;
-  median_price_per_sqft: number;
-  trend_direction: string;
-  trend_summary: string;
-  metro_access_summary: string;
-  traffic_summary: string;
-  waterlogging_summary: string;
-  livability_summary: string;
-  externality_tags: string[];
-  infrastructure_tags: string[];
-  community_notes: string;
-};
-
 export type SourcedClaim = {
   entity_name: string;
   claim: string;
@@ -1214,11 +873,7 @@ export type SearchResultSet = {
   results: SearchResultItem[];
 };
 
-export type SearchRuntimeVersion = {
-  servingBundleVersion: string;
-  scoringPolicyVersion: number;
-  searchEngineVersion: string;
-};
+export type SearchRuntimeVersion = import("../generated/SearchJourneyEnvelope.ts").SearchRuntimeVersion;
 
 export type SearchResponse = {
   /** Rendered view; the API wire contract is SearchJourneyEnvelope. */
@@ -1229,7 +884,6 @@ export type SearchResponse = {
   orderedResultIds: string[];
   totalMatches: number;
   runtimeVersion: SearchRuntimeVersion;
-  areaContext?: SearchAreaContext;
   state: "results" | "no_matches";
   searchGuidance?: SearchGuidance;
 };
@@ -1269,35 +923,7 @@ export type JourneyIntent = {
 export type SearchRevisionTarget =
   | { kind: "branch"; branchId: string }
   | { kind: "predicate"; branchId: string; predicateId: string };
-export type SearchJourneyEnvelope = {
-  contractVersion: 1;
-  runtimeVersion: SearchRuntimeVersion;
-  active: {
-    revision: { id: string; parentId?: string; stateToken: string; resultFingerprint: string; depth: number };
-    buyerBrief: string;
-    latestUtterance: string;
-    intent: JourneyIntent;
-    collections: JourneyCollection[];
-    results: {
-      kind: "current";
-      orderedResultIds: string[];
-      resultSets: Array<{ branchId: string; label: string; results: JourneyResultCard[] }>;
-      totalMatches: number;
-      state: "results" | "no_matches";
-      areaContext?: SearchAreaContext;
-      guidance?: SearchGuidance;
-    } | { kind: "retained"; orderedResultIds: string[]; resultFingerprint: string };
-  };
-  attempt: {
-    kind: "initial" | "revision" | "resume";
-    catalogRebased?: boolean;
-    catalogDelta?: SearchJourneyDelta;
-    intentDelta?: SearchJourneyDelta;
-    outcome: "activated" | "preservedParent" | "clarificationRequired" | "limitReached" | "resumed";
-    clarification?: { code: string; message: string };
-    selectedPropertyConsequence?: { propertyId: string; outcome: "retained" | "excluded"; explanation: string; failedPredicateIds?: string[] };
-  };
-};
+export type SearchJourneyEnvelope = import("../generated/SearchJourneyEnvelope.ts").SearchJourneyEnvelope;
 
 export type JourneyCollection = {
   id: string;
@@ -1315,16 +941,7 @@ export type SearchJourneyDelta = {
   moved: Array<{ propertyId: string; from: number; to: number; cause: "catalogRefresh" | "intentRefinement"; explanation: string }>;
 };
 
-export type SearchProofResolution = {
-  propertyId: string;
-  factKey: string;
-  targetEntityId?: string;
-  targetLabel?: string;
-  value?: { type: string; data: unknown };
-  unit?: string;
-  sourceObservations: Array<{ observationId: string; sourceUrl?: string }>;
-  destination?: { surfaceId: string; layerId?: string; kind: string; targetId: string };
-};
+export type SearchProofResolution = import("../generated/SearchProofResolution.ts").ProofResolution;
 
 export type ReraInfo = {
   registered: boolean;

@@ -1,3 +1,4 @@
+import mapRenderer from "../fixtures/prestige-waterford-api/map-renderer.json" with { type: "json" };
 import assert from "node:assert/strict";
 import test from "node:test";
 import propertyDetail from "../fixtures/prestige-waterford-api/property-detail.json" with { type: "json" };
@@ -18,7 +19,7 @@ const waterfordFixturePropertyId = "discovered-prestige-waterford-3bhk";
 const waterfordFixtureServingBundleVersion =
   "catalog-71-ffb4dc50-117e-453c-b26f-41822430324e";
 const propertyPath = `/api/properties/${waterfordFixturePropertyId}`;
-const detail = propertyDetail as unknown as PropertyDetailResponse;
+const detail = { ...propertyDetail, map_context: mapRenderer } as unknown as PropertyDetailResponse;
 const scenes = {
   arrival_story: arrivalStory as unknown as SurfaceSceneResponse,
   around_this_home: aroundThisHome as unknown as SurfaceSceneResponse,
@@ -28,7 +29,7 @@ function scene(surfaceId: keyof typeof scenes): SurfaceSceneResponse {
   return structuredClone(scenes[surfaceId]);
 }
 
-test("Waterford fixture exposes the production-shaped property response", () => {
+test("archived renderer input retains geometry independently of the wire DTO", () => {
   const response = structuredClone(detail);
 
   assert.equal(response.property.id, waterfordFixturePropertyId);
@@ -44,7 +45,7 @@ test("Waterford fixture exposes the production-shaped property response", () => 
   assert.equal(response.map_context.lakes?.length, 7);
 });
 
-test("Waterford manifest maps every property-page request to a snapshot", () => {
+test("renderer fixture transport uses the current context resource", () => {
   assert.equal(manifest.property_id, waterfordFixturePropertyId);
   assert.equal(
     manifest.serving_bundle_version,
@@ -54,8 +55,7 @@ test("Waterford manifest maps every property-page request to a snapshot", () => 
     manifest.responses.map((response) => response.endpoint),
     [
       propertyPath,
-      `${propertyPath}/surfaces/arrival_story`,
-      `${propertyPath}/surfaces/around_this_home`,
+      `${propertyPath}/context`,
     ],
   );
 });

@@ -18,16 +18,17 @@ use crate::dag_config::{community_themes_config, CommunityThemeDefinition};
 /// Target length for buyer-facing community pulse paragraphs.
 pub const COMMUNITY_PARAGRAPH_MAX_WORDS: usize = 85;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CommunityPulseQuote {
     pub text: String,
     pub source_type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub source_url: Option<String>,
     pub polarity: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CommunityPulse {
     pub source_label: String,
     pub sentiment_band: String,

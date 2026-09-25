@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::future::IntoFuture;
 use std::net::SocketAddr;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
@@ -36,12 +37,172 @@ use tokio::sync::{mpsc, RwLock};
 use tower::ServiceExt;
 
 #[tokio::test]
+async fn materialized_weak_claims_are_excluded_by_validation_and_runtime() {
+    let (root, state, app) = materialized_contract(false).await;
+    let original = state.search_runtime.load_full();
+    let manifest = &original.bundle.manifest;
+    let mut facts = backend::serving::read_facts_parquet(
+        &std::fs::read(root.path().join(&manifest.fact_parquet_key)).unwrap(),
+    )
+    .unwrap();
+    let metadata = backend::serving::read_search_metadata_parquet(
+        &std::fs::read(root.path().join(&manifest.search_metadata_parquet_key)).unwrap(),
+    )
+    .unwrap();
+    let rera = backend::serving::read_rera_evidence_parquet(
+        &std::fs::read(root.path().join(&manifest.rera_evidence_parquet_key)).unwrap(),
+    )
+    .unwrap();
+    let mut weakened = 0;
+    for fact in &mut facts {
+        if fact.fact_key == "listing_3bhk" {
+            fact.confidence = 0.0;
+            weakened += 1;
+        }
+    }
+    assert!(weakened >= 3);
+    let mut edges = original.bundle.edges.clone();
+    for edge in &mut edges {
+        if edge.edge_type == "built_by" {
+            edge.confidence = 0.0;
+        }
+    }
+    let lake = LakeStore::local(root.path()).unwrap();
+    let version = "materialized-admission-rejection";
+    ServingBundleBuilder::new(lake.clone())
+        .build_from_catalog_records(
+            original.bundle.entities.clone(),
+            facts,
+            metadata,
+            edges,
+            rera,
+            version,
+        )
+        .await
+        .unwrap();
+    let report = backend::serving::validate_search_serving_candidate(&lake, version)
+        .await
+        .unwrap();
+    assert!(report
+        .excluded_search_capabilities
+        .iter()
+        .any(|claim| claim.fact_key == "listing_3bhk"
+            && claim.reason == "ineligible_inventory_source_or_confidence"));
+    assert!(report
+        .excluded_search_capabilities
+        .iter()
+        .any(|claim| claim.fact_key == "built_by"
+            && claim.reason == "requires_eligible_unambiguous_identity"));
+    let loaded = ServingBundleLoader::new(lake, root.path().join("admission-cache"))
+        .load_search_bundle(version)
+        .await
+        .unwrap();
+    let runtime = backend::data_loader::runtime_snapshot_from_serving_bundle(Arc::new(loaded));
+    assert!(
+        !runtime.properties.is_empty(),
+        "societies remain browseable"
+    );
+    assert!(runtime
+        .inventory_options
+        .values()
+        .all(|option| option.bhk != Some(3)));
+    for edge in runtime
+        .bundle
+        .edges
+        .iter()
+        .filter(|edge| edge.edge_type == "built_by")
+    {
+        assert_eq!(
+            runtime
+                .identity_evaluation
+                .evaluate(
+                    &edge.from_entity_id,
+                    &edge.to_entity_id,
+                    runtime.bundle.manifest.proof_snapshot_identity()
+                )
+                .state,
+            backend::search::EvaluationState::Unknown
+        );
+    }
+    state.search_runtime.store(Arc::new(runtime));
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/search?q=3BHK")
+                .extension(ConnectInfo(SocketAddr::from(([192, 0, 2, 240], 41000))))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value = serde_json::from_slice(
+        &to_bytes(response.into_body(), 4 * 1024 * 1024)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(body["active"]["results"]["totalMatches"], 0);
+}
+
+#[tokio::test]
 async fn three_societies_reach_serving_with_listing_and_builder_evidence() {
+    let (_original_root, state, app) = materialized_contract(false).await;
+    let (_updated_root, updated_state, _) = materialized_contract(true).await;
+    if let Ok(address) = std::env::var("OPENESTATES_CONTRACT_SERVER_ADDR") {
+        // Test-only control listener; the application still uses the production router.
+        // Both snapshots have completed the same source -> Parquet -> API assertions.
+        let original = state.search_runtime.load_full();
+        let updated = updated_state.search_runtime.load_full();
+        assert_ne!(
+            original.bundle.manifest.proof_snapshot_identity(),
+            updated.bundle.manifest.proof_snapshot_identity()
+        );
+        let control = axum::Router::new().route(
+            "/snapshot/{version}",
+            axum::routing::post(
+                move |axum::extract::Path(version): axum::extract::Path<String>| {
+                    let state = state.clone();
+                    let snapshot = match version.as_str() {
+                        "original" => Some(original.clone()),
+                        "updated" => Some(updated.clone()),
+                        _ => None,
+                    };
+                    async move {
+                        let Some(snapshot) = snapshot else {
+                            return StatusCode::BAD_REQUEST;
+                        };
+                        state.search_runtime.store(snapshot);
+                        StatusCode::NO_CONTENT
+                    }
+                },
+            ),
+        );
+        let control_listener = tokio::net::TcpListener::bind("127.0.0.1:4017")
+            .await
+            .unwrap();
+        let listener = tokio::net::TcpListener::bind(address).await.unwrap();
+        tokio::try_join!(
+            axum::serve(control_listener, control).into_future(),
+            axum::serve(
+                listener,
+                app.into_make_service_with_connect_info::<SocketAddr>()
+            )
+            .into_future(),
+        )
+        .unwrap();
+    }
+}
+
+async fn materialized_contract(carpet: bool) -> (tempfile::TempDir, Arc<AppState>, axum::Router) {
     let root = tempdir().unwrap();
     let lake = LakeStore::local(root.path()).unwrap();
     let store = AssetMaterializationStore::new(lake.clone());
     let observed_at = Utc.with_ymd_and_hms(2026, 7, 14, 12, 0, 0).unwrap();
-    let projects = fixtures();
+    let mut projects = fixtures();
+    if carpet {
+        projects[0].area_basis = "carpet";
+    }
     let partition = AssetPartition::new([
         ("dt", "2026-07-14"),
         ("society", "project-enrichment-fixture"),
@@ -80,7 +241,7 @@ async fn three_societies_reach_serving_with_listing_and_builder_evidence() {
         )
         .await
         .unwrap();
-    assert_eq!(listings_record.row_count, 3);
+    assert_eq!(listings_record.row_count, 5);
     assert!(listings_record.artifacts.iter().any(|artifact| {
         artifact.content_type == "application/vnd.apache.parquet"
             && artifact.key.ends_with("listings/part-00000.parquet")
@@ -121,6 +282,11 @@ async fn three_societies_reach_serving_with_listing_and_builder_evidence() {
     let gold = load_society_gold_records(&lake, &gold_manifest)
         .await
         .unwrap();
+    let bundle_version = if carpet {
+        "project-enrichment-fixture-carpet"
+    } else {
+        "project-enrichment-fixture"
+    };
     let records = CatalogRecords::from_society_gold(&gold, Vec::new()).unwrap();
     ServingBundleBuilder::new(lake.clone())
         .build_from_catalog_records(
@@ -129,16 +295,16 @@ async fn three_societies_reach_serving_with_listing_and_builder_evidence() {
             records.search_metadata,
             records.edges,
             records.rera_evidence,
-            "project-enrichment-fixture",
+            bundle_version,
         )
         .await
         .unwrap();
     let loaded = ServingBundleLoader::new(lake.clone(), root.path().join("serving-cache"))
-        .load_search_bundle("project-enrichment-fixture")
+        .load_search_bundle(bundle_version)
         .await
         .unwrap();
     for project in &projects {
-        let alias = format!("society:{}", slug(project.name));
+        let alias = canonical_id(project.registration);
         let rows = loaded.fact_index.entity(&alias).unwrap();
         for fact_key in [
             "rera_number",
@@ -228,7 +394,7 @@ async fn three_societies_reach_serving_with_listing_and_builder_evidence() {
     )
     .unwrap();
     assert_eq!(topology["geo_cell_count"], 1);
-    assert_eq!(topology["point_assignment_count"], 4);
+    assert_eq!(topology["point_assignment_count"], 5);
     assert_eq!(topology["market_coverage_count"], 1);
     assert_eq!(
         topology["ambiguous_point_cell_entity_ids"],
@@ -238,7 +404,7 @@ async fn three_societies_reach_serving_with_listing_and_builder_evidence() {
 
     let loaded = Arc::new(loaded);
     let runtime = backend::data_loader::runtime_snapshot_from_serving_bundle(loaded.clone());
-    assert_eq!(runtime.properties.len(), 3);
+    assert_eq!(runtime.properties.len(), 4);
     let whitefield_market_id = loaded
         .entities
         .iter()
@@ -255,10 +421,6 @@ async fn three_societies_reach_serving_with_listing_and_builder_evidence() {
             .len(),
         1
     );
-    let properties = runtime.properties.to_vec();
-    let societies = runtime.societies.to_vec();
-    let areas = runtime.areas.to_vec();
-    let search_index = runtime.search_index.clone();
     let (search_event_tx, _search_event_rx) = mpsc::channel(8);
     let state = Arc::new(AppState {
         execution: backend::security::ExecutionLanes::current(),
@@ -273,20 +435,22 @@ async fn three_societies_reach_serving_with_listing_and_builder_evidence() {
         property_catalog_cache: tokio::sync::Mutex::new(None),
         search_event_tx,
         search_log_dropped_count: AtomicU64::new(0),
-        properties: RwLock::new(properties),
-        search_index: RwLock::new(search_index),
         recommendation_cache: RwLock::new(std::collections::HashMap::new()),
-        areas: RwLock::new(areas),
-        societies: RwLock::new(societies),
-        discovery_config: backend::discovery::load_discovery_config(),
+
         map_overlays: Arc::new(backend::routes::map_overlays::CityMapOverlays::default()),
-        knowledge: Arc::new(RwLock::new(KnowledgeGraph::new())),
         project_root: root.path().to_path_buf(),
         process_started_at: Utc::now(),
-        interest_counter: AtomicU64::new(0),
-        interest_write_lock: tokio::sync::Mutex::new(()),
     });
-    let response = build_app_router_with_lake(state, lake)
+    let snapshot_identity = state
+        .search_runtime
+        .load()
+        .bundle
+        .manifest
+        .proof_snapshot_identity()
+        .to_string();
+    let app = build_app_router_with_lake(state.clone(), lake);
+    let response = app
+        .clone()
         .oneshot(
             Request::builder()
                 .uri("/api/search?q=3BHK%20in%20Whitefield")
@@ -311,10 +475,283 @@ async fn three_societies_reach_serving_with_listing_and_builder_evidence() {
             .len(),
         3
     );
+    // This is deliberately the production router over materialized source inputs.
+    // A passing engine-only fixture cannot establish receipt resolvability.
+    for query in ["3BHK", "3BHK above 10 acres", "3BHK near metro"] {
+        let query: String = url::form_urlencoded::byte_serialize(query.as_bytes()).collect();
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/search?q={query}"))
+                    .extension(ConnectInfo(SocketAddr::from(([192, 0, 2, 2], 41000))))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let journey: Value = serde_json::from_slice(
+            &to_bytes(response.into_body(), 4 * 1024 * 1024)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert!(
+            journey["active"]["results"]["totalMatches"]
+                .as_u64()
+                .unwrap()
+                > 0,
+            "{query} must exercise matches"
+        );
+        let mut resolved_count = 0;
+        let mut numeric_count = 0;
+        for set in journey["active"]["results"]["resultSets"]
+            .as_array()
+            .unwrap()
+        {
+            for result in set["results"].as_array().unwrap() {
+                assert!(
+                    !result["reasons"].as_array().unwrap().is_empty(),
+                    "matched inventory retains witnesses"
+                );
+                for reason in result["reasons"].as_array().unwrap() {
+                    let response = app.clone().oneshot(Request::builder()
+                        .method("POST").uri("/api/search/proofs/resolve")
+                        .header("content-type", "application/json")
+                        .extension(ConnectInfo(SocketAddr::from(([192, 0, 2, 3], 41000))))
+                        .body(Body::from(serde_json::json!({"proofToken": reason["proofToken"], "propertyId": result["id"]}).to_string())).unwrap()).await.unwrap();
+                    let status = response.status();
+                    let receipt: Value = serde_json::from_slice(
+                        &to_bytes(response.into_body(), 4 * 1024 * 1024)
+                            .await
+                            .unwrap(),
+                    )
+                    .unwrap();
+                    assert_eq!(status, StatusCode::OK, "{query}: {receipt}");
+                    resolved_count += 1;
+                    if receipt["constraint"].is_object() {
+                        numeric_count += 1;
+                        assert_eq!(receipt["claim"]["unit"], receipt["constraint"]["unit"]);
+                        assert!(receipt["claim"]["value"].is_number());
+                    }
+                    assert_eq!(receipt["snapshotIdentity"], snapshot_identity);
+                    assert_eq!(receipt["resolutionStatus"], "resolved");
+                    assert!(!receipt["sourceObservations"].as_array().unwrap().is_empty());
+                }
+            }
+        }
+        assert!(resolved_count > 0);
+        if query.contains("acres") {
+            assert!(
+                numeric_count > 0,
+                "numeric eligibility must issue its constraint and witness"
+            );
+        }
+    }
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/search?q=3BHK%20carpet%20area%20above%201500%20sqft")
+                .extension(ConnectInfo(SocketAddr::from(([192, 0, 2, 4], 41000))))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let journey: Value = serde_json::from_slice(
+        &to_bytes(response.into_body(), 4 * 1024 * 1024)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        journey["active"]["results"]["totalMatches"], 0,
+        "carpet search is deferred even when the source contains carpet measurements"
+    );
+    for (query, expected) in [
+        ("2BHK%20under%201.5Cr%20above%201400%20sqft", 0),
+        ("3BHK%20above%201500%20sqft", 3),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/search?q={query}"))
+                    .extension(ConnectInfo(SocketAddr::from(([192, 0, 2, 14], 41000))))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let result: Value = serde_json::from_slice(
+            &to_bytes(response.into_body(), 4 * 1024 * 1024)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            result["active"]["results"]["totalMatches"], expected,
+            "{query}"
+        );
+    }
+    let ids = body["active"]["results"]["orderedResultIds"]
+        .as_array()
+        .unwrap();
+    let mut context_receipt_count = 0;
+    for id in ids {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!(
+                        "/api/properties/{}?snapshotIdentity={snapshot_identity}",
+                        id.as_str().unwrap()
+                    ))
+                    .extension(ConnectInfo(SocketAddr::from(([192, 0, 2, 5], 41000))))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let detail: Value = serde_json::from_slice(
+            &to_bytes(response.into_body(), 4 * 1024 * 1024)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        let evidence = detail["evidence"]["sections"].as_array().unwrap();
+        for item in evidence
+            .iter()
+            .flat_map(|section| section["items"].as_array().unwrap())
+        {
+            let references = item["evidence"]
+                .as_array()
+                .expect("every buyer claim binds evidence");
+            assert!(!references.is_empty());
+            for reference in references {
+                let reference: backend::serving::EvidenceRef =
+                    serde_json::from_value(reference.clone()).unwrap();
+                assert_eq!(reference.snapshot_identity, snapshot_identity);
+                match reference.evidence_id {
+                    backend::serving::EvidenceId::Observation(ref id) => {
+                        assert!(loaded.evidence_index.observation(id).is_some())
+                    }
+                    backend::serving::EvidenceId::Derivation(ref id) => {
+                        assert!(loaded.evidence_index.derivation(id).is_some())
+                    }
+                    backend::serving::EvidenceId::Entity(_)
+                    | backend::serving::EvidenceId::Relationship(_) => {
+                        panic!("source panels require observed facts")
+                    }
+                }
+            }
+        }
+        let context = &detail["context"];
+        assert_eq!(context["snapshotIdentity"], snapshot_identity);
+        assert!(context.get("surfaceId").is_none());
+        assert!(context.get("layers").is_none());
+        context_receipt_count += context["features"].as_array().unwrap().len();
+        for feature in context["features"].as_array().unwrap() {
+            let reference: backend::serving::EvidenceRef =
+                serde_json::from_value(feature["fact"]["evidence"].clone()).unwrap();
+            assert_eq!(reference.snapshot_identity, snapshot_identity);
+            let backend::serving::EvidenceId::Observation(id) = reference.evidence_id else {
+                panic!("context fact must retain its observation");
+            };
+            assert!(loaded.evidence_index.observation(&id).is_some());
+            if feature["fact"]["factKey"] == "nearby_schools" {
+                assert_eq!(
+                    feature["fact"]["value"]["type"], "Numeric",
+                    "distance must be typed before serving"
+                );
+                let target = &feature["target"];
+                assert!(
+                    target["entityId"]
+                        .as_str()
+                        .is_some_and(|id| id.starts_with("place:canonical:")),
+                    "source identity must bind the canonical school: {target}"
+                );
+                assert!(
+                    target["point"].is_array(),
+                    "sourced school coordinates must survive"
+                );
+                assert!(!target["geometryEvidence"].as_array().unwrap().is_empty());
+            }
+        }
+        let measurement = &detail["property"]["area_measurement"];
+        assert_eq!(
+            measurement["evidence"]["snapshot_identity"],
+            snapshot_identity
+        );
+        assert_eq!(measurement["unit"], "sqft");
+        assert!(detail["property"].get("carpet_area_sqft").is_none());
+    }
+    assert!(
+        context_receipt_count > 0,
+        "materialized context must contain receipts"
+    );
+    for (snapshot, expected) in [
+        (&snapshot_identity, StatusCode::OK),
+        (&"retired".to_string(), StatusCode::CONFLICT),
+    ] {
+        let response = app.clone().oneshot(Request::builder().method("POST").uri("/api/properties/batch")
+            .header("content-type", "application/json")
+            .extension(ConnectInfo(SocketAddr::from(([192, 0, 2, 6], 41000))))
+            .body(Body::from(serde_json::json!({"propertyIds": [ids[1], ids[0], ids[1], "missing"], "snapshotIdentity": snapshot}).to_string())).unwrap()).await.unwrap();
+        assert_eq!(response.status(), expected);
+        if expected == StatusCode::OK {
+            let batch: Value = serde_json::from_slice(
+                &to_bytes(response.into_body(), 4 * 1024 * 1024)
+                    .await
+                    .unwrap(),
+            )
+            .unwrap();
+            assert_eq!(batch["items"].as_array().unwrap().len(), 2);
+            for item in batch["items"].as_array().unwrap() {
+                if item["area_measurement"]["basis"] != "carpet" {
+                    assert!(
+                        item.get("carpet_area_sqft").is_none(),
+                        "summary must preserve measurement basis"
+                    );
+                }
+            }
+            assert_eq!(batch["items"][0]["id"], ids[1]);
+            assert_eq!(batch["items"][1]["id"], ids[0]);
+            assert_eq!(batch["missingIds"], serde_json::json!(["missing"]));
+        }
+    }
+    for resource in ["", "/rera", "/recommendations", "/evidence"] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!(
+                        "/api/properties/{}{resource}?snapshotIdentity=retired",
+                        ids[0].as_str().unwrap()
+                    ))
+                    .extension(ConnectInfo(SocketAddr::from(([192, 0, 2, 6], 41000))))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            response.status(),
+            StatusCode::CONFLICT,
+            "{resource} must reject mixed snapshots"
+        );
+    }
+    (root, state, app)
 }
 
 struct ProjectFixture {
     name: &'static str,
+    area_basis: &'static str,
     registration: &'static str,
     status: &'static str,
     acres: f64,
@@ -327,6 +764,7 @@ fn fixtures() -> Vec<ProjectFixture> {
     vec![
         ProjectFixture {
             name: "Prestige Raintree Park",
+            area_basis: "mixed",
             registration: "PRM/KA/RERA/1251/446/PR/270824/006981",
             status: "Under Construction",
             acres: 21.0,
@@ -336,6 +774,7 @@ fn fixtures() -> Vec<ProjectFixture> {
         },
         ProjectFixture {
             name: "Prestige Park Grove",
+            area_basis: "built_up",
             registration: "PRM/KA/RERA/1251/446/PR/100823/006141",
             status: "Sold Out",
             acres: 71.41,
@@ -345,6 +784,7 @@ fn fixtures() -> Vec<ProjectFixture> {
         },
         ProjectFixture {
             name: "Prestige Lavender Fields",
+            area_basis: "super_builtup",
             registration: "PRM/KA/RERA/1251/446/PR/290423/005906",
             status: "Sold Out",
             acres: 18.2,
@@ -389,6 +829,32 @@ fn source_inputs(
                     provider_observation_id: None,
                     asset_lineage: Vec::new(),
                 });
+                let mut documents = detail_facts.last().unwrap().clone();
+                documents.fact_key = "rera_document_manifest".to_string();
+                documents.value_json = serde_json::to_string(&FactValue::Text(
+                    serde_json::json!([{
+                        "artifact_id": "fixture-sanctioned-plan", "kind": "sanctioned_plan",
+                        "label": "Sanctioned plan", "document_group": "plans",
+                        "source_url": "https://rera.example/documents/sanctioned-plan.pdf",
+                        "buyer_visibility": "public", "confidence": 1.0
+                    }])
+                    .to_string(),
+                ))
+                .unwrap();
+                documents.observation_provider = Some("Rera".to_string());
+                documents.provider_observation_id =
+                    Some(format!("{}:documents", project.registration));
+                documents.asset_lineage = vec!["rera_registry_monthly".to_string()];
+                detail_facts.push(documents);
+                detail_fact_annotations.push(SkillFactAnnotationRecord {
+                    entity_id: entity_id.clone(),
+                    fact_key: "rera_document_manifest".to_string(),
+                    display_template: None,
+                    answers_preferences_json: "[]".to_string(),
+                    scoring_direction: None,
+                    scoring_weight: None,
+                    scoring_thresholds_json: "[]".to_string(),
+                });
                 detail_fact_annotations.push(SkillFactAnnotationRecord {
                     entity_id,
                     fact_key: "rera_lat_lng".to_string(),
@@ -417,10 +883,16 @@ fn source_inputs(
             }
         })
         .collect();
-    let external_listing_records = projects
+    let mut external_listing_records: Vec<_> = projects
         .iter()
         .map(|project| ExternalListingObservationRecord {
             entity_id: canonical_id(project.registration),
+            property_id: Some(format!(
+                "discovered-{}-3bhk",
+                canonical_id(project.registration)
+                    .strip_prefix("society:")
+                    .unwrap()
+            )),
             project_key: Some(project.registration.to_string()),
             source_name: "MagicBricks".to_string(),
             source_url: Some(format!("https://listings.example/{}", slug(project.name))),
@@ -437,7 +909,7 @@ fn source_inputs(
             area_display: None,
             price_per_sqft_display: None,
             configuration: Some("3BHK".to_string()),
-            area_type: Some("super_builtup".to_string()),
+            area_type: Some(project.area_basis.to_string()),
             bhk: Some(3.0),
             bathrooms: Some(3.0),
             floor: Some("12".to_string()),
@@ -446,6 +918,22 @@ fn source_inputs(
             observed_at,
         })
         .collect();
+    // Two actual offers must never be combined into one qualifying home.
+    for (price, area) in [(10_000_000.0, 1_000.0), (30_000_000.0, 2_000.0)] {
+        let mut offer = external_listing_records[0].clone();
+        offer.property_id = None;
+        offer.bhk = Some(2.0);
+        offer.configuration = Some("2BHK".into());
+        offer.price = Some(price);
+        offer.price_min = Some(price);
+        offer.price_max = Some(price);
+        offer.area_sqft = Some(area);
+        offer.area_sqft_min = Some(area);
+        offer.area_sqft_max = Some(area);
+        offer.area_type = Some("built-up".into());
+        offer.source_url = Some(format!("https://listings.example/offer-{price}"));
+        external_listing_records.push(offer);
+    }
     let osm_power_records = projects
         .iter()
         .enumerate()
@@ -583,8 +1071,8 @@ fn source_inputs(
                 place_id: Some("greenwood-high".to_string()),
                 place_url: "https://maps.example/greenwood-high".to_string(),
                 distance_km: Some(1.2),
-                latitude: Some(12.9720),
-                longitude: Some(77.5960),
+                latitude: Some(first_project.latitude + 0.0108),
+                longitude: Some(first_project.longitude),
                 rating: Some(4.3),
                 review_count: Some(420),
                 primary_type: Some("school".to_string()),

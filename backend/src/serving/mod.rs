@@ -4,13 +4,16 @@
 //! Parquet tables for structured facts/entities, small JSON control files, and
 //! a Tantivy index prefix for fast local recall.
 
+pub(crate) mod admission;
 pub mod aliases;
 pub mod builder;
+pub mod context_binding;
 pub mod coordinates;
 mod eligibility;
 pub mod evidence;
 pub mod loader;
 pub mod market_topology;
+pub mod measurements;
 pub mod parquet;
 pub mod projection;
 pub mod proximity;
@@ -70,11 +73,10 @@ pub use tantivy_index::{
 };
 pub use topology::{derive_spatial_topology, SpatialTopologyReport};
 pub use types::{
-    unique_society_aliases, validate_serving_edge_evidence, BundleArtifact, BundleArtifactKind,
-    QuarantinedSociety, ServingBundleManifest, ServingBundleSchema, ServingColumnSchema,
-    ServingEdgeRecord, ServingEntityFactRows, ServingEntityRecord, ServingEntityVisibility,
-    ServingFactIndex, ServingFactRecord, ServingQuarantineReport, ServingSearchMetadataRecord,
-    ServingTableSchema,
+    validate_serving_edge_evidence, BundleArtifact, BundleArtifactKind, QuarantinedSociety,
+    ServingBundleManifest, ServingBundleSchema, ServingColumnSchema, ServingEdgeRecord,
+    ServingEntityFactRows, ServingEntityRecord, ServingEntityVisibility, ServingFactIndex,
+    ServingFactRecord, ServingQuarantineReport, ServingSearchMetadataRecord, ServingTableSchema,
 };
 pub use validator::{
     validate_search_serving_candidate, ServingBundleValidationError, ServingBundleValidationIssue,

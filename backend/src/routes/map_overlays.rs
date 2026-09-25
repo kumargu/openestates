@@ -45,13 +45,15 @@ pub struct SeedPolygon {
     pub centroid: (f64, f64),
 }
 
-#[derive(Serialize, Clone, Debug, PartialEq)]
+#[derive(schemars::JsonSchema, Serialize, Clone, Debug, PartialEq)]
 pub struct MapOverlayLine {
     pub id: String,
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub label: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "f64")]
     pub distance_km: Option<f64>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub details: Vec<String>,
@@ -59,16 +61,18 @@ pub struct MapOverlayLine {
     pub coordinates: Vec<[f64; 2]>,
     pub source_type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
     pub source_url: Option<String>,
 }
 
-#[derive(Serialize, Clone, Debug, PartialEq)]
+#[derive(schemars::JsonSchema, Serialize, Clone, Debug, PartialEq)]
 pub struct MapOverlayPolygon {
     pub id: String,
     pub name: String,
     pub kind: String,
     pub coordinates: Vec<[f64; 2]>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "f64")]
     pub distance_km: Option<f64>,
     pub source_type: String,
 }

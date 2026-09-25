@@ -49,8 +49,8 @@ pub async fn sitemap_xml(State(state): State<Arc<AppState>>) -> impl IntoRespons
 
     // Property pages
     {
-        let properties = state.properties.read().await;
-        for p in properties.iter() {
+        let runtime = state.search_runtime.load();
+        for p in runtime.properties.iter() {
             urls.push(format!(
                 "  <url><loc>{}/property/{}</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>",
                 base_url, p.id

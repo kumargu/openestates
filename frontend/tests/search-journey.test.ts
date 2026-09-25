@@ -4,7 +4,7 @@ import { journeyFixture, retainedFixture } from "./fixtures/search-journey.ts";
 import { projectSearchJourney, readSavedJourney, saveJourney, selectJourneyProperty, journeyEditTargets, journeyUrl, readSearchCheckpoint } from "../src/lib/search-journey.ts";
 import { primaryProofFocus, resolvedProofFocus } from "../src/lib/proof-focus.ts";
 import { searchResultReasonLabels } from "../src/lib/search.ts";
-import { getDiscovery, getPropertySurfacesBatch, resumeSearch, resumeSearchCheckpoint, reviseSearch, searchProperties, resolveSearchProof } from "../src/lib/api.ts";
+import { getDiscovery, getProperty, getPropertyContextsBatch, resumeSearch, resumeSearchCheckpoint, reviseSearch, searchProperties, resolveSearchProof } from "../src/lib/api.ts";
 
 test("wire envelope projects ranked cards and server-selected proof without reparsing the query", () => {
   const envelope = journeyFixture();
@@ -87,8 +87,8 @@ test("API chain sends signed parents, stable mutation IDs, selection, and exact 
   const proof = {
     propertyId: "home", factKey: "nearby_schools", targetEntityId: "school",
     targetLabel: "Fixture School", value: { type: "Numeric", data: 0.8 }, unit: "km",
-    destination: { surfaceId: "around_this_home", layerId: "schools", kind: "scene", targetId: "around-this-home" },
-    sourceObservations: [{ observationId: "exact", sourceUrl: "https://example.test/exact" }],
+    contractVersion: 1, snapshotIdentity: "fixture", semanticFingerprint: "fixture", branchId: "branch", predicateId: "predicate", subjectEntityId: "society:home", relation: "near", resolutionStatus: "resolved", derivationChain: [],
+    sourceObservations: [{ provider: "fixture", providerObservationId: "exact", subjectEntityId: "society:home", observedAt: "2026-07-14T12:00:00Z", assetLineage: ["fixture/v1"], observationId: "exact", sourceUrl: "https://example.test/exact" }],
   };
   const original = globalThis.fetch;
   globalThis.fetch = async (input, options) => {
@@ -148,7 +148,7 @@ test("concurrent resume effects share one stateless rebase request", async () =>
   } finally { globalThis.fetch = original; }
 });
 
-test("concurrent landing eligibility effects share one surface batch", async () => {
+test("concurrent context reads share one bounded batch", async () => {
   const original = globalThis.fetch;
   let calls = 0;
   let finish: ((response: Response) => void) | undefined;
@@ -157,13 +157,13 @@ test("concurrent landing eligibility effects share one surface batch", async () 
     return new Promise<Response>((resolve) => { finish = resolve; });
   };
   try {
-    const first = getPropertySurfacesBatch(["home"], ["arrival_story"]);
-    const second = getPropertySurfacesBatch(["home"], ["arrival_story"]);
+    const first = getPropertyContextsBatch(["home"]);
+    const second = getPropertyContextsBatch(["home"]);
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(calls, 1);
-    finish!(Response.json({ contractVersion: 1, items: [] }));
-    assert.deepEqual(await first, { contractVersion: 1, items: [] });
-    assert.deepEqual(await second, { contractVersion: 1, items: [] });
+    finish!(Response.json({ contractVersion: 1, snapshotIdentity: "fixture", items: [] }));
+    assert.deepEqual(await first, { contractVersion: 1, snapshotIdentity: "fixture", items: [] });
+    assert.deepEqual(await second, { contractVersion: 1, snapshotIdentity: "fixture", items: [] });
   } finally { globalThis.fetch = original; }
 });
 
@@ -184,4 +184,41 @@ test("concurrent landing discovery effects share one catalog request", async () 
     assert.deepEqual(await first, { product_promise: "proof", quotes: [], shelves: [] });
     assert.deepEqual(await second, { product_promise: "proof", quotes: [], shelves: [] });
   } finally { globalThis.fetch = original; }
+});
+
+test("snapshot conflicts prevent an older discovery request from restoring the cache", async () => {
+  const original = globalThis.fetch;
+  const discoveryResolvers: Array<(response: Response) => void> = [];
+  let discoveryCalls = 0;
+  globalThis.fetch = (input) => {
+    const path = String(input);
+    if (path.includes("/api/properties/")) {
+      return Promise.resolve(Response.json(
+        { code: "stale_snapshot" },
+        { status: 409 },
+      ));
+    }
+    discoveryCalls += 1;
+    return new Promise<Response>((resolve) => discoveryResolvers.push(resolve));
+  };
+  try {
+    await assert.rejects(getProperty("reset-cache"));
+    const retired = getDiscovery();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(discoveryCalls, 1);
+
+    await assert.rejects(getProperty("detect-conflict"));
+    const current = getDiscovery();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(discoveryCalls, 2);
+
+    discoveryResolvers[0](Response.json({ product_promise: "retired", quotes: [], shelves: [] }));
+    discoveryResolvers[1](Response.json({ product_promise: "current", quotes: [], shelves: [] }));
+    assert.equal((await retired).product_promise, "retired");
+    assert.equal((await current).product_promise, "current");
+    assert.equal((await getDiscovery()).product_promise, "current");
+    assert.equal(discoveryCalls, 2);
+  } finally {
+    globalThis.fetch = original;
+  }
 });

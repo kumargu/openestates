@@ -38,6 +38,44 @@ pub(crate) fn classify_and_prune(
     bundle_version: &str,
     config: &ServingEligibilityFile,
 ) -> Result<EligibleServingRecords, serde_json::Error> {
+    let mut excluded_claims = Vec::new();
+    let facts = facts
+        .into_iter()
+        .filter(|fact| {
+            let required = config
+                .observation_required_fact_keys
+                .contains(&fact.fact_key)
+                || config
+                    .observation_required_prefixes
+                    .iter()
+                    .any(|prefix| fact.fact_key.starts_with(prefix));
+            let admitted = !required
+                || fact.observation.as_ref().is_some_and(|observation| {
+                    observation.subject_entity_id == fact.entity_id
+                        && observation.validate().is_ok()
+                });
+            if !admitted {
+                excluded_claims.push(super::types::ExcludedServingClaim {
+                    entity_id: fact.entity_id.clone(),
+                    fact_key: fact.fact_key.clone(),
+                    reason: "missing_eligible_observation".to_string(),
+                });
+            }
+            admitted
+        })
+        .collect::<Vec<_>>();
+    excluded_claims.sort_by(|a, b| (&a.entity_id, &a.fact_key).cmp(&(&b.entity_id, &b.fact_key)));
+    excluded_claims.dedup();
+    let admitted_keys = facts
+        .iter()
+        .map(|fact| (fact.entity_id.as_str(), fact.fact_key.as_str()))
+        .collect::<HashSet<_>>();
+    let search_metadata = search_metadata
+        .into_iter()
+        .filter(|metadata| {
+            admitted_keys.contains(&(metadata.entity_id.as_str(), metadata.fact_key.as_str()))
+        })
+        .collect::<Vec<_>>();
     let mut groups = society_groups(&entities);
     let runtime_id_by_entity_id = groups
         .iter()
@@ -49,18 +87,8 @@ pub(crate) fn classify_and_prune(
         })
         .collect::<BTreeMap<_, _>>();
 
-    for group in groups
-        .values_mut()
-        .filter(|group| group.entity_ids.len() > 1)
-    {
-        group
-            .reasons
-            .insert("ambiguous_canonical_identity".to_string());
-    }
-
     let mut property_runtime_ids = property_society_runtime_ids(&edges, &runtime_id_by_entity_id);
-    let mut fact_index = ServingFactIndex::from_records(facts.clone(), search_metadata.clone());
-    fact_index.add_society_aliases(&entities);
+    let fact_index = ServingFactIndex::from_records(facts.clone(), search_metadata.clone());
     let projected_properties = crate::data_loader::properties_from_serving_records_with_edges(
         &entities,
         &edges,
@@ -111,7 +139,8 @@ pub(crate) fn classify_and_prune(
         &mut groups,
     );
 
-    let quarantine = quarantine_report(bundle_version, config.version, groups);
+    let mut quarantine = quarantine_report(bundle_version, config.version, groups);
+    quarantine.excluded_claims = excluded_claims;
     let removed_society_ids = quarantine
         .societies
         .iter()
@@ -213,7 +242,7 @@ fn society_groups(entities: &[ServingEntityRecord]) -> BTreeMap<String, SocietyG
         .iter()
         .filter(|entity| entity.entity_type == "society")
     {
-        let runtime_id = format!("soc-{}", entity_slug(&entity.name));
+        let runtime_id = entity.entity_id.clone();
         let group = groups.entry(runtime_id).or_default();
         group.entity_ids.insert(entity.entity_id.clone());
         group.names.insert(entity.name.clone());
@@ -503,6 +532,7 @@ fn quarantine_report(
         excluded_society_count: societies.len() as u64,
         reason_counts,
         societies,
+        excluded_claims: Vec::new(),
     }
 }
 
@@ -556,25 +586,6 @@ fn entities_to_remove(
     removed
 }
 
-fn entity_slug(value: &str) -> String {
-    value
-        .trim()
-        .to_ascii_lowercase()
-        .chars()
-        .map(|character| {
-            if character.is_ascii_alphanumeric() {
-                character
-            } else {
-                '-'
-            }
-        })
-        .collect::<String>()
-        .split('-')
-        .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>()
-        .join("-")
-}
-
 #[cfg(test)]
 mod tests {
     use chrono::Utc;
@@ -585,6 +596,9 @@ mod tests {
 
     fn policy() -> ServingEligibilityFile {
         ServingEligibilityFile {
+            inventory_listing_types: vec!["sale".into()],
+            observation_required_fact_keys: Vec::new(),
+            observation_required_prefixes: Vec::new(),
             version: 1,
             minimum_projected_properties: 1,
             missing_projection_reason_code: "missing_property_projection".to_string(),
@@ -593,11 +607,6 @@ mod tests {
                     reason_code: "missing_property_area".to_string(),
                     predicate: EligibilityValuePredicate::AnyNonEmpty,
                     fields: vec!["area".to_string()],
-                },
-                ProjectedPropertyRequirement {
-                    reason_code: "missing_property_size".to_string(),
-                    predicate: EligibilityValuePredicate::AnyPositive,
-                    fields: vec!["carpet_area_sqft".to_string()],
                 },
                 ProjectedPropertyRequirement {
                     reason_code: "missing_property_builder".to_string(),
@@ -783,14 +792,20 @@ mod tests {
 
         assert_eq!(result.quarantine.societies.len(), 1);
         let quarantined = &result.quarantine.societies[0];
-        assert_eq!(quarantined.runtime_society_id, "soc-incomplete");
+        assert_eq!(quarantined.runtime_society_id, "society:incomplete");
         assert_eq!(
             quarantined.reason_codes,
-            vec!["missing_property_media".to_string()]
+            vec![
+                "missing_property_builder".to_string(),
+                "missing_property_media".to_string()
+            ]
         );
         assert_eq!(
             quarantined.property_entity_ids,
-            vec!["property:incomplete-2bhk".to_string()]
+            vec![
+                "property:discovered-incomplete".to_string(),
+                "property:incomplete-2bhk".to_string()
+            ]
         );
     }
 

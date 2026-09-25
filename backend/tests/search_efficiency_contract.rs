@@ -49,7 +49,6 @@ fn inert_test_plan(query: &str, snapshot: &str) -> backend::search::CompiledSear
 #[test]
 fn indexed_search_prunes_large_mock_corpus_before_ranking() {
     let properties = mock_property_corpus();
-    let society_names = society_names(&properties);
     let index = SearchIndex::build(&properties);
     let query = "3bhk east bangalore under 2cr";
     let intent = parse_intent(query);
@@ -71,9 +70,48 @@ fn indexed_search_prunes_large_mock_corpus_before_ranking() {
         "recall ratio {recall_ratio:.4} should stay under {MAX_RECALL_CANDIDATE_RATIO:.4}"
     );
 
+    let mut entities = Vec::new();
+    let mut edges = Vec::new();
+    for property in &properties {
+        let society = format!("society:{}", property.society_id);
+        let area = format!("area:{}", property.area_id);
+        for (id, kind, name) in [
+            (&society, "society", &property.title),
+            (&area, "area", &property.area),
+        ] {
+            entities.push(ServingEntityRecord {
+                entity_id: id.clone(),
+                entity_type: kind.to_string(),
+                name: name.clone(),
+                root_source: Some("controlled-catalog".to_string()),
+                visibility: Default::default(),
+                searchable_text: name.clone(),
+            });
+        }
+        edges.push(ServingEdgeRecord {
+            from_entity_id: society,
+            to_entity_id: area,
+            edge_type: "in_area".to_string(),
+            confidence: 1.0,
+            source_type: "OpenStreetMap".to_string(),
+            derivation: None,
+        });
+    }
+    entities.sort_by(|a, b| a.entity_id.cmp(&b.entity_id));
+    entities.dedup_by(|a, b| a.entity_id == b.entity_id);
+    let bundle = loaded_bundle_with_edges(entities, Vec::new(), edges);
+    let search_index =
+        SearchIndex::build_with_serving_graph(&properties, &bundle.entities, &bundle.edges);
+    let identities = backend::search::identity::IdentityEvaluationIndex::from_records(
+        &bundle.entities,
+        &bundle.edges,
+        search_support::SNAPSHOT_IDENTITY,
+    );
+    let snapshot = search_runtime_snapshot(bundle, &properties, search_index);
+    let compiled = SearchEngine::new(&snapshot).compile_initial(query, "root");
     let inventory_options = inventory_options(&properties);
+    let society_names = society_names(&properties);
     let started = Instant::now();
-    let compiled_query = IntentAst::from_text(query);
     let results = CandidateEvaluator::search(CandidateEvaluationRequest {
         properties: &properties,
         search_index: Some(&index),
@@ -82,10 +120,13 @@ fn indexed_search_prunes_large_mock_corpus_before_ranking() {
         geo_query: None,
         serving_facts: None,
         society_names: &society_names,
-        query: &compiled_query.raw,
-        intent: &compiled_query.intent,
-        constraints: &compiled_query.constraints,
-        evaluation: inventory_context(&inventory_options),
+        query,
+        intent: &intent,
+        constraints: &compiled.branches[0].predicates,
+        evaluation: backend::search::SearchEvaluationContext {
+            identities: Some(&identities),
+            ..inventory_context(&inventory_options)
+        },
     });
     let elapsed = started.elapsed();
 
@@ -826,7 +867,7 @@ fn empty_response(query: &str) -> SearchExecution {
         result_sets: Vec::new(),
         ordered_result_ids: Vec::new(),
         total_matches: 0,
-        area_context: None,
+
         state: "no_matches".to_string(),
         search_guidance: None,
     }
@@ -962,7 +1003,6 @@ fn search_runtime_snapshot(
         Arc::new(bundle),
         properties.to_vec(),
         mock_societies(properties),
-        Vec::new(),
         search_index,
     )
 }
@@ -1014,8 +1054,7 @@ fn loaded_bundle_core(
     let entity_index = SpatialEntityIndex::from_serving_bundle(&entities, &fact_index);
     let spatial_index =
         SpatialServingIndex::from_serving_bundle_with_edges(&entities, &fact_index, &edges);
-    let mut graph_index = GraphIndex::from_serving_bundle(&entities, &edges, "efficiency-contract");
-    graph_index.add_entity_aliases(&backend::serving::unique_society_aliases(&entities));
+    let graph_index = GraphIndex::from_serving_bundle(&entities, &edges, "efficiency-contract");
     let evidence_index =
         backend::serving::ServingEvidenceIndex::from_records(fact_index.all_facts(), &edges)
             .expect("efficiency fixture evidence index");
@@ -1152,6 +1191,7 @@ fn property_with_description(
         price_per_sqft: 12_000,
         carpet_area_sqft: 1_200,
         super_builtup_sqft: 1_550,
+        area_measurement: None,
         floor: 8,
         total_floors: 20,
         facing: "East".to_string(),
@@ -1177,7 +1217,7 @@ fn property_with_description(
         images: Vec::new(),
         hero_image: String::new(),
         description_summary: description_summary.to_string(),
-        transparency_tags: Vec::new(),
+
         source_reference: "search-efficiency-contract".to_string(),
     }
 }

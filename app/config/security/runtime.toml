@@ -36,11 +36,9 @@ max_result_id_bytes = 512
 max_target_id_bytes = 512
 max_intent_predicates = 64
 
-[surface_requests]
+[context_requests]
 batch_property_limit = 24
-surface_id_limit = 8
 max_property_id_bytes = 512
-max_surface_id_bytes = 256
 
 [requests]
 public_timeout_ms = 3000
@@ -52,7 +50,6 @@ max_request_target_bytes = 8192
 max_search_query_bytes = 2048
 search_body_bytes = 131072
 batch_body_bytes = 65536
-interest_body_bytes = 16384
 admin_body_bytes = 65536
 
 [rate_limits.read]
@@ -67,10 +64,6 @@ burst = 16
 period_ms = 1000
 burst = 30
 
-[rate_limits.interest]
-period_ms = 30000
-burst = 5
-
 [rate_limits.admin]
 period_ms = 1000
 burst = 20
@@ -80,10 +73,3 @@ stream_concurrency = 64
 
 [retention]
 serving_cache_versions = 8
-
-[interest_storage]
-max_name_chars = 120
-max_contact_chars = 320
-max_record_bytes = 1024
-max_property_file_bytes = 262144
-max_total_bytes = 33554432

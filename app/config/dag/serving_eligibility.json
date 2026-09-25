@@ -1,18 +1,29 @@
 {
-  "version": 5,
+  "version": 7,
+  "inventory_listing_types": ["sale"],
   "minimum_projected_properties": 1,
   "missing_projection_reason_code": "missing_property_projection",
   "property_requirements": [
     {
       "reason_code": "missing_property_area",
       "predicate": "any_non_empty",
-      "fields": ["area"]
-    },
-    {
-      "reason_code": "missing_property_size",
-      "predicate": "any_positive",
-      "fields": ["carpet_area_sqft"]
+      "fields": [
+        "area"
+      ]
     }
   ],
-  "society_requirements": []
+  "society_requirements": [],
+  "observation_required_fact_keys": [
+    "bhk",
+    "price",
+    "price_min",
+    "price_max",
+    "price_per_sqft",
+    "carpet_area_sqft",
+    "super_builtup_sqft"
+  ],
+  "observation_required_prefixes": [
+    "listing_",
+    "pricing_"
+  ]
 }

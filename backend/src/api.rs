@@ -75,27 +75,10 @@ pub fn build_app_router_with_lake(state: Arc<AppState>, lake: LakeStore) -> Rout
                 get(routes::properties::get_property_recommendations),
             )
             .route(
-                "/api/properties/{id}/surfaces/{surface_id}",
-                get(routes::surfaces::get_property_surface),
+                "/api/properties/{id}/context",
+                get(routes::property_context::get_property_context),
             )
-            .route(
-                "/api/properties/{id}/surfaces",
-                get(routes::surfaces::list_property_surfaces),
-            )
-            .route("/api/areas", get(routes::areas::list_areas))
-            .route("/api/areas/tracker", get(routes::areas::area_tracker))
-            .route("/api/areas/{id}", get(routes::areas::get_area))
-            .route("/api/shortlist", get(routes::shortlist::get_shortlist))
             .route("/api/discovery", get(routes::discovery::discovery_home))
-            .route(
-                "/api/societies/search",
-                get(routes::societies::search_societies),
-            )
-            .route("/api/societies/{slug}", get(routes::societies::get_society))
-            .route(
-                "/api/properties/{id}/interests/count",
-                get(routes::interests::get_interest_count),
-            )
             .route("/api/sitemap.xml", get(routes::sitemap::sitemap_xml)),
     );
 
@@ -124,17 +107,13 @@ pub fn build_app_router_with_lake(state: Arc<AppState>, lake: LakeStore) -> Rout
     let batch_routes = security.protect_batch_reads(
         Router::new()
             .route(
-                "/api/properties/surfaces/batch",
-                post(routes::surfaces::get_property_surfaces_batch),
+                "/api/properties/batch",
+                post(routes::properties::property_summaries),
             )
             .route(
-                "/api/properties/evidence/batch",
-                post(routes::properties::get_property_evidence_batch),
+                "/api/properties/context/batch",
+                post(routes::property_context::get_property_context_batch),
             ),
-    );
-
-    let interest_routes = security.protect_interest_writes(
-        Router::new().route("/api/interests", post(routes::interests::express_interest)),
     );
 
     let admin_routes = security.protect_admin(
@@ -153,7 +132,6 @@ pub fn build_app_router_with_lake(state: Arc<AppState>, lake: LakeStore) -> Rout
                 .merge(catalog_routes)
                 .merge(search_routes)
                 .merge(batch_routes)
-                .merge(interest_routes)
                 .merge(admin_routes)
                 .fallback(|| async { axum::http::StatusCode::NOT_FOUND }),
         )

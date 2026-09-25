@@ -1,26 +1,23 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 
-use crate::knowledge::graph::KnowledgeGraph;
 use crate::models::{Property, PropertyCard, Society};
-use crate::routes::enrichment::{enrich_property_card, society_node_id};
+use crate::routes::enrichment::society_node_id;
 use crate::routes::properties::{
     build_source_panels, evidence_section_from_panel, overlay_serving_google_reviews,
     PropertyEvidenceResponse,
 };
 use crate::scoring::{
-    score_property_for_surface, scoring_policy, signal_score, CandidateScore, FactAvailability,
+    score_recommendation_candidate, scoring_policy, signal_score, CandidateScore, FactAvailability,
     RecommendationBranchPolicy, RecommendationEligibilityPolicy,
     RecommendationFallbackBranchPolicy, RecommendationRecallChannelPolicy,
     RecommendationRecallOperator, RecommendationRecallPolicy, ScoredSignal,
 };
-use crate::serving::{unique_society_aliases, LoadedServingBundle, TantivyRecallHit};
+use crate::serving::{LoadedServingBundle, TantivyRecallHit};
 
 use super::branch::{
     compass_magnitude, BranchLens, EvidenceDelta, RecallChannelHit, RecommendationBranch,
 };
 use super::snapshot::{summarize_evidence_sections, EvidenceSnapshot};
-
-const RECOMMENDATION_SURFACE: &str = "recommendations";
 
 struct Candidate {
     property: Property,
@@ -47,7 +44,6 @@ struct BranchBuildState<'a> {
 pub struct RecommendationBranchInputs<'a> {
     pub current: &'a Property,
     pub current_evidence: &'a PropertyEvidenceResponse,
-    pub graph: &'a KnowledgeGraph,
     pub properties: &'a [Property],
     pub societies: &'a [Society],
     pub serving_bundle: Option<&'a LoadedServingBundle>,
@@ -60,7 +56,6 @@ pub fn build_recommendation_branches(
     let RecommendationBranchInputs {
         current,
         current_evidence,
-        graph,
         properties,
         societies,
         serving_bundle,
@@ -68,17 +63,11 @@ pub fn build_recommendation_branches(
     } = inputs;
 
     let current_snapshot = summarize_evidence_sections(&current_evidence.sections);
-    let current_score = score_property_for_surface(
-        current,
-        serving_bundle,
-        area_median_ppsf,
-        RECOMMENDATION_SURFACE,
-    );
+    let current_score = score_recommendation_candidate(current, serving_bundle, area_median_ppsf);
     let policy = scoring_policy();
     let recall_policy = &policy.recommendation_recall;
     let candidates = recall_candidates(
         current,
-        graph,
         properties,
         societies,
         serving_bundle,
@@ -137,7 +126,6 @@ pub fn build_recommendation_branches(
 
 fn recall_candidates(
     current: &Property,
-    graph: &KnowledgeGraph,
     properties: &[Property],
     societies: &[Society],
     serving_bundle: Option<&LoadedServingBundle>,
@@ -187,7 +175,7 @@ fn recall_candidates(
         }
     }
 
-    let property_index = PropertyEntityIndex::new(properties, serving_bundle, &eligible_ids);
+    let property_index = PropertyEntityIndex::new(properties, &eligible_ids);
     add_serving_graph_recall(
         current,
         serving_bundle,
@@ -241,12 +229,14 @@ fn recall_candidates(
             let property = properties.iter().find(|property| property.id == id)?;
             channels.sort_by(|left, right| left.channel.cmp(&right.channel));
             let card = overlay_serving_google_reviews(
-                enrich_property_card(property, societies, graph),
+                crate::routes::properties::property_card(property, societies),
                 &property.society_id,
                 serving_bundle.map(|bundle| &bundle.fact_index),
             );
             let source_panels = build_source_panels(
-                graph,
+                serving_bundle
+                    .map(|bundle| bundle.manifest.proof_snapshot_identity())
+                    .unwrap_or(""),
                 property,
                 serving_bundle.map(|bundle| &bundle.fact_index),
                 serving_bundle.map(|bundle| &bundle.graph_index),
@@ -256,12 +246,7 @@ fn recall_candidates(
                 .map(|panel| evidence_section_from_panel(panel, &card.kg_entity_refs))
                 .collect::<Vec<_>>();
             let snapshot = summarize_evidence_sections(&sections);
-            let score = score_property_for_surface(
-                property,
-                serving_bundle,
-                area_median_ppsf,
-                RECOMMENDATION_SURFACE,
-            );
+            let score = score_recommendation_candidate(property, serving_bundle, area_median_ppsf);
             Some(Candidate {
                 property: property.clone(),
                 card,
@@ -279,23 +264,12 @@ struct PropertyEntityIndex {
 }
 
 impl PropertyEntityIndex {
-    fn new(
-        properties: &[Property],
-        serving_bundle: Option<&LoadedServingBundle>,
-        eligible_ids: &HashSet<&str>,
-    ) -> Self {
-        let canonical_by_alias: HashMap<String, String> = serving_bundle
-            .map(|bundle| {
-                unique_society_aliases(&bundle.entities)
-                    .into_iter()
-                    .collect()
-            })
-            .unwrap_or_default();
+    fn new(properties: &[Property], eligible_ids: &HashSet<&str>) -> Self {
         let mut entity_by_property = HashMap::new();
         let mut properties_by_entity = HashMap::<String, Vec<String>>::new();
         for property in properties {
             let alias = society_node_id(&property.society_id);
-            let entity_id = canonical_by_alias.get(&alias).cloned().unwrap_or(alias);
+            let entity_id = alias;
             entity_by_property.insert(property.id.clone(), entity_id.clone());
             if eligible_ids.contains(property.id.as_str()) {
                 properties_by_entity
@@ -861,12 +835,8 @@ fn society_key_from_card(property: &PropertyCard) -> String {
 
 fn recommendation_query(current: &Property) -> String {
     format!(
-        "{} {} {} {} {}",
-        current.title,
-        current.area,
-        current.society_id,
-        current.builder_name,
-        current.transparency_tags.join(" ")
+        "{} {} {} {}",
+        current.title, current.area, current.society_id, current.builder_name
     )
 }
 

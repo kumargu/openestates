@@ -10,7 +10,7 @@ use crate::state::SearchRuntimeSnapshot;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet, VecDeque};
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JourneyCollection {
     pub id: String,
@@ -21,7 +21,7 @@ pub struct JourneyCollection {
     pub cards: Vec<BrowsePropertyCard>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(schemars::JsonSchema, Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CollectionPriceBand {
     pub min: u64,

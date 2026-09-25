@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use backend::graph::GraphIndex;
-use backend::knowledge::{FactValue, KnowledgeGraph};
+use backend::knowledge::FactValue;
 use backend::models::{KgEntityRefs, Property, Society};
 use backend::recommendations::{
     build_recommendation_branches, RecommendationBranch, RecommendationBranchInputs,
@@ -233,7 +233,6 @@ fn execute(case: &ScenarioCase, reverse_candidates: bool) -> Vec<RecommendationB
     let properties = specs.iter().map(property).collect::<Vec<_>>();
     let societies = specs.iter().map(society).collect::<Vec<_>>();
     let bundle = build_bundle(case, &specs);
-    let graph = KnowledgeGraph::new();
     let anchor = properties
         .iter()
         .find(|property| property.id == case.anchor.id)
@@ -243,7 +242,6 @@ fn execute(case: &ScenarioCase, reverse_candidates: bool) -> Vec<RecommendationB
     build_recommendation_branches(RecommendationBranchInputs {
         current: anchor,
         current_evidence: &evidence,
-        graph: &graph,
         properties: &properties,
         societies: &societies,
         serving_bundle: Some(&bundle),
@@ -389,6 +387,7 @@ fn property(spec: &PropertySpec) -> Property {
         price_per_sqft: spec.ppsf,
         carpet_area_sqft: if listable { 1_350 } else { 0 },
         super_builtup_sqft: if listable { 1_650 } else { 0 },
+        area_measurement: None,
         floor: 8,
         total_floors: 20,
         facing: "East".to_string(),
@@ -414,7 +413,7 @@ fn property(spec: &PropertySpec) -> Property {
         images: Vec::new(),
         hero_image: String::new(),
         description_summary: "Controlled recommendation scenario".to_string(),
-        transparency_tags: Vec::new(),
+
         source_reference: "recommendation-scenarios-contract".to_string(),
     }
 }

@@ -936,16 +936,19 @@ export function ReraReportPage() {
 }
 
 function ReraReportContent({ id }: { id: string }) {
+  const searchContext = useSearchSpan();
+  const snapshotIdentity = searchContext?.runtimeVersion.snapshotIdentity;
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     let active = true;
-    Promise.all([getProperty(id), getPropertyRera(id)])
-      .then(([detail, report]) => active && setState({ status: "ready", detail, report }))
+    getProperty(id, { snapshotIdentity })
+      .then(async (detail) => ({ detail, report: await getPropertyRera(id, { snapshotIdentity: detail.snapshot_identity }) }))
+      .then(({ detail, report }) => active && setState({ status: "ready", detail, report }))
       .catch(() => active && setState({ status: "error" }));
     return () => { active = false; };
-  }, [id, retryKey]);
+  }, [id, retryKey, snapshotIdentity]);
 
   if (state.status === "loading") return <PageState variant="loading" context="property" />;
   if (state.status === "error") {
@@ -1006,7 +1009,7 @@ function ReraReportContent({ id }: { id: string }) {
           />
           <Inventory section={surfaceById(report.surface.sections, "inventory")} evidence={report.evidence} />
           <Plans
-            plans={detail.plans}
+            plans={detail.plans ?? undefined}
             surface={surfaceById(report.surface.sections, "plans")}
           />
           <Documents

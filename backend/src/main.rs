@@ -59,17 +59,10 @@ fn main() {
     println!("  GET /api/health");
     println!("  GET /media/*path");
     println!("  GET /api/properties | /api/properties/{{id}} | /api/properties/{{id}}/evidence | /api/properties/{{id}}/rera | /api/properties/{{id}}/recommendations");
-    println!(
-        "  GET /api/properties/{{id}}/surfaces | /api/properties/{{id}}/surfaces/{{surface_id}}"
-    );
-    println!("  POST /api/properties/surfaces/batch");
-    println!("  POST /api/properties/evidence/batch");
-    println!("  GET /api/areas | /api/areas/tracker | /api/areas/{{id}}");
+    println!("  GET /api/properties/{{id}}/context");
+    println!("  POST /api/properties/context/batch");
     println!("  GET /api/discovery");
     println!("  GET /api/search?q=...");
-    println!("  GET /api/societies/search?q=... | /api/societies/{{slug}}");
-    println!("  POST /api/interests");
-    println!("  GET /api/properties/{{id}}/interests/count");
     println!("  GET  /api/sitemap.xml");
     println!("Public site origin: {public_site_origin}");
     if let Some(path) = loaded_env_file {

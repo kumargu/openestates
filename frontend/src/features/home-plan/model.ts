@@ -192,8 +192,8 @@ function rupeesToNearestThousands(value: number, config: PlanModelConfig): numbe
 }
 
 /** A plan needs a real price; without one there is nothing to finance. */
-export function hasPlannablePrice(propertyPriceInr: number): boolean {
-  return Number.isFinite(propertyPriceInr) && propertyPriceInr > 0;
+export function hasPlannablePrice(propertyPriceInr: number | undefined): propertyPriceInr is number {
+  return typeof propertyPriceInr === "number" && Number.isFinite(propertyPriceInr) && propertyPriceInr > 0;
 }
 
 /**

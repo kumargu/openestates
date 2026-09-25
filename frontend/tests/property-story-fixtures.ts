@@ -232,7 +232,6 @@ export function storyLabDetailFixture(
   }
 
   if (options.coverage === "sparse") {
-    detail.similar_properties = [];
     delete detail.external_reviews;
     detail.rera_report_ref = {
       registration_ids: [],
@@ -240,8 +239,6 @@ export function storyLabDetailFixture(
       availability: "unavailable",
     };
     delete detail.decision_check_summary;
-  } else if (options.coverage === "partial") {
-    detail.similar_properties = detail.similar_properties.slice(0, 1);
   }
 
   return detail;

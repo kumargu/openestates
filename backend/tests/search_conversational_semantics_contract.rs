@@ -3126,7 +3126,6 @@ impl MockSearchFixture {
             self.bundle.clone(),
             self.properties.clone(),
             mock_societies(&self.properties),
-            Vec::new(),
             index,
         )
     }
@@ -3437,7 +3436,7 @@ impl FixtureBuilder {
         let recall_facts = self
             .facts
             .iter()
-            .filter(|fact| fact.source_type != "ControlledInventoryReceipt")
+            .filter(|fact| fact.source_type != "ExternalListing")
             .cloned()
             .collect::<Vec<_>>();
         let recall_index =
@@ -3451,12 +3450,11 @@ impl FixtureBuilder {
             &edges,
         );
         let search_capabilities = SearchCapabilityIndex::from_bundle(&self.entities, &fact_index);
-        let mut graph_index = GraphIndex::from_serving_bundle(
+        let graph_index = GraphIndex::from_serving_bundle(
             &self.entities,
             &edges,
             "conversational-semantics-mock",
         );
-        graph_index.add_entity_aliases(&backend::serving::unique_society_aliases(&self.entities));
         let evidence_index =
             backend::serving::ServingEvidenceIndex::from_records(fact_index.all_facts(), &edges)
                 .expect("conversational fixture evidence index");
@@ -3960,6 +3958,7 @@ fn property(spec: &HomeSpec, society_id: &str) -> Property {
         price_per_sqft: 12_000,
         carpet_area_sqft: 1_200,
         super_builtup_sqft: 1_550,
+        area_measurement: None,
         floor: 8,
         total_floors: 20,
         facing: "East".to_string(),
@@ -3990,7 +3989,7 @@ fn property(spec: &HomeSpec, society_id: &str) -> Property {
         images: Vec::new(),
         hero_image: String::new(),
         description_summary: "Controlled conversational-search fixture".to_string(),
-        transparency_tags: Vec::new(),
+
         source_reference: "conversational-semantics-contract".to_string(),
     }
 }
@@ -4018,7 +4017,7 @@ fn serving_fact(entity_id: &str, fact_key: &str, value: FactValue) -> ServingFac
         vec!["asset:controlled-search-fixture/v1".to_string()],
     )
     .unwrap();
-    ServingFactRecord {
+    backend::serving::measurements::normalize_distance_fact(ServingFactRecord {
         entity_id: entity_id.to_string(),
         fact_key: fact_key.to_string(),
         value_type: match &value {
@@ -4037,11 +4036,13 @@ fn serving_fact(entity_id: &str, fact_key: &str, value: FactValue) -> ServingFac
         skill_id: Some("search_conversational_semantics_contract".to_string()),
         learned_at: observed_at,
         observation: Some(observation),
-    }
+    })
 }
 
 fn inventory_receipt_fact(entity_id: &str, spec: &HomeSpec) -> ServingFactRecord {
     let value = serde_json::json!({
+        "property_id": spec.id,
+        "listing_type": "sale",
         "bhk": spec.bhk,
         "price": spec.price,
         "area_sqft": 1_600,
@@ -4049,10 +4050,10 @@ fn inventory_receipt_fact(entity_id: &str, spec: &HomeSpec) -> ServingFactRecord
     .to_string();
     let mut fact = serving_fact(
         entity_id,
-        "controlled_inventory_option",
+        &format!("listing_{}bhk", spec.bhk),
         FactValue::Text(value),
     );
-    fact.source_type = "ControlledInventoryReceipt".to_string();
+    fact.source_type = "ExternalListing".to_string();
     fact.source_url = Some(format!("https://example.test/listings/{}", spec.id));
     fact.observation = Some(
         SourceObservation::new(

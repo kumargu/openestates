@@ -82,7 +82,6 @@ impl ServingBundleLoader {
         let entity_alias_index = ServingEntityAliasIndex::from_records(entity_aliases)
             .map_err(|err| ServingBundleLoadError::Configuration(err.to_string()))?;
         let edges = load_edges(&self.lake, &manifest).await?;
-        let aliases = super::types::unique_society_aliases(&entities);
         let mut fact_index = load_fact_index(&self.lake, &manifest).await?;
         validate_serving_edge_evidence(
             &edges,
@@ -92,13 +91,10 @@ impl ServingBundleLoader {
         .map_err(ServingBundleLoadError::Configuration)?;
         let evidence_index = ServingEvidenceIndex::from_records(fact_index.all_facts(), &edges)
             .map_err(ServingBundleLoadError::Configuration)?;
-        fact_index.add_society_aliases(&entities);
         fact_index.add_canonical_spatial_bindings(&edges);
-        let mut rera_evidence_index = load_rera_evidence_index(&self.lake, &manifest).await?;
-        rera_evidence_index.add_aliases(&aliases);
-        let mut graph_index =
+        let rera_evidence_index = load_rera_evidence_index(&self.lake, &manifest).await?;
+        let graph_index =
             GraphIndex::from_serving_bundle(&entities, &edges, manifest.proof_snapshot_identity());
-        graph_index.add_entity_aliases(&aliases);
         let entity_index =
             SpatialEntityIndex::from_serving_bundle_with_edges(&entities, &fact_index, &edges);
         let spatial_index =

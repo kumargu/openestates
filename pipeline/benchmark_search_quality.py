@@ -163,10 +163,7 @@ def main() -> None:
             [result.get("id") for result in flattened_results(item)]
             for item in successful_responses
         ]
-        if (case.get("expected") or {}).get("proof_handoff_matches_all"):
-            response["_proof_handoffs"] = collect_proof_handoffs(
-                args.base_url, response, args.timeout_seconds
-            )
+        response["_proof_handoffs"] = collect_proof_handoffs(args.base_url, response, args.timeout_seconds)
 
         checks = evaluate_case(case, response)
         passed = sum(1 for item in checks if item["passed"])
@@ -278,6 +275,7 @@ def call_search(base_url: str, query: str, timeout_seconds: int) -> Optional[Dic
         started_at = time.perf_counter()
         with urllib.request.urlopen(url, timeout=timeout_seconds) as response:
             payload = json.loads(response.read())
+            journey_results(payload)
             payload["_request_duration_ms"] = (time.perf_counter() - started_at) * 1000
             return payload
     except (urllib.error.URLError, json.JSONDecodeError) as err:
@@ -295,6 +293,108 @@ def call_health(base_url: str, timeout_seconds: int) -> Optional[Dict[str, Any]]
         return None
 
 
+def project_context_handoff(
+    context: Dict[str, Any], focus: Dict[str, Any], serving_bundle_version: Any
+) -> Dict[str, Any]:
+    """Project the typed context receipt into the benchmark's focus contract."""
+    proof = field_value(context, "matched_proof")
+    scene = {
+        "servingBundleVersion": serving_bundle_version,
+        "proofFocus": None,
+        "features": [],
+        "receipts": [],
+    }
+    if not isinstance(proof, dict):
+        return scene
+
+    source_ids = {
+        field_value(source, "observation_id")
+        for source in field_value(proof, "source_observations") or []
+        if isinstance(source, dict)
+    }
+    derivation_ids = {
+        field_value(item, "derivation_id")
+        for item in field_value(proof, "derivation_chain") or []
+        if isinstance(item, dict)
+    }
+    matched = None
+    for candidate in context.get("features") or []:
+        if not isinstance(candidate, dict):
+            continue
+        fact = candidate.get("fact")
+        target = candidate.get("target")
+        if not isinstance(fact, dict):
+            continue
+        evidence = field_value(fact, "evidence") or {}
+        evidence_id = field_value(evidence, "evidence_id") or {}
+        target_id = field_value(target, "entity_id") if isinstance(target, dict) else None
+        if (
+            field_value(fact, "fact_key") == field_value(proof, "fact_key")
+            and (
+                not field_value(proof, "target_entity_id")
+                or target_id == field_value(proof, "target_entity_id")
+            )
+            and field_value(evidence_id, "id") in (source_ids | derivation_ids)
+        ):
+            matched = candidate
+            break
+
+    if matched is not None:
+        fact = matched["fact"]
+        target = matched.get("target") or {}
+        geometry = field_value(target, "geometry")
+        point = field_value(target, "point")
+        if not geometry and point:
+            geometry = {"type": "Point", "coordinates": point}
+        receipt = {
+            "id": field_value(fact, "id"),
+            "factKey": field_value(fact, "fact_key"),
+            "sourceType": field_value(fact, "source_type"),
+            "sourceUrl": field_value(fact, "source_url"),
+            "learnedAt": field_value(fact, "observed_at"),
+        }
+        entity_id = field_value(target, "entity_id")
+    else:
+        derivations = field_value(proof, "derivation_chain") or []
+        sources = field_value(proof, "source_observations") or []
+        geometry = field_value(proof, "geometry")
+        if not geometry or not derivations or not sources:
+            return scene
+        derivation = derivations[0]
+        source = sources[0]
+        receipt = {
+            "id": field_value(derivation, "derivation_id"),
+            "factKey": field_value(proof, "fact_key"),
+            "sourceType": field_value(source, "provider"),
+            "sourceUrl": field_value(source, "source_url"),
+            "learnedAt": field_value(source, "observed_at"),
+        }
+        entity_id = field_value(proof, "target_entity_id")
+
+    if not geometry:
+        return scene
+    feature_id = ":".join(
+        [
+            str(field_value(focus, "surface_id") or ""),
+            str(field_value(focus, "layer_id") or ""),
+            str(receipt["id"]),
+        ]
+    )
+    scene["proofFocus"] = {
+        **focus,
+        "featureId": feature_id,
+        "receiptId": receipt["id"],
+    }
+    scene["features"] = [{
+        "id": feature_id,
+        "entityId": entity_id,
+        "layerId": field_value(focus, "layer_id"),
+        "receiptIds": [receipt["id"]],
+    }]
+    scene["receipts"] = [receipt]
+    return scene
+
+
 def collect_proof_handoffs(
     base_url: str, response: Dict[str, Any], timeout_seconds: int
 ) -> List[Dict[str, Any]]:
@@ -303,22 +403,42 @@ def collect_proof_handoffs(
         property_id = result.get("id")
         if not isinstance(property_id, str) or not property_id:
             continue
-        for focus in result.get("proof_focuses") or result.get("proofFocuses") or []:
-            if not isinstance(focus, dict):
-                continue
-            surface_id = field_value(focus, "surface_id")
-            if not isinstance(surface_id, str) or not surface_id:
-                continue
+        for reason in result.get("reasons", []):
+            token = reason.get("proofToken")
+            if not token:
+                raise ValueError("search reason has no proof token")
+            request = urllib.request.Request(f"{base_url}/api/search/proofs/resolve",
+                data=json.dumps({"proofToken": token, "propertyId": property_id}).encode(),
+                headers={"Content-Type": "application/json"}, method="POST")
+            with urllib.request.urlopen(request, timeout=timeout_seconds) as resolved_response:
+                receipt = json.loads(resolved_response.read())
+            if receipt.get("resolutionStatus") != "resolved":
+                raise ValueError("emitted search proof did not resolve")
+            presentation = load_json(Path(__file__).resolve().parents[1] / "app/config/ui/property-context.json")
+            destination = {}
+            for surface in presentation["surfaces"]:
+                handoff = surface.get("proofHandoff")
+                if not handoff:
+                    continue
+                layer = next((layer for layer in (surface.get("scene") or {}).get("layers", []) if receipt["factKey"] in layer.get("factKeys", [])), None)
+                if layer or receipt["factKey"] in handoff.get("factKeys", []):
+                    destination = {"surfaceId": surface["id"], "layerId": layer["id"] if layer else None, **handoff}
+                    break
+            focus = {"factKey": receipt["factKey"], "entityId": receipt.get("targetEntityId"),
+                "matchedLabel": receipt.get("targetLabel"), **destination,
+                "destinationKind": destination.get("kind"), "proofToken": token}
+            surface_id = destination.get("surfaceId")
             handoff = {
                 "result_id": property_id,
                 "search_focus": focus,
                 "scene": None,
                 "detail": None,
+                "receipt": receipt,
             }
             try:
                 property_path = urllib.parse.quote(property_id, safe="")
                 destination_kind = field_value(focus, "destination_kind")
-                if destination_kind == "section":
+                if destination_kind == "section" or not surface_id:
                     url = f"{base_url}/api/properties/{property_path}"
                     with urllib.request.urlopen(url, timeout=timeout_seconds) as detail_response:
                         detail = json.loads(detail_response.read())
@@ -326,18 +446,20 @@ def collect_proof_handoffs(
                             handoff["detail"] = detail
                     handoffs.append(handoff)
                     continue
-                surface_path = urllib.parse.quote(surface_id, safe="")
                 focus_query = urllib.parse.urlencode(
-                    {"focus": json.dumps(focus, separators=(",", ":"))}
+                    {"proofToken": token}
                 )
-                url = (
-                    f"{base_url}/api/properties/{property_path}/surfaces/"
-                    f"{surface_path}?{focus_query}"
-                )
-                with urllib.request.urlopen(url, timeout=timeout_seconds) as surface_response:
-                    scene = json.loads(surface_response.read())
-                    if isinstance(scene, dict):
-                        handoff["scene"] = scene
+                url = f"{base_url}/api/properties/{property_path}/context?{focus_query}"
+                with urllib.request.urlopen(url, timeout=timeout_seconds) as context_response:
+                    context = json.loads(context_response.read())
+                    if isinstance(context, dict):
+                        handoff["context"] = context
+                        runtime = response.get("runtimeVersion") or {}
+                        handoff["scene"] = project_context_handoff(
+                            context,
+                            focus,
+                            field_value(runtime, "serving_bundle_version"),
+                        )
             except (urllib.error.URLError, json.JSONDecodeError) as err:
                 handoff["error"] = str(err)
             handoffs.append(handoff)
@@ -395,7 +517,7 @@ def load_suite(
 
 def evaluate_case(case: Dict[str, Any], response: Dict[str, Any]) -> List[Dict[str, Any]]:
     expected = case.get("expected") or {}
-    intent = response.get("intent") or {}
+    intent = response["active"]["intent"]
     checks: List[Dict[str, Any]] = []
     diagnostics = search_diagnostics(response)
     timing_layers = {
@@ -550,7 +672,7 @@ def evaluate_case(case: Dict[str, Any], response: Dict[str, Any]) -> List[Dict[s
             )
         )
     if "state" in expected:
-        got_state = normalize_token(response.get("state"))
+        got_state = normalize_token(journey_results(response).get("state"))
         wanted_state = normalize_token(expected["state"])
         checks.append(
             check(
@@ -561,7 +683,7 @@ def evaluate_case(case: Dict[str, Any], response: Dict[str, Any]) -> List[Dict[s
             )
         )
     if "total_matches" in expected:
-        got_total = response.get("totalMatches", response.get("total_matches", len(results)))
+        got_total = journey_results(response)["totalMatches"]
         checks.append(
             check(
                 "result_count",
@@ -1022,7 +1144,7 @@ def case_result(
             "num_results": len(results),
             "result_sets": result_set_summaries(response),
             "ordered_result_ids": [result.get("id") for result in results],
-            "intent": response.get("intent") or {},
+            "intent": response["active"]["intent"],
             "top_results": result_summaries(results[:5]),
             "learning_gaps": learning_gaps(response),
             "search_diagnostics": search_diagnostics(response),
@@ -1056,9 +1178,7 @@ def result_summaries(results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 "coverage": explanation.get("preference_coverage")
                 or explanation.get("preferenceCoverage")
                 or [],
-                "proof_focuses": result.get("proof_focuses")
-                or result.get("proofFocuses")
-                or [],
+                "proof_focuses": [handoff["search_focus"] for handoff in result.get("_benchmark_proofs", [])],
             }
         )
     return summaries
@@ -1295,18 +1415,20 @@ def proof_handoff_summaries(handoffs: List[Dict[str, Any]]) -> List[Dict[str, An
     return summaries
 
 
-def public_result_sets(response: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Return buyer-visible result sets, with a legacy flat-response adapter."""
-    result_sets = response.get("resultSets") or response.get("result_sets") or []
-    if isinstance(result_sets, list):
-        normalized = [item for item in result_sets if isinstance(item, dict)]
-        if normalized:
-            return normalized
+def journey_results(response: Dict[str, Any]) -> Dict[str, Any]:
+    if response.get("contractVersion") != 1:
+        raise ValueError("unsupported search journey contract version")
+    active = response.get("active")
+    results = active.get("results") if isinstance(active, dict) else None
+    if not isinstance(results, dict) or results.get("kind") != "current":
+        raise ValueError("benchmark requires a current search journey result envelope")
+    if not isinstance(results.get("resultSets"), list) or not isinstance(results.get("orderedResultIds"), list):
+        raise ValueError("invalid search journey results")
+    return results
 
-    legacy_results = response.get("results") or []
-    if not isinstance(legacy_results, list) or not legacy_results:
-        return []
-    return [{"branchId": "legacy", "label": "Results", "results": legacy_results}]
+
+def public_result_sets(response: Dict[str, Any]) -> List[Dict[str, Any]]:
+    return journey_results(response)["resultSets"]
 
 
 def flattened_results(response: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -1319,12 +1441,17 @@ def flattened_results(response: Dict[str, Any]) -> List[Dict[str, Any]]:
             if not isinstance(raw_result, dict):
                 continue
             result = dict(raw_result)
+            result["_benchmark_proofs"] = [handoff for handoff in response.get("_proof_handoffs", []) if handoff["result_id"] == result.get("id")]
             result["_benchmark_branch_id"] = branch_id
             result["_benchmark_branch_label"] = branch_label
             result["_benchmark_branch_rank"] = branch_rank
             result["_benchmark_result_rank"] = result_rank
             flattened.append(result)
-    return flattened
+    by_id = {result["id"]: result for result in flattened}
+    ordered_ids = journey_results(response)["orderedResultIds"]
+    if set(by_id) != set(ordered_ids) or len(set(ordered_ids)) != len(ordered_ids):
+        raise ValueError("journey result membership does not match authoritative ordering")
+    return [by_id[result_id] for result_id in ordered_ids]
 
 
 def result_set_summaries(response: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -1667,12 +1794,8 @@ def top_reasons(results: List[Dict[str, Any]], limit: int) -> List[Dict[str, Any
 
 
 def top_proof_focuses(results: List[Dict[str, Any]], limit: int) -> List[Dict[str, Any]]:
-    focuses: List[Dict[str, Any]] = []
-    for result in results[:limit]:
-        for focus in result.get("proof_focuses") or result.get("proofFocuses") or []:
-            if isinstance(focus, dict):
-                focuses.append(focus)
-    return focuses
+    return [handoff["search_focus"] for result in results[:limit]
+            for handoff in result.get("_benchmark_proofs", [])]
 
 
 def record_matches(record: Dict[str, Any], requirement: Dict[str, Any]) -> bool:
@@ -1693,8 +1816,11 @@ def field_value(record: Dict[str, Any], field: str) -> Any:
 
 
 def get_explanation(result: Dict[str, Any]) -> Dict[str, Any]:
-    explanation = result.get("match_explanation") or result.get("matchExplanation") or {}
-    return explanation if isinstance(explanation, dict) else {}
+    receipts = {handoff["search_focus"]["proofToken"]: handoff["receipt"]
+                for handoff in result.get("_benchmark_proofs", [])}
+    return {"reasons": [{"fact_key": receipts[reason["proofToken"]]["factKey"],
+                         "preference": reason["explanation"], "display": reason["explanation"]}
+                        for reason in result.get("reasons", []) if reason["proofToken"] in receipts]}
 
 
 def learning_gaps(response: Dict[str, Any]) -> List[str]:
@@ -1727,12 +1853,12 @@ def intent_evidence_keys(intent: Dict[str, Any]) -> set[str]:
 
 
 def search_diagnostics(response: Dict[str, Any]) -> Dict[str, Any]:
-    diagnostics = response.get("search_diagnostics") or response.get("searchDiagnostics") or {}
+    diagnostics = {"runtime": response.get("runtimeVersion", {})}
     return diagnostics if isinstance(diagnostics, dict) else {}
 
 
 def search_guidance(response: Dict[str, Any]) -> Dict[str, Any]:
-    guidance = response.get("search_guidance") or response.get("searchGuidance") or {}
+    guidance = journey_results(response).get("guidance") or {}
     return guidance if isinstance(guidance, dict) else {}
 
 

@@ -210,7 +210,7 @@ impl SocietyGoldRecords {
         support_facts: &[SkillFactRecord],
         support_annotations: &[SkillFactAnnotationRecord],
     ) -> Result<Self, SocietyGoldSnapshotMaterializeError> {
-        Self::from_graph_with_asset_rows(graph, &[], &[], support_facts, support_annotations)
+        Self::from_graph_with_asset_rows(graph, &[], &[], support_facts, support_annotations, &[])
     }
 
     pub fn from_graph_with_asset_rows(
@@ -219,9 +219,10 @@ impl SocietyGoldRecords {
         canonical_edges: &[SocietyGoldEdgeRecord],
         support_facts: &[SkillFactRecord],
         support_annotations: &[SkillFactAnnotationRecord],
+        identity_seeds: &[super::SourceEntitySeed],
     ) -> Result<Self, SocietyGoldSnapshotMaterializeError> {
         let mut records = Self::from_graph(graph)?;
-        let canonical_aliases = canonical_society_alias_map(canonical_entities)?;
+        let canonical_aliases = canonical_society_alias_map(canonical_entities, identity_seeds)?;
         records.rewrite_entity_references(&canonical_aliases);
         let shadow_alias_entity_ids = canonical_aliases.keys().cloned().collect();
         records.remove_entities(&shadow_alias_entity_ids)?;
@@ -626,25 +627,36 @@ fn slug(value: &str) -> String {
 
 fn canonical_society_alias_map(
     canonical_entities: &[SocietyGoldEntityRecord],
+    identity_seeds: &[super::SourceEntitySeed],
 ) -> Result<HashMap<String, String>, SocietyGoldSnapshotMaterializeError> {
-    let mut aliases = HashMap::new();
-    for entity in canonical_entities
+    let canonical_ids = canonical_entities
         .iter()
         .filter(|entity| entity.entity_type == "society")
-    {
-        let alias_entity_id = format!("society:{}", slug(&entity.name));
-        if let Some(existing) = aliases.insert(alias_entity_id.clone(), entity.entity_id.clone()) {
-            if existing != entity.entity_id {
+        .map(|entity| entity.entity_id.as_str())
+        .collect::<std::collections::HashSet<_>>();
+    let mut aliases = HashMap::new();
+    for seed in identity_seeds {
+        let Some(alias) = seed
+            .alias_entity_id
+            .as_ref()
+            .filter(|alias| *alias != &seed.entity_id)
+        else {
+            continue;
+        };
+        if !canonical_ids.contains(seed.entity_id.as_str()) {
+            continue;
+        }
+        if let Some(existing) = aliases.insert(alias.clone(), seed.entity_id.clone()) {
+            if existing != seed.entity_id {
                 return Err(
                     SocietyGoldSnapshotMaterializeError::InvalidCanonicalIdentity(format!(
-                        "{alias_entity_id} maps to both {existing} and {}",
-                        entity.entity_id
+                        "explicit alias {alias} maps to both {existing} and {}",
+                        seed.entity_id
                     )),
                 );
             }
         }
     }
-    aliases.retain(|alias, canonical| alias != canonical);
     Ok(aliases)
 }
 
@@ -833,6 +845,7 @@ impl SocietyGoldSnapshotMaterializer {
             &[],
             &[],
             &[],
+            &[],
         )
         .await
     }
@@ -860,6 +873,7 @@ impl SocietyGoldSnapshotMaterializer {
             &[],
             support_facts,
             support_annotations,
+            &[],
         )
         .await
     }
@@ -877,6 +891,7 @@ impl SocietyGoldSnapshotMaterializer {
         canonical_edges: &[SocietyGoldEdgeRecord],
         support_facts: &[SkillFactRecord],
         support_annotations: &[SkillFactAnnotationRecord],
+        identity_seeds: &[super::SourceEntitySeed],
     ) -> Result<SocietyGoldSnapshotMaterialization, SocietyGoldSnapshotMaterializeError> {
         self.materialize_for_run_inner(
             graph,
@@ -889,6 +904,7 @@ impl SocietyGoldSnapshotMaterializer {
             canonical_edges,
             support_facts,
             support_annotations,
+            identity_seeds,
         )
         .await
     }
@@ -906,6 +922,7 @@ impl SocietyGoldSnapshotMaterializer {
         canonical_edges: &[SocietyGoldEdgeRecord],
         support_facts: &[SkillFactRecord],
         support_annotations: &[SkillFactAnnotationRecord],
+        identity_seeds: &[super::SourceEntitySeed],
     ) -> Result<SocietyGoldSnapshotMaterialization, SocietyGoldSnapshotMaterializeError> {
         let view_version = view_version.into();
         let records = SocietyGoldRecords::from_graph_with_asset_rows(
@@ -914,6 +931,7 @@ impl SocietyGoldSnapshotMaterializer {
             canonical_edges,
             support_facts,
             support_annotations,
+            identity_seeds,
         )?;
 
         let entity_key = AssetPathBuilder::gold_asset_key(
@@ -1912,7 +1930,7 @@ mod tests {
     }
 
     #[test]
-    fn duplicate_canonical_society_names_fail_before_kg_merge() {
+    fn duplicate_display_names_preserve_independent_canonical_entities() {
         let learned_at = Utc.with_ymd_and_hms(2026, 8, 16, 7, 0, 0).unwrap();
         let canonical_entities = [
             SocietyGoldEntityRecord {
@@ -1935,18 +1953,25 @@ mod tests {
             },
         ];
 
-        let error = SocietyGoldRecords::from_graph_with_asset_rows(
+        let records = SocietyGoldRecords::from_graph_with_asset_rows(
             &KnowledgeGraph::new(),
             &canonical_entities,
             &[],
             &[],
             &[],
+            &[],
         )
-        .unwrap_err();
+        .unwrap();
 
-        assert!(error.to_string().contains("society:arvind-bel-air"));
-        assert!(error.to_string().contains("society:rera-first"));
-        assert!(error.to_string().contains("society:rera-second"));
+        assert_eq!(records.entities.len(), 2);
+        assert_eq!(
+            records
+                .entities
+                .iter()
+                .map(|entity| entity.entity_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["society:rera-first", "society:rera-second"]
+        );
     }
 
     #[test]
@@ -2012,7 +2037,8 @@ mod tests {
             &[],
             &support_facts,
             &support_annotations,
-        )
+        &[serde_json::from_value(serde_json::json!({ "entity_id": "society:rera-a19f2cf2456fc549", "alias_entity_id": "society:prestige-lavender-fields", "name": "An unrelated display spelling" })).unwrap()],
+    )
         .unwrap();
 
         assert!(records

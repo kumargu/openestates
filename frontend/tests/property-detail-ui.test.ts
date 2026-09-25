@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   propertyDetailPath,
-  propertySurfacePath,
+  propertyContextPath,
 } from "../src/lib/api.ts";
 import {
   availableLayers,
@@ -37,6 +37,7 @@ import {
   wrapPhotoIndex,
 } from "../src/lib/propertyScene.ts";
 import { propertyMapContextFromSurfaceScene } from "../src/lib/surfaceSceneProjection.ts";
+import { proofFocusRendered } from "../src/lib/proof-focus.ts";
 import type { PropertyMapContext, ProofFocus, SurfaceSceneResponse } from "../src/lib/types.ts";
 
 const emptyMapContext: PropertyMapContext = {
@@ -76,13 +77,33 @@ test("detail and surface carry only signed proof identity, never client claims",
   assert.equal(detailUrl.searchParams.get("qf"), "q123");
 
   const surfaceUrl = new URL(
-    propertySurfacePath("property id/with slash", "around_this_home", focus),
+    propertyContextPath("property id/with slash", focus.proofToken),
     "http://test.local",
   );
-  assert.equal(surfaceUrl.pathname, "/api/properties/property%20id%2Fwith%20slash/surfaces/around_this_home");
+  assert.equal(surfaceUrl.pathname, "/api/properties/property%20id%2Fwith%20slash/context");
   assert.equal(surfaceUrl.searchParams.get("proofToken"), focus.proofToken);
   assert.equal(surfaceUrl.searchParams.has("focus"), false);
   assert.equal(propertyDetailPath("home", { ...focus, proofToken: undefined }), "/property/home");
+});
+
+test("scene proof suppresses the generic receipt only after its focus renders", () => {
+  const focus: ProofFocus = {
+    proofToken: "signed:nonspatial",
+    surfaceId: "water_context",
+    layerId: "groundwater",
+    factKey: "environment.groundwater_potential_class",
+    destinationKind: "scene",
+    targetId: "around-this-home",
+  };
+  assert.equal(proofFocusRendered(focus, null), false);
+  assert.equal(proofFocusRendered(focus, {
+    proofFocusStatus: "notRequested",
+  } as SurfaceSceneResponse), false);
+  assert.equal(proofFocusRendered(focus, {
+    proofFocusStatus: "applied",
+    proofFocus: focus,
+  } as SurfaceSceneResponse), true);
+  assert.equal(proofFocusRendered({ ...focus, destinationKind: "section" }, null), true);
 });
 
 test("around-this-home stays hidden without usable context", () => {

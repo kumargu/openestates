@@ -2,9 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::models::Property;
 use crate::routes::enrichment::society_node_id;
-use crate::serving::{
-    unique_society_aliases, ServingEdgeRecord, ServingEntityRecord, TantivyRecallHit,
-};
+use crate::serving::{ServingEdgeRecord, ServingEntityRecord, TantivyRecallHit};
 
 use super::analyzer;
 use super::ast::{ConstraintExpr, ConstraintTerm, IntentAst};
@@ -45,8 +43,7 @@ impl SearchIndex {
     }
 
     /// Build property recall mappings with canonical society identities from
-    /// the promoted serving bundle. Runtime properties retain readable society
-    /// slugs, while serving documents use canonical entity IDs.
+    /// the promoted serving bundle. Runtime properties carry canonical society IDs.
     pub fn build_with_serving_entities(
         properties: &[Property],
         entities: &[ServingEntityRecord],
@@ -74,23 +71,6 @@ impl SearchIndex {
             }
         }
         index.add_serving_society_memberships(entities, edges);
-        for (alias, canonical_id) in unique_society_aliases(entities) {
-            let Some(property_ids) = index.by_entity_node.get(&alias).cloned() else {
-                continue;
-            };
-            let canonical_property_ids = index
-                .by_entity_node
-                .entry(canonical_id.clone())
-                .or_default();
-            for property_id in &property_ids {
-                push_unique(canonical_property_ids, property_id);
-            }
-            for property_id in property_ids {
-                index
-                    .society_entity_by_property
-                    .insert(property_id, canonical_id.clone());
-            }
-        }
         index.add_serving_builder_memberships(entities, edges);
         index.add_serving_market_locality_memberships(entities, edges);
         index
@@ -214,15 +194,14 @@ impl SearchIndex {
         self.price_max_by_id.insert(property.id.clone(), price_max);
 
         let text = format!(
-            "{} {} {} {} {} {} {} {}",
+            "{} {} {} {} {} {} {}",
             property.title,
             property.area,
             property.city,
             property.society_id.replace('-', " "),
             property.society_id,
             property.builder_name,
-            property.description_summary,
-            property.transparency_tags.join(" ")
+            property.description_summary
         );
         for token in analyzer::search_tokens(&text, super::schema::query_stopwords()) {
             push_unique(self.by_token.entry(token).or_default(), &property.id);
@@ -388,16 +367,6 @@ impl SearchIndex {
             .get(entity_id)
             .cloned()
             .unwrap_or_default()
-    }
-
-    pub(crate) fn entity_has_property(&self, entity_id: &str, property_id: &str) -> bool {
-        self.by_property_node
-            .get(entity_id)
-            .is_some_and(|id| id == property_id)
-            || self
-                .by_entity_node
-                .get(entity_id)
-                .is_some_and(|ids| ids.iter().any(|id| id == property_id))
     }
 
     pub(crate) fn builder_entity_id_for_property(&self, property_id: &str) -> Option<&str> {
@@ -778,18 +747,6 @@ fn query_contains_phrase(query: &str, phrase: &str) -> bool {
         .collect::<Vec<_>>()
         .windows(phrase.split_whitespace().count())
         .any(|window| window.join(" ") == phrase)
-}
-
-pub(crate) fn property_matches_excluded_society(property: &Property, name: &str) -> bool {
-    entity_keys_match(&property.society_id, name)
-        || query_contains_phrase(
-            &normalize_entity_key(&property.title),
-            &normalize_entity_key(name),
-        )
-}
-
-pub(crate) fn property_matches_excluded_builder(property: &Property, name: &str) -> bool {
-    entity_keys_match(&property.builder_name, name)
 }
 
 fn entity_keys_match(left: &str, right: &str) -> bool {
@@ -1235,8 +1192,8 @@ mod tests {
     #[test]
     fn serving_aware_index_maps_canonical_society_hits_to_runtime_properties() {
         let properties = vec![
-            test_property("prop-2", "century-central"),
-            test_property("prop-1", "century-central"),
+            test_property("prop-2", "society:rera-af36618d49c94b92"),
+            test_property("prop-1", "society:rera-af36618d49c94b92"),
         ];
         let entities = vec![ServingEntityRecord {
             entity_id: "society:rera-af36618d49c94b92".to_string(),
@@ -1252,9 +1209,11 @@ mod tests {
             index.property_ids_for_entity_id("society:rera-af36618d49c94b92"),
             vec!["prop-2".to_string(), "prop-1".to_string()]
         );
-        assert_eq!(
-            index.property_ids_for_entity_id("society:century-central"),
-            vec!["prop-2".to_string(), "prop-1".to_string()]
+        assert!(
+            index
+                .property_ids_for_entity_id("society:century-central")
+                .is_empty(),
+            "display names are not identity aliases"
         );
     }
 
@@ -1290,12 +1249,11 @@ mod tests {
         );
 
         assert_eq!(index.recall_ids(&query), vec!["edge-linked-home"]);
-        assert!(index.entity_has_property(canonical_id, "edge-linked-home"));
     }
 
     #[test]
     fn serving_graph_market_locality_membership_participates_in_structured_recall() {
-        let mut property = test_property("graph-area-home", "century-central");
+        let mut property = test_property("graph-area-home", "society:rera-af36618d49c94b92");
         property.area = "Unknown".to_string();
         let entities = vec![
             ServingEntityRecord {
@@ -1355,6 +1313,7 @@ mod tests {
             price_per_sqft: 10_000,
             carpet_area_sqft: 1_000,
             super_builtup_sqft: 1_200,
+            area_measurement: None,
             floor: 1,
             total_floors: 10,
             facing: "East".to_string(),
@@ -1380,7 +1339,7 @@ mod tests {
             images: Vec::new(),
             hero_image: String::new(),
             description_summary: String::new(),
-            transparency_tags: Vec::new(),
+
             source_reference: "unit-test".to_string(),
         }
     }

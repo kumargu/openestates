@@ -1,0 +1,1026 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SearchJourneyEnvelope",
+  "type": "object",
+  "properties": {
+    "active": {
+      "$ref": "#/definitions/SearchJourneyActive"
+    },
+    "attempt": {
+      "$ref": "#/definitions/SearchJourneyAttempt"
+    },
+    "contractVersion": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "runtimeVersion": {
+      "$ref": "#/definitions/SearchRuntimeVersion"
+    }
+  },
+  "required": [
+    "contractVersion",
+    "runtimeVersion",
+    "active",
+    "attempt"
+  ],
+  "definitions": {
+    "Availability": {
+      "type": "string",
+      "enum": [
+        "available",
+        "unavailable"
+      ]
+    },
+    "BoolExpr": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "all"
+            },
+            "value": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/BoolExpr"
+              }
+            }
+          },
+          "required": [
+            "op",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "any"
+            },
+            "value": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/BoolExpr"
+              }
+            }
+          },
+          "required": [
+            "op",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "not"
+            },
+            "value": {
+              "$ref": "#/definitions/BoolExpr"
+            }
+          },
+          "required": [
+            "op",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "leaf"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "value"
+          ]
+        }
+      ]
+    },
+    "BrowsePropertyCard": {
+      "description": "Bounded landing-card projection built once with the immutable search runtime.\nIt deliberately excludes evidence blobs, descriptions, tags, and source panels.",
+      "type": "object",
+      "properties": {
+        "area": {
+          "type": "string"
+        },
+        "availability": {
+          "$ref": "#/definitions/InventoryAvailability"
+        },
+        "bhk": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "detail_href": {
+          "type": "string"
+        },
+        "google_rating": {
+          "type": "number",
+          "format": "double"
+        },
+        "google_review_count": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "id": {
+          "type": "string"
+        },
+        "image": {
+          "type": "string"
+        },
+        "price": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "price_max": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "price_min": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "save_id": {
+          "type": "string"
+        },
+        "society_id": {
+          "type": "string"
+        },
+        "society_name": {
+          "type": "string"
+        },
+        "sqft": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "availability",
+        "id",
+        "society_id",
+        "title",
+        "society_name",
+        "area",
+        "image",
+        "detail_href",
+        "save_id"
+      ]
+    },
+    "CollectionPriceBand": {
+      "type": "object",
+      "properties": {
+        "currency": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "max": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "min": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "min",
+        "max",
+        "currency",
+        "label"
+      ]
+    },
+    "IntentBranchPresentation": {
+      "type": "object",
+      "properties": {
+        "constraints": {
+          "$ref": "#/definitions/IntentExpression"
+        },
+        "id": {
+          "type": "string"
+        },
+        "preferences": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/IntentPreferencePresentation"
+          }
+        },
+        "unresolvedRequirements": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "constraints",
+        "preferences"
+      ]
+    },
+    "IntentExpression": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "clauses": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/IntentExpression"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "const": "all"
+            }
+          },
+          "required": [
+            "kind",
+            "clauses"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "clauses": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/IntentExpression"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "const": "any"
+            }
+          },
+          "required": [
+            "kind",
+            "clauses"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "clause": {
+              "$ref": "#/definitions/IntentExpression"
+            },
+            "kind": {
+              "type": "string",
+              "const": "not"
+            }
+          },
+          "required": [
+            "kind",
+            "clause"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "predicate"
+            },
+            "predicate": {
+              "$ref": "#/definitions/IntentPredicatePresentation"
+            }
+          },
+          "required": [
+            "kind",
+            "predicate"
+          ]
+        }
+      ]
+    },
+    "IntentPredicatePresentation": {
+      "type": "object",
+      "properties": {
+        "dimension": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "operator": {
+          "type": "string"
+        },
+        "polarity": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "resolvedLabel": {
+          "type": "string"
+        },
+        "unit": {
+          "type": "string"
+        },
+        "value": true
+      },
+      "required": [
+        "id",
+        "dimension",
+        "label",
+        "polarity",
+        "operator",
+        "value",
+        "required"
+      ]
+    },
+    "IntentPreferencePresentation": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "polarity": {
+          "$ref": "#/definitions/Polarity"
+        },
+        "priority": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "weight": {
+          "type": "number",
+          "format": "float"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "polarity",
+        "weight",
+        "required"
+      ]
+    },
+    "IntentPresentation": {
+      "type": "object",
+      "properties": {
+        "branches": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/IntentBranchPresentation"
+          }
+        },
+        "root": {
+          "$ref": "#/definitions/BoolExpr"
+        }
+      },
+      "required": [
+        "root",
+        "branches"
+      ]
+    },
+    "InventoryAvailability": {
+      "type": "object",
+      "properties": {
+        "area": {
+          "$ref": "#/definitions/Availability"
+        },
+        "bedrooms": {
+          "$ref": "#/definitions/Availability"
+        },
+        "price": {
+          "$ref": "#/definitions/Availability"
+        }
+      },
+      "required": [
+        "bedrooms",
+        "price",
+        "area"
+      ]
+    },
+    "JourneyClarification": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ]
+    },
+    "JourneyCollection": {
+      "type": "object",
+      "properties": {
+        "cards": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/BrowsePropertyCard"
+          }
+        },
+        "id": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        },
+        "priceBand": {
+          "$ref": "#/definitions/CollectionPriceBand"
+        },
+        "strategy": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "strategy",
+        "title",
+        "note",
+        "priceBand",
+        "cards"
+      ]
+    },
+    "JourneyResultCard": {
+      "description": "Bounded landing-card projection built once with the immutable search runtime.\nIt deliberately excludes evidence blobs, descriptions, tags, and source panels.",
+      "type": "object",
+      "properties": {
+        "area": {
+          "type": "string"
+        },
+        "availability": {
+          "$ref": "#/definitions/InventoryAvailability"
+        },
+        "bhk": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "detail_href": {
+          "type": "string"
+        },
+        "google_rating": {
+          "type": "number",
+          "format": "double"
+        },
+        "google_review_count": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "homeStateDisplay": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "image": {
+          "type": "string"
+        },
+        "matchTier": {
+          "$ref": "#/definitions/MatchTier"
+        },
+        "price": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "price_max": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "price_min": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SearchMatchReason"
+          }
+        },
+        "save_id": {
+          "type": "string"
+        },
+        "society_id": {
+          "type": "string"
+        },
+        "society_name": {
+          "type": "string"
+        },
+        "sqft": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "availability",
+        "id",
+        "society_id",
+        "title",
+        "society_name",
+        "area",
+        "image",
+        "detail_href",
+        "save_id",
+        "matchTier",
+        "reasons"
+      ]
+    },
+    "JourneyResultSet": {
+      "type": "object",
+      "properties": {
+        "branchId": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/JourneyResultCard"
+          }
+        }
+      },
+      "required": [
+        "branchId",
+        "label",
+        "results"
+      ]
+    },
+    "MatchTier": {
+      "type": "string",
+      "enum": [
+        "exact",
+        "supported",
+        "contextual"
+      ]
+    },
+    "Polarity": {
+      "type": "string",
+      "enum": [
+        "positive",
+        "negative"
+      ]
+    },
+    "ResultDelta": {
+      "type": "object",
+      "properties": {
+        "added": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "moved": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ResultMovement"
+          }
+        },
+        "removed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "retained": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "added",
+        "removed",
+        "retained",
+        "moved"
+      ]
+    },
+    "ResultMovement": {
+      "type": "object",
+      "properties": {
+        "cause": {
+          "$ref": "#/definitions/ResultMovementCause"
+        },
+        "explanation": {
+          "type": "string"
+        },
+        "from": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "propertyId": {
+          "type": "string"
+        },
+        "to": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "propertyId",
+        "from",
+        "to",
+        "cause",
+        "explanation"
+      ]
+    },
+    "ResultMovementCause": {
+      "type": "string",
+      "enum": [
+        "catalogRefresh",
+        "intentRefinement"
+      ]
+    },
+    "SearchGuidance": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string"
+        },
+        "mode": {
+          "type": "string"
+        },
+        "suggestions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode",
+        "title",
+        "message",
+        "suggestions"
+      ]
+    },
+    "SearchJourneyActive": {
+      "type": "object",
+      "properties": {
+        "buyerBrief": {
+          "type": "string"
+        },
+        "collections": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/JourneyCollection"
+          }
+        },
+        "intent": {
+          "$ref": "#/definitions/IntentPresentation"
+        },
+        "latestUtterance": {
+          "type": "string"
+        },
+        "results": {
+          "$ref": "#/definitions/SearchJourneyResults"
+        },
+        "revision": {
+          "$ref": "#/definitions/SearchJourneyRevision"
+        }
+      },
+      "required": [
+        "revision",
+        "buyerBrief",
+        "latestUtterance",
+        "intent",
+        "results",
+        "collections"
+      ]
+    },
+    "SearchJourneyAttempt": {
+      "type": "object",
+      "properties": {
+        "attemptedIntent": {
+          "$ref": "#/definitions/IntentPresentation"
+        },
+        "catalogDelta": {
+          "$ref": "#/definitions/ResultDelta"
+        },
+        "catalogRebased": {
+          "type": "boolean"
+        },
+        "clarification": {
+          "$ref": "#/definitions/JourneyClarification"
+        },
+        "intentDelta": {
+          "$ref": "#/definitions/ResultDelta"
+        },
+        "kind": {
+          "$ref": "#/definitions/SearchJourneyAttemptKind"
+        },
+        "operation": {
+          "$ref": "#/definitions/SearchRevisionOperation"
+        },
+        "outcome": {
+          "$ref": "#/definitions/SearchJourneyOutcome"
+        },
+        "selectedPropertyConsequence": {
+          "$ref": "#/definitions/SelectedPropertyConsequence"
+        }
+      },
+      "required": [
+        "kind",
+        "operation",
+        "outcome",
+        "catalogRebased"
+      ]
+    },
+    "SearchJourneyAttemptKind": {
+      "type": "string",
+      "enum": [
+        "initial",
+        "revision",
+        "resume"
+      ]
+    },
+    "SearchJourneyOutcome": {
+      "type": "string",
+      "enum": [
+        "activated",
+        "preservedParent",
+        "clarificationRequired",
+        "limitReached",
+        "resumed"
+      ]
+    },
+    "SearchJourneyResults": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "guidance": {
+              "$ref": "#/definitions/SearchGuidance"
+            },
+            "kind": {
+              "type": "string",
+              "const": "current"
+            },
+            "orderedResultIds": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "resultSets": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/JourneyResultSet"
+              }
+            },
+            "state": {
+              "$ref": "#/definitions/SearchResultState"
+            },
+            "totalMatches": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "kind",
+            "resultSets",
+            "orderedResultIds",
+            "totalMatches",
+            "state"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "retained"
+            },
+            "orderedResultIds": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "resultFingerprint": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "orderedResultIds",
+            "resultFingerprint"
+          ]
+        }
+      ]
+    },
+    "SearchJourneyRevision": {
+      "type": "object",
+      "properties": {
+        "depth": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "id": {
+          "type": "string"
+        },
+        "operation": {
+          "$ref": "#/definitions/SearchRevisionOperation"
+        },
+        "parentId": {
+          "type": "string"
+        },
+        "resultFingerprint": {
+          "type": "string"
+        },
+        "semanticFingerprint": {
+          "type": "string"
+        },
+        "stateToken": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "operation",
+        "depth",
+        "semanticFingerprint",
+        "resultFingerprint",
+        "stateToken"
+      ]
+    },
+    "SearchMatchReason": {
+      "type": "object",
+      "properties": {
+        "branchId": {
+          "type": "string"
+        },
+        "explanation": {
+          "type": "string"
+        },
+        "predicateId": {
+          "type": "string"
+        },
+        "proofToken": {
+          "type": "string"
+        },
+        "showOnCard": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "showOnCard",
+        "branchId",
+        "predicateId",
+        "explanation",
+        "proofToken"
+      ]
+    },
+    "SearchResultState": {
+      "type": "string",
+      "enum": [
+        "results",
+        "no_matches"
+      ]
+    },
+    "SearchRevisionOperation": {
+      "type": "string",
+      "enum": [
+        "initial",
+        "resume",
+        "refine",
+        "rephrase",
+        "expand",
+        "replace",
+        "exclude",
+        "correct"
+      ]
+    },
+    "SearchRuntimeVersion": {
+      "type": "object",
+      "properties": {
+        "scoringPolicyVersion": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "searchEngineVersion": {
+          "type": "string"
+        },
+        "semanticContractDigest": {
+          "type": "string"
+        },
+        "servingBundleVersion": {
+          "type": "string"
+        },
+        "snapshotIdentity": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "snapshotIdentity",
+        "servingBundleVersion",
+        "scoringPolicyVersion",
+        "searchEngineVersion",
+        "semanticContractDigest"
+      ]
+    },
+    "SelectedPropertyCause": {
+      "type": "string",
+      "enum": [
+        "catalogRefresh",
+        "intentRefinement"
+      ]
+    },
+    "SelectedPropertyConsequence": {
+      "type": "object",
+      "properties": {
+        "branchIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "cause": {
+          "$ref": "#/definitions/SelectedPropertyCause"
+        },
+        "explanation": {
+          "type": "string"
+        },
+        "failedPredicateIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "outcome": {
+          "$ref": "#/definitions/SelectedPropertyOutcome"
+        },
+        "proofReferences": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SearchMatchReason"
+          }
+        },
+        "propertyId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "propertyId",
+        "outcome",
+        "cause",
+        "explanation"
+      ]
+    },
+    "SelectedPropertyOutcome": {
+      "type": "string",
+      "enum": [
+        "retained",
+        "excluded"
+      ]
+    }
+  }
+}

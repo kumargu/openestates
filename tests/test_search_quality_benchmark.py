@@ -8,7 +8,9 @@ from pipeline.benchmark_search_quality import (
     evaluate_case,
     evaluate_proof_handoffs,
     flattened_results,
+    journey_results,
     load_suite,
+    project_context_handoff,
     public_quality_summary,
     serving_bundle_requirement_error,
 )
@@ -41,7 +43,44 @@ def search_diagnostics() -> dict:
     }
 
 
+def journey_fixture(payload: dict) -> dict:
+    sets = payload.pop("resultSets", None)
+    if sets is None:
+        sets = [{"branchId": "branch-1", "label": "Homes", "results": payload.pop("results", [])}]
+    handoffs = []
+    for group in sets:
+        for result in group["results"]:
+            focuses = result.pop("proof_focuses", result.pop("proofFocuses", []))
+            explanation = result.pop("match_explanation", result.pop("matchExplanation", {}))
+            proof_records = focuses + [reason for reason in explanation.get("reasons", [])
+                if not any(focus.get("factKey", focus.get("fact_key")) == reason.get("fact_key", reason.get("factKey")) for focus in focuses)]
+            result["reasons"] = []
+            for index, focus in enumerate(proof_records):
+                token = f"fixture-token:{result['id']}:{index}"
+                focus["proofToken"] = token
+                fact_key = focus.get("fact_key", focus.get("factKey", "fixture_fact"))
+                result["reasons"].append({"proofToken": token, "explanation": focus.get("preference", focus.get("display", fact_key)), "showOnCard": True})
+                handoffs.append({"result_id": result["id"], "search_focus": focus,
+                    "receipt": {"factKey": fact_key, "resolutionStatus": "resolved"}})
+    payload["_proof_handoffs"] = handoffs
+    return {"contractVersion": 1, "runtimeVersion": {"servingBundleVersion": "fixture"},
+            "active": {"intent": payload.pop("intent", {}), "results": {
+                "kind": "current", "resultSets": sets,
+                "orderedResultIds": [result["id"] for group in sets for result in group["results"]],
+                "totalMatches": payload.pop("totalMatches", sum(len(group["results"]) for group in sets)),
+                "state": payload.pop("state", "results"),
+                "guidance": payload.pop("searchGuidance", {})}}, "_request_duration_ms": 1.0, **payload}
+
+
 class SearchQualityBenchmarkTests(unittest.TestCase):
+    def test_current_envelope_is_required_and_backend_order_wins(self) -> None:
+        response = journey_fixture({"results": [{"id": "a"}, {"id": "b"}]})
+        response["active"]["results"]["orderedResultIds"] = ["b", "a"]
+        self.assertEqual([result["id"] for result in flattened_results(response)], ["b", "a"])
+        for invalid in [{"results": []}, {"contractVersion": 2}, {"contractVersion": 1, "active": {"results": {"kind": "retained"}}}]:
+            with self.assertRaises(ValueError):
+                flattened_results(invalid)
+
     def test_rera_registration_aliases_do_not_claim_legal_safety(self) -> None:
         for fact_key in ("rera_registered", "rera_number", "rera_status"):
             self.assertEqual(PREFERENCE_ALIASES[fact_key], {"rera_registration"})
@@ -86,7 +125,7 @@ class SearchQualityBenchmarkTests(unittest.TestCase):
         self.assertEqual(sources, [f"{bank_path}#mixed_south_experiment"])
 
     def test_public_result_sets_are_flattened_with_branch_provenance(self) -> None:
-        response = {
+        response = journey_fixture({
             "resultSets": [
                 {
                     "branchId": "branch-1",
@@ -99,7 +138,7 @@ class SearchQualityBenchmarkTests(unittest.TestCase):
                     "results": [{"id": "property:three", "bhk": 3}],
                 },
             ]
-        }
+        })
 
         results = flattened_results(response)
 
@@ -131,7 +170,7 @@ class SearchQualityBenchmarkTests(unittest.TestCase):
                 ],
             },
         }
-        response = {
+        response = journey_fixture({
             "query": case["query"],
             "resultSets": [
                 {
@@ -158,7 +197,7 @@ class SearchQualityBenchmarkTests(unittest.TestCase):
             "totalMatches": 1,
             "state": "results",
             "_request_duration_ms": 2.0,
-        }
+        })
 
         checks = evaluate_case(case, response)
 
@@ -170,13 +209,13 @@ class SearchQualityBenchmarkTests(unittest.TestCase):
             "query": "Godrej Air 4BHK",
             "expected": {"state": "no_matches", "total_matches": 0, "zero_results": True},
         }
-        response = {
+        response = journey_fixture({
             "query": case["query"],
             "resultSets": [],
             "totalMatches": 0,
             "state": "no_matches",
             "_request_duration_ms": 1.0,
-        }
+        })
 
         checks = evaluate_case(case, response)
 
@@ -188,7 +227,7 @@ class SearchQualityBenchmarkTests(unittest.TestCase):
             "query": "find me something good",
             "expected": {"search_guidance_mode": "needs_more_specifics"},
         }
-        response = {
+        response = journey_fixture({
             "query": case["query"],
             "resultSets": [],
             "totalMatches": 0,
@@ -200,7 +239,7 @@ class SearchQualityBenchmarkTests(unittest.TestCase):
                 "suggestions": [],
             },
             "_request_duration_ms": 1.0,
-        }
+        })
 
         checks = evaluate_case(case, response)
 
@@ -212,7 +251,7 @@ class SearchQualityBenchmarkTests(unittest.TestCase):
             "query": "3BHK under 2cr",
             "expected": {"result_budget_max": 20_000_000},
         }
-        response = {
+        response = journey_fixture({
             "resultSets": [
                 {
                     "branchId": "branch-1",
@@ -228,7 +267,7 @@ class SearchQualityBenchmarkTests(unittest.TestCase):
                 }
             ],
             "_request_duration_ms": 1.0,
-        }
+        })
 
         checks = evaluate_case(case, response)
 
@@ -236,11 +275,11 @@ class SearchQualityBenchmarkTests(unittest.TestCase):
 
     def test_repeated_public_results_must_keep_the_same_order(self) -> None:
         case = {"id": "STABLE", "query": "3BHK in Whitefield", "expected": {}}
-        response = {
+        response = journey_fixture({
             "resultSets": [],
             "_request_duration_ms": 1.0,
             "_ordered_result_ids_runs": [["one", "two"], ["two", "one"]],
-        }
+        })
 
         checks = evaluate_case(case, response)
 
@@ -306,14 +345,6 @@ class SearchQualityBenchmarkTests(unittest.TestCase):
                 "top_result_ids_any": ["property:purva-westend-3bhk"],
                 "result_ids_any": ["property:purva-westend-3bhk"],
                 "result_areas_all": ["Kudlu Gate"],
-                "resolved_entity_matches_all": [
-                    {
-                        "entity_id": "place:metro:kudlu-gate",
-                        "entity_type": "place",
-                        "match_source": "serving_entity",
-                        "polarity": "positive",
-                    }
-                ],
                 "proof_focus_any": [
                     {
                         "surface_id": "around_this_home",
@@ -324,7 +355,7 @@ class SearchQualityBenchmarkTests(unittest.TestCase):
                 ],
             },
         }
-        response = {
+        response = journey_fixture({
             "intent": {},
             "results": [
                 {
@@ -343,7 +374,7 @@ class SearchQualityBenchmarkTests(unittest.TestCase):
                 }
             ],
             "search_diagnostics": search_diagnostics(),
-        }
+        })
 
         checks = evaluate_case(case, response)
 
@@ -358,7 +389,7 @@ class SearchQualityBenchmarkTests(unittest.TestCase):
                 "forbidden_proof_focus_fact_keys": ["nearby_metro_stations"],
             },
         }
-        response = {
+        response = journey_fixture({
             "intent": {},
             "results": [
                 {
@@ -376,7 +407,7 @@ class SearchQualityBenchmarkTests(unittest.TestCase):
                 }
             ],
             "search_diagnostics": search_diagnostics(),
-        }
+        })
 
         checks = evaluate_case(case, response)
         failures = {(check["layer"], check["check"]) for check in checks if not check["passed"]}
@@ -396,7 +427,7 @@ class SearchQualityBenchmarkTests(unittest.TestCase):
                 ],
             },
         }
-        response = {
+        response = journey_fixture({
             "intent": {},
             "results": [
                 {
@@ -414,7 +445,7 @@ class SearchQualityBenchmarkTests(unittest.TestCase):
                 }
             ],
             "search_diagnostics": search_diagnostics(),
-        }
+        })
 
         checks = evaluate_case(case, response)
 
@@ -484,6 +515,52 @@ class SearchQualityBenchmarkTests(unittest.TestCase):
             "receipt_lineage_1",
             {check["check"] for check in failed if not check["passed"]},
         )
+
+    def test_context_handoff_projects_only_renderable_matched_evidence(self) -> None:
+        focus = {
+            "surfaceId": "around_this_home",
+            "layerId": "metro",
+            "factKey": "nearby_metro_stations",
+            "entityId": "place:hoodi",
+            "destinationKind": "scene",
+        }
+        proof = {
+            "factKey": "nearby_metro_stations",
+            "targetEntityId": "place:hoodi",
+            "sourceObservations": [{"observationId": "observation:hoodi"}],
+            "derivationChain": [],
+        }
+        fact = {
+            "id": "fact:hoodi",
+            "factKey": "nearby_metro_stations",
+            "sourceType": "Google",
+            "sourceUrl": "https://maps.google.com/hoodi",
+            "observedAt": "2026-08-01T00:00:00Z",
+            "evidence": {"evidence_id": {"kind": "observation", "id": "observation:hoodi"}},
+        }
+        context = {
+            "matchedProof": proof,
+            "features": [{
+                "fact": fact,
+                "target": {
+                    "entityId": "place:hoodi",
+                    "geometry": {"type": "Point", "coordinates": [77.7, 13.0]},
+                    "point": [77.7, 13.0],
+                },
+            }],
+        }
+
+        scene = project_context_handoff(context, focus, "bundle-v1")
+
+        self.assertEqual(scene["servingBundleVersion"], "bundle-v1")
+        self.assertEqual(scene["proofFocus"]["receiptId"], "fact:hoodi")
+        self.assertEqual(scene["features"][0]["entityId"], "place:hoodi")
+        self.assertEqual(scene["receipts"][0]["sourceType"], "Google")
+
+        context["features"][0]["target"]["geometry"] = None
+        context["features"][0]["target"]["point"] = None
+        nonspatial = project_context_handoff(context, focus, "bundle-v1")
+        self.assertIsNone(nonspatial["proofFocus"])
 
     def test_section_proof_handoff_requires_target_and_reachable_detail(self) -> None:
         focus = {

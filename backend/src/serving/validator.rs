@@ -46,6 +46,7 @@ pub struct ServingBundleValidationReport {
     pub media_references_checked: usize,
     pub passed: bool,
     pub issues: Vec<ServingBundleValidationIssue>,
+    pub excluded_search_capabilities: Vec<crate::search::capabilities::CapabilityExclusion>,
 }
 
 #[derive(Debug)]
@@ -336,8 +337,37 @@ pub async fn validate_search_serving_candidate(
             Some(manifest.entity_alias_parquet_key.clone()),
         );
     }
-    let mut fact_index = ServingFactIndex::from_records(facts.clone(), metadata.clone());
-    fact_index.add_society_aliases(&entities);
+    let fact_index = ServingFactIndex::from_records(facts.clone(), metadata.clone());
+    let capabilities = crate::search::SearchCapabilityIndex::from_bundle(&entities, &fact_index);
+    let mut excluded_search_capabilities = capabilities.excluded_bindings().to_vec();
+    for fact in &facts {
+        if !super::admission::inventory_fact_key(&fact.fact_key) {
+            continue;
+        }
+        if let Err(reason) = crate::search::evaluation::InventoryObservationValue::from_fact(fact) {
+            excluded_search_capabilities.push(crate::search::capabilities::CapabilityExclusion {
+                entity_id: fact.entity_id.clone(),
+                fact_key: fact.fact_key.clone(),
+                preference: "inventory".into(),
+                reason: reason.into(),
+            });
+        }
+    }
+    let identities = crate::search::identity::IdentityEvaluationIndex::from_records(
+        &entities,
+        &edges,
+        manifest.proof_snapshot_identity(),
+    );
+    for edge in &edges {
+        if identities.relationship_admitted(edge) == Some(false) {
+            excluded_search_capabilities.push(crate::search::capabilities::CapabilityExclusion {
+                entity_id: edge.from_entity_id.clone(),
+                fact_key: edge.edge_type.clone(),
+                preference: "entity_identity".into(),
+                reason: "requires_eligible_unambiguous_identity".into(),
+            });
+        }
+    }
     let properties = crate::data_loader::properties_from_serving_records_with_edges(
         &entities,
         &edges,
@@ -374,6 +404,7 @@ pub async fn validate_search_serving_candidate(
         rera_evidence_count: rera_evidence.len(),
         edge_count: edges.len(),
         media_references_checked,
+        excluded_search_capabilities,
         passed: issues.is_empty(),
         issues,
     })
@@ -555,7 +586,6 @@ fn validate_record_relations(
     issues: &mut Vec<ServingBundleValidationIssue>,
 ) {
     let mut entity_ids = BTreeSet::new();
-    let mut society_by_runtime_id = BTreeMap::<String, String>::new();
     for entity in entities {
         if !entity_ids.insert(entity.entity_id.as_str()) {
             issue(
@@ -565,28 +595,30 @@ fn validate_record_relations(
                 Some(entity.entity_id.clone()),
             );
         }
-        if entity.entity_type == "society" {
-            let runtime_id = format!("soc-{}", entity_slug(&entity.name));
-            if let Some(existing) =
-                society_by_runtime_id.insert(runtime_id.clone(), entity.entity_id.clone())
-            {
-                if existing != entity.entity_id {
-                    issue(
-                        issues,
-                        "ambiguous_canonical_society_identity",
-                        format!(
-                            "runtime society id {runtime_id} is produced by both {existing} and {}",
-                            entity.entity_id
-                        ),
-                        Some(runtime_id),
-                    );
-                }
-            }
-        }
     }
 
     let mut fact_pairs = BTreeSet::new();
     for fact in facts {
+        if let Some(encoded) = match &fact.value {
+            FactValue::Text(encoded) if super::admission::inventory_fact_key(&fact.fact_key) => {
+                Some(encoded)
+            }
+            _ => None,
+        } {
+            if let Ok(value) = serde_json::from_str::<
+                crate::search::evaluation::InventoryObservationValue,
+            >(encoded)
+            {
+                if let Err(reason) = value.validate() {
+                    issue(
+                        issues,
+                        "inconsistent_inventory_measurement",
+                        reason,
+                        Some(format!("{}/{}", fact.entity_id, fact.fact_key)),
+                    );
+                }
+            }
+        }
         if !entity_ids.contains(fact.entity_id.as_str()) {
             issue(
                 issues,
@@ -713,18 +745,6 @@ fn validate_property_projection(
                 Some(property.id.clone()),
             );
         }
-        let price_is_explicitly_unavailable = property
-            .transparency_tags
-            .iter()
-            .any(|tag| tag.eq_ignore_ascii_case("Price unavailable"));
-        if property.price == 0 && !price_is_explicitly_unavailable {
-            issue(
-                issues,
-                "incomplete_property_price",
-                "property card requires a positive price or an explicit unavailable state",
-                Some(property.id.clone()),
-            );
-        }
         if property.builder_name.trim().is_empty() {
             issue(
                 issues,
@@ -733,32 +753,7 @@ fn validate_property_projection(
                 Some(property.id.clone()),
             );
         }
-        if property.carpet_area_sqft == 0 {
-            issue(
-                issues,
-                "incomplete_property_size",
-                "property card requires positive size data",
-                Some(property.id.clone()),
-            );
-        }
     }
-}
-
-fn entity_slug(value: &str) -> String {
-    let mut output = String::new();
-    let mut pending_dash = false;
-    for character in value.trim().to_ascii_lowercase().chars() {
-        if character.is_ascii_alphanumeric() {
-            if pending_dash && !output.is_empty() {
-                output.push('-');
-            }
-            output.push(character);
-            pending_dash = false;
-        } else {
-            pending_dash = true;
-        }
-    }
-    output
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1019,8 +1014,8 @@ mod tests {
     }
 
     #[test]
-    fn repeatable_search_metadata_does_not_fail_bundle_validation() {
-        let entities = vec![super::super::ServingEntityRecord {
+    fn distinct_same_name_entities_and_repeatable_metadata_pass_validation() {
+        let mut entities = vec![super::super::ServingEntityRecord {
             entity_id: "society:test".to_string(),
             entity_type: "society".to_string(),
             name: "Test Society".to_string(),
@@ -1028,6 +1023,9 @@ mod tests {
             visibility: Default::default(),
             searchable_text: String::new(),
         }];
+        let mut same_name = entities[0].clone();
+        same_name.entity_id = "society:independent".to_string();
+        entities.push(same_name);
         let facts = vec![fact(FactValue::Text("School".to_string()))];
         let metadata = super::super::ServingSearchMetadataRecord {
             entity_id: "society:test".to_string(),
@@ -1050,5 +1048,19 @@ mod tests {
         );
 
         assert!(issues.is_empty(), "unexpected issues: {issues:?}");
+
+        let mut inconsistent = fact(FactValue::Text(r#"{"bhk":3,"price":10000000,"area_sqft":1112,"area_sqft_min":742,"area_sqft_max":764,"area_type":"carpet"}"#.into()));
+        inconsistent.fact_key = "listing_3bhk".into();
+        validate_record_relations(
+            &entities,
+            &[inconsistent],
+            &[],
+            &[],
+            "test-bundle",
+            &mut issues,
+        );
+        assert!(issues
+            .iter()
+            .any(|issue| issue.code == "inconsistent_inventory_measurement"));
     }
 }

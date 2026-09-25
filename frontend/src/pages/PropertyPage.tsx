@@ -1,3 +1,6 @@
+import { identityReceiptLabel } from "../lib/proof-focus.ts";
+import { projectPropertyContext } from "../lib/property-context.ts";
+import measurementPresentation from "../../../app/config/ui/measurements.json";
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import {
   Link,
@@ -8,13 +11,15 @@ import {
 import type {
   PropertyDetailResponse,
   ProofFocus,
+  SearchProofResolution,
   ArrivalSearchSociety,
   SurfaceSceneResponse,
 } from "../lib/types.ts";
 import {
   getProperty,
-  getPropertySurface,
-  getPropertySurfacesBatch,
+  ApiError,
+  getPropertyContext,
+  getPropertyContextsBatch,
   propertyDetailPath,
   resolveSearchProof,
 } from "../lib/api.ts";
@@ -54,6 +59,7 @@ import {
   initialPropertySurfaceId,
   propertyProofMatch,
   propertySceneProofFocus,
+  proofFocusRendered,
   resolvedProofFocus,
 } from "../lib/proof-focus.ts";
 import { backendUrl, publicSiteUrl } from "../lib/runtimeConfig.ts";
@@ -105,10 +111,26 @@ function PropertySearchMatch({
   );
 }
 
+function GenericSearchReceipt({ receipt }: { receipt: SearchProofResolution }) {
+  const sources = receipt.sourceObservations.filter((source) => source.sourceUrl);
+  return <details className="property-search-match property-search-receipt">
+    <summary>Matched your search</summary>
+    {identityReceiptLabel(receipt) && <p>{identityReceiptLabel(receipt)}</p>}
+    {receipt.claim && <p>{receipt.claim.value.toLocaleString("en-IN")} {receipt.claim.unit}</p>}
+    {receipt.constraint && <p>{receipt.constraint.raw_text}</p>}
+    {sources.map((source) => <a key={source.observationId} href={source.sourceUrl} target="_blank" rel="noreferrer">{sources.length === 1 ? "Source" : source.provider}</a>)}
+  </details>;
+}
+
+function propertyAreaLabel(property: PropertyDetailResponse["property"]): string | undefined {
+  const measurement = property.area_measurement;
+  if (!measurement) return undefined;
+  const labels: Record<string, string> = measurementPresentation.areaBasisLabels;
+  return `${measurement.value.toLocaleString("en-IN")} ${measurement.unit} ${labels[measurement.basis] ?? measurement.basis}`;
+}
+
 function buildPropertyJsonLd(p: PropertyDetailResponse["property"]) {
-  const sizeDescription = hasKnownNumber(p.carpet_area_sqft)
-    ? `${p.carpet_area_sqft} sqft`
-    : "available configuration";
+  const sizeDescription = propertyAreaLabel(p) ?? "available configuration";
   const jsonLd: Record<string, unknown> = {
     "@context": "https://schema.org",
     "@type": "RealEstateListing",
@@ -119,11 +141,6 @@ function buildPropertyJsonLd(p: PropertyDetailResponse["property"]) {
       `in ${p.area}, ${p.city}`,
     ].filter(Boolean).join(", "),
     url: publicSiteUrl(`/property/${encodeURIComponent(p.id)}`),
-    offers: {
-      "@type": "Offer",
-      price: p.price,
-      priceCurrency: "INR",
-    },
     address: {
       "@type": "PostalAddress",
       addressLocality: p.area,
@@ -133,10 +150,10 @@ function buildPropertyJsonLd(p: PropertyDetailResponse["property"]) {
   if (hasKnownNumber(p.bhk)) {
     jsonLd.numberOfRooms = p.bhk;
   }
-  if (hasKnownNumber(p.carpet_area_sqft)) {
+  if (p.area_measurement?.basis === "carpet") {
     jsonLd.floorSize = {
       "@type": "QuantitativeValue",
-      value: p.carpet_area_sqft,
+      value: p.area_measurement.value,
       unitCode: "FTK",
     };
   }
@@ -189,7 +206,8 @@ function PropertyPageBody({
   const [storyPlaying, setStoryPlaying] = useState(true);
   const [data, setData] = useState<PropertyDetailResponse | null>(null);
   const [resolvedFocus, setResolvedFocus] = useState<ProofFocus>();
-  const [proofUnavailable, setProofUnavailable] = useState(false);
+  const [proofError, setProofError] = useState<string>();
+  const [receipt, setReceipt] = useState<SearchProofResolution>();
   const proofFocus = resolvedFocus;
 
   useEffect(() => {
@@ -200,9 +218,10 @@ function PropertyPageBody({
       if (controller.signal.aborted) return;
       const focus = resolvedProofFocus(proof, token);
       setResolvedFocus(focus);
-      setProofUnavailable(!focus);
-    }).catch(() => {
-      if (!controller.signal.aborted) setProofUnavailable(true);
+      setReceipt(proof);
+      setProofError(undefined);
+    }).catch((error: unknown) => {
+      if (!controller.signal.aborted) setProofError(error instanceof ApiError ? error.code : "request_failed");
     });
     return () => controller.abort();
   }, [id, focusParam]);
@@ -220,7 +239,7 @@ function PropertyPageBody({
   const [searchContextSocieties, setSearchContextSocieties] =
     useState<ArrivalSearchSociety[]>([]);
   const [status, setStatus] = useState<
-    "loading" | "error" | "not_found" | "ok"
+    "loading" | "error" | "not_found" | "stale" | "ok"
   >("loading");
   const [retryKey, setRetryKey] = useState(0);
   const discoveryMapContext = useMemo(
@@ -250,7 +269,8 @@ function PropertyPageBody({
   useEffect(() => {
     const controller = new AbortController();
 
-    getProperty(id, { signal: controller.signal })
+    if (focusParam && !receipt && !proofError) return () => controller.abort();
+    getProperty(id, { signal: controller.signal, snapshotIdentity: receipt?.snapshotIdentity ?? propertySearchContext?.runtimeVersion.snapshotIdentity })
       .then((d) => {
         if (controller.signal.aborted) return;
         setData(d);
@@ -258,13 +278,14 @@ function PropertyPageBody({
       })
       .catch((err: Error) => {
         if (controller.signal.aborted) return;
-        setStatus(err.message.includes("404") ? "not_found" : "error");
+        setData(null);
+        setStatus(err instanceof ApiError && err.status === 409 ? "stale" : err.message.includes("404") ? "not_found" : "error");
       });
 
     return () => {
       controller.abort();
     };
-  }, [id, retryKey]);
+  }, [id, retryKey, focusParam, proofError, receipt, propertySearchContext?.runtimeVersion.snapshotIdentity]);
 
   useEffect(() => {
     const currentSocietyId = data?.entity_refs.society_entity_id;
@@ -278,14 +299,14 @@ function PropertyPageBody({
       return () => { cancelled = true; };
     }
     const controller = new AbortController();
-    void getPropertySurfacesBatch(
+    void getPropertyContextsBatch(
       candidates.map((candidate) => candidate.propertyId),
-      [ARRIVAL_STORY_SURFACE_ID],
+      { signal: controller.signal, snapshotIdentity: data?.snapshot_identity },
     ).then((response) => {
       if (controller.signal.aborted) return;
       const scenesByPropertyId = new Map(response.items.map((item) => [
         item.propertyId,
-        item.scenes.find((scene) => scene.surfaceId === ARRIVAL_STORY_SURFACE_ID),
+        projectPropertyContext(item, ARRIVAL_STORY_SURFACE_ID),
       ]));
       const resolved = candidates.flatMap((candidate) => {
         const scene = scenesByPropertyId.get(candidate.propertyId);
@@ -326,22 +347,21 @@ function PropertyPageBody({
       if (!controller.signal.aborted) setSearchContextSocieties([]);
     });
     return () => controller.abort();
-  }, [data?.entity_refs.society_entity_id, discoveryMapContext]);
+  }, [data?.entity_refs.society_entity_id, data?.snapshot_identity, discoveryMapContext]);
 
   useEffect(() => {
     const propertyId = data?.property?.id;
     if (!propertyId) return;
     let cancelled = false;
 
-    getPropertySurface(
+    getPropertyContext(
       propertyId,
-      initialPropertySurfaceId(proofFocus),
-      propertySceneProofFocus(proofFocus),
+      propertySceneProofFocus(proofFocus)?.proofToken,
+      { snapshotIdentity: data.snapshot_identity },
     )
-      .then((scene) => {
+      .then((context) => {
         if (!cancelled) {
-          setAroundThisHomeScene(scene);
-          if (propertySceneProofFocus(proofFocus)?.proofToken && scene.proofFocusStatus && scene.proofFocusStatus !== "applied") setProofUnavailable(true);
+          setAroundThisHomeScene(projectPropertyContext(context, initialPropertySurfaceId(proofFocus), proofFocus?.proofToken));
         }
       })
       .catch(() => {
@@ -351,17 +371,17 @@ function PropertyPageBody({
     return () => {
       cancelled = true;
     };
-  }, [data?.property?.id, proofFocus]);
+  }, [data, proofFocus]);
 
   useEffect(() => {
     const propertyId = data?.property?.id;
     if (!propertyId) return;
     let cancelled = false;
 
-    getPropertySurface(propertyId, ARRIVAL_STORY_SURFACE_ID)
-      .then((scene) => {
+    getPropertyContext(propertyId, undefined, { snapshotIdentity: data.snapshot_identity })
+      .then((context) => {
         if (cancelled) return;
-        setArrivalScene(scene);
+        setArrivalScene(projectPropertyContext(context, ARRIVAL_STORY_SURFACE_ID));
         setArrivalSceneStatus("ready");
       })
       .catch(() => {
@@ -373,7 +393,7 @@ function PropertyPageBody({
     return () => {
       cancelled = true;
     };
-  }, [data?.property?.id]);
+  }, [data]);
 
   useEffect(() => {
     if (
@@ -426,6 +446,14 @@ function PropertyPageBody({
         </section>
       </div>
     );
+  if (status === "stale") return (
+    <div className="page-state" role="status">
+      <h2>This evidence changed since your search.</h2>
+      <Link className="page-state__action page-state__action--primary" to={`/?q=${encodeURIComponent(propertySearchContext?.queryLabel ?? "")}`}>
+        Search again
+      </Link>
+    </div>
+  );
   if (status === "not_found")
     return (
       <PageState
@@ -456,9 +484,7 @@ function PropertyPageBody({
   const pricePerSqftLabel = hasKnownNumber(p.price_per_sqft)
     ? `${p.price_per_sqft.toLocaleString("en-IN")} /sqft`
     : null;
-  const sizeLabel = hasKnownNumber(p.carpet_area_sqft)
-    ? `${p.carpet_area_sqft.toLocaleString("en-IN")} sqft`
-    : null;
+  const sizeLabel = propertyAreaLabel(p);
   const pageDescription = [
     hasKnownNumber(p.bhk) ? `${p.bhk} BHK` : null,
     sizeLabel,
@@ -494,6 +520,9 @@ function PropertyPageBody({
   );
   const hasGoogleReviews = Boolean(data.external_reviews?.reviews?.length
     || data.external_reviews?.google_reviews_url || hasKnownNumber(data.external_reviews?.google_rating));
+  const showGenericReceipt = Boolean(
+    receipt && !proofFocusRendered(proofFocus, aroundThisHomeScene),
+  );
 
   if (arrivalSceneStatus === "loading") {
     return (
@@ -553,7 +582,8 @@ function PropertyPageBody({
             ),
           }}
         />
-        {proofUnavailable && <p className="property-atlas-proof-status" role="status">This search receipt is no longer available. You can still explore the home.</p>}
+        {showGenericReceipt && receipt && <GenericSearchReceipt receipt={receipt} />}
+        {proofError && <p className="property-atlas-proof-status" role="status">{proofError === "stale_proof_snapshot" ? "This evidence changed since your search. Search again to see the latest homes." : proofError === "proof_evidence_missing" ? "This receipt is no longer available." : "This receipt could not be opened. Try again."}</p>}
         {hasGoogleReviews && <section id="resident-voice" className="property-atlas-reviews" aria-labelledby="atlas-reviews-title" tabIndex={-1}>
           <header>
             <h2 id="atlas-reviews-title">What residents say</h2>
@@ -640,7 +670,8 @@ function PropertyPageBody({
           />
 
           <main className="property-clean-flow">
-            {proofUnavailable && <p role="status">This search receipt is no longer available. You can still explore the home.</p>}
+            {showGenericReceipt && receipt && <GenericSearchReceipt receipt={receipt} />}
+        {proofError && <p role="status">{proofError === "stale_proof_snapshot" ? "This evidence changed since your search. Search again to see the latest homes." : proofError === "proof_evidence_missing" ? "This receipt is no longer available." : "This receipt could not be opened. Try again."}</p>}
             <PropertySearchMatch data={data} focus={proofFocus} />
 
             {story.map.available && aroundThisHomeContext && (

@@ -4,6 +4,7 @@ export default defineConfig({
   testDir: "./e2e/search",
   outputDir: "./test-results/search-journey",
   timeout: 30000,
+  grepInvert: /live bundle API/,
   workers: 1,
   projects: [
     { name: "desktop", use: { viewport: { width: 1440, height: 1000 } } },

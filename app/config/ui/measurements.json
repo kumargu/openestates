@@ -1,0 +1,9 @@
+{
+  "areaBasisLabels": {
+    "carpet": "carpet",
+    "built_up": "built-up",
+    "super_builtup": "super built-up",
+    "mixed": "listed area",
+    "unspecified": "listed area"
+  }
+}

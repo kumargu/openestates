@@ -1,6 +1,6 @@
 {
   "_comment": "SOURCE CONFLICT RULES — which source tier wins, confidence caps per source_type, never_default prefixes for risk/operating facts.",
-  "version": 2,
+  "version": 3,
   "default_strategy": "prefer_highest_confidence",
   "source_tiers": [
     "source_entity_seed",
@@ -58,6 +58,23 @@
     "minimum_direct_address_confidence": 0.8,
     "neighborhood_radius_km": 4.0,
     "market_name_fact_key": "market.locality_name"
+  },
+  "inventory_evidence": {
+    "fact_key_pattern": "^listing_[0-9]+(?:_[0-9]+)?bhk$",
+    "minimum_confidence": 0.6,
+    "allowed_sources": [
+      "ExternalListing"
+    ]
+  },
+  "identity_evidence": {
+    "minimum_confidence": 0.6,
+    "allowed_sources": [
+      "Rera",
+      "SpatialTopology",
+      "MarketLocality",
+      "SourceEntitySeed",
+      "OpenStreetMap"
+    ]
   },
   "overrides": {
     "legal.rera_registered": {

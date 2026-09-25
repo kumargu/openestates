@@ -4,6 +4,14 @@ use crate::serving::{ServingEntityRecord, ServingFactIndex};
 
 use super::intent::PreferenceSignal;
 
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct CapabilityExclusion {
+    pub entity_id: String,
+    pub fact_key: String,
+    pub preference: String,
+    pub reason: String,
+}
+
 /// Search dimensions that are both configured and present in the promoted bundle.
 ///
 /// The index is built once at bundle load. Request-time validation only performs
@@ -13,6 +21,7 @@ pub struct SearchCapabilityIndex {
     fact_keys: HashSet<String>,
     preference_labels: HashSet<String>,
     entity_types: HashSet<String>,
+    excluded: Vec<CapabilityExclusion>,
 }
 
 impl SearchCapabilityIndex {
@@ -23,27 +32,45 @@ impl SearchCapabilityIndex {
                 .entity_types
                 .insert(entity.entity_type.trim().to_ascii_lowercase());
         }
-        for (_, rows) in facts.rows() {
-            for fact in &rows.facts {
-                index
-                    .fact_keys
-                    .insert(fact.fact_key.trim().to_ascii_lowercase());
-            }
+        for (entity_id, rows) in facts.rows() {
             for metadata in &rows.search_metadata {
-                if !index
-                    .fact_keys
-                    .contains(&metadata.fact_key.trim().to_ascii_lowercase())
-                {
-                    continue;
-                }
                 for preference in &metadata.answers_preferences {
-                    index
-                        .preference_labels
-                        .insert(preference.trim().to_ascii_lowercase());
+                    if super::text::preference_capability_supported(
+                        facts,
+                        entity_id,
+                        &metadata.fact_key,
+                        preference,
+                    ) {
+                        index
+                            .fact_keys
+                            .insert(metadata.fact_key.trim().to_ascii_lowercase());
+                        index
+                            .preference_labels
+                            .insert(preference.trim().to_ascii_lowercase());
+                    } else {
+                        index.excluded.push(CapabilityExclusion {
+                            entity_id: entity_id.to_string(),
+                            fact_key: metadata.fact_key.clone(),
+                            preference: preference.clone(),
+                            reason: "no_eligible_evaluable_evidence".to_string(),
+                        });
+                    }
                 }
             }
         }
+        index.excluded.sort_by(|a, b| {
+            (&a.entity_id, &a.fact_key, &a.preference).cmp(&(
+                &b.entity_id,
+                &b.fact_key,
+                &b.preference,
+            ))
+        });
+        index.excluded.dedup();
         index
+    }
+
+    pub fn excluded_bindings(&self) -> &[CapabilityExclusion] {
+        &self.excluded
     }
 
     pub fn supports_preference(&self, preference: &PreferenceSignal) -> bool {
@@ -59,10 +86,6 @@ impl SearchCapabilityIndex {
     pub fn supports_fact_key(&self, fact_key: &str) -> bool {
         let requested = fact_key.trim().to_ascii_lowercase();
         self.fact_keys.contains(&requested)
-            || self.fact_keys.iter().any(|available| {
-                available.starts_with(&format!("{requested}_"))
-                    || requested.starts_with(&format!("{available}_"))
-            })
     }
 
     pub fn supports_entity_type(&self, entity_type: &str) -> bool {
@@ -96,7 +119,17 @@ mod tests {
                 model: None,
                 skill_id: None,
                 learned_at: Utc::now(),
-                observation: None,
+                observation: Some(
+                    crate::serving::SourceObservation::new(
+                        "Computed",
+                        "noise-observation",
+                        "society:one",
+                        Utc::now(),
+                        None,
+                        vec!["fixture/v1".to_string()],
+                    )
+                    .unwrap(),
+                ),
             }],
             vec![ServingSearchMetadataRecord {
                 entity_id: "society:one".to_string(),
@@ -119,5 +152,20 @@ mod tests {
             missing_evidence_neutral: true,
         }));
         assert!(!index.supports_fact_key("cats"));
+        let rows = facts.entity("society:one").unwrap();
+        for (confidence, value) in [
+            (0.1, FactValue::Numeric(0.8)),
+            (0.8, FactValue::Text("not a number".to_string())),
+        ] {
+            let mut fact = rows.facts[0].clone();
+            fact.confidence = confidence;
+            fact.value = value;
+            let rejected = ServingFactIndex::from_records(vec![fact], rows.search_metadata.clone());
+            assert!(
+                !SearchCapabilityIndex::from_bundle(&[], &rejected)
+                    .supports_fact_key("noise_score"),
+                "capability must bind eligible evidence and an executable value type"
+            );
+        }
     }
 }

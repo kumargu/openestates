@@ -8,7 +8,6 @@ import json
 import math
 import os
 import re
-import statistics
 import html as html_lib
 import urllib.error
 import urllib.parse
@@ -173,7 +172,7 @@ def records_for_entity(
             )
         observations.extend(page_observations)
 
-    return aggregate_listing_records(observations)
+    return listing_records(observations)
 
 
 def explicit_source_pages(input_data: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -820,57 +819,30 @@ def clean_html_text(value: str) -> str:
     return text.strip()
 
 
-def aggregate_listing_records(observations: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    grouped = {}  # type: Dict[Tuple[str, float, str, str], List[Dict[str, Any]]]
-    for observation in observations:
-        bhk = observation.get("bhk")
-        entity_id = observation.get("entity_id")
-        if not entity_id or bhk is None:
-            continue
-        listing_type = listing_type_from_page(observation)
-        source_name = optional_string(observation.get("source_name")) or "ExternalListing"
-        grouped.setdefault((str(entity_id), float(bhk), listing_type, source_name), []).append(
-            observation
-        )
-
+def listing_records(observations: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Keep each listing observation intact; project ranges are not inventory."""
     records = []
-    for (_entity_id, bhk, listing_type, _source_name), group in grouped.items():
-        prices = sorted_float_values(record.get("price") for record in group)
-        areas = sorted_float_values(record.get("area_sqft") for record in group)
-        ppsf_values = sorted_float_values(record.get("price_per_sqft") for record in group)
-        if not prices or not areas:
+    for observation in observations:
+        price = optional_float(observation.get("price"))
+        area = optional_float(observation.get("area_sqft"))
+        bhk = optional_float(observation.get("bhk"))
+        if not observation.get("entity_id") or any(
+            value is None or not math.isfinite(value) or value <= 0
+            for value in (price, area, bhk)
+        ):
             continue
-        first = group[0]
-        price = statistics.median(prices)
-        area_sqft = representative_area_sqft(price, areas, ppsf_values)
-        records.append(
-            {
-                "entity_id": first["entity_id"],
-                "project_key": first.get("project_key"),
-                "source_name": first["source_name"],
-                "source_url": first.get("source_url"),
-                "listing_type": listing_type,
-                "price": round(price),
-                "price_min": round(prices[0]),
-                "price_max": round(prices[-1]),
-                "area_sqft": round(area_sqft),
-                "area_sqft_min": round(areas[0]),
-                "area_sqft_max": round(areas[-1]),
-                "price_per_sqft_min": round(ppsf_values[0]) if ppsf_values else None,
-                "price_per_sqft_max": round(ppsf_values[-1]) if ppsf_values else None,
-                "price_display": inr_range_display(prices[0], prices[-1]),
-                "area_display": sqft_range_display(areas[0], areas[-1]),
-                "price_per_sqft_display": ppsf_range_display(ppsf_values),
-                "configuration": "{} BHK".format(format_bhk(bhk)),
-                "area_type": aggregate_area_type(group),
-                "bhk": bhk,
-                "bathrooms": median_optional(record.get("bathrooms") for record in group),
-                "floor": representative_text(record.get("floor") for record in group),
-                "society": first.get("society"),
-                "locality": representative_text(record.get("locality") for record in group),
-                "observed_at": max(record["observed_at"] for record in group),
-            }
+        record = dict(observation)
+        record.update(
+            listing_type=listing_type_from_page(observation),
+            price=round(price), price_min=round(price), price_max=round(price),
+            area_sqft=round(area), area_sqft_min=round(area), area_sqft_max=round(area),
+            price_display=inr_display(price), area_display=sqft_range_display(area, area),
+            configuration="{} BHK".format(format_bhk(bhk)),
         )
+        ppsf = optional_float(observation.get("price_per_sqft"))
+        record.update(price_per_sqft_min=ppsf, price_per_sqft_max=ppsf,
+                      price_per_sqft_display=ppsf_range_display([ppsf]) if ppsf else None)
+        records.append(record)
     return records
 
 
@@ -1051,17 +1023,8 @@ def dedupe_records(records: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
     deduped = []
     seen = set()
     for record in records:
-        key = (
-            record["entity_id"],
-            record.get("bhk"),
-            record.get("listing_type"),
-            record.get("source_name"),
-            record.get("source_url"),
-            record.get("price_min"),
-            record.get("price_max"),
-            record.get("area_sqft_min"),
-            record.get("area_sqft_max"),
-        )
+        # Preserve distinct listing observations (including explicit identity and floor).
+        key = json.dumps(record, sort_keys=True, separators=(",", ":"))
         if key in seen:
             continue
         seen.add(key)
@@ -1206,17 +1169,6 @@ def skip_listing_fetch(request: Dict[str, Any]) -> bool:
     )
 
 
-def aggregate_area_type(group: List[Dict[str, Any]]) -> str:
-    values = {
-        value
-        for value in (optional_string(record.get("area_type")) for record in group)
-        if value
-    }
-    if len(values) == 1:
-        return next(iter(values))
-    return "mixed listed area" if values else "unknown"
-
-
 def sorted_float_values(values: Iterable[Any]) -> List[float]:
     parsed = []
     for value in values:
@@ -1224,38 +1176,6 @@ def sorted_float_values(values: Iterable[Any]) -> List[float]:
         if number is not None and math.isfinite(number) and number > 0:
             parsed.append(number)
     return sorted(parsed)
-
-
-def representative_area_sqft(
-    price: float, areas: List[float], ppsf_values: List[float]
-) -> float:
-    if ppsf_values:
-        ppsf = statistics.median(ppsf_values)
-        if ppsf > 0:
-            return price / ppsf
-    return statistics.median(areas)
-
-
-def median_optional(values: Iterable[Any]) -> Optional[float]:
-    parsed = sorted_float_values(values)
-    return statistics.median(parsed) if parsed else None
-
-
-def representative_text(values: Iterable[Any]) -> Optional[str]:
-    counts = {}  # type: Dict[str, int]
-    for value in values:
-        text = optional_string(value)
-        if text:
-            counts[text] = counts.get(text, 0) + 1
-    if not counts:
-        return None
-    return sorted(counts.items(), key=lambda item: (-item[1], item[0]))[0][0]
-
-
-def inr_range_display(min_price: float, max_price: float) -> str:
-    if round(min_price) == round(max_price):
-        return inr_display(min_price)
-    return "{} - {}".format(inr_display(min_price), inr_display(max_price))
 
 
 def inr_display(value: float) -> str:
