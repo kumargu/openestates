@@ -23,29 +23,26 @@ the API and search process load one compact Parquet bundle and one Tantivy
 index, never per-society files.
 
 The immutable roster referenced by `manifests/catalog/dev.json` is authoritative.
-When no pointer exists, `apply` starts from an empty roster; populate it with
-explicit society upserts. Each active generation stores a roster that pins the
-exact gold snapshots used by that bundle.
+`data/catalog/bootstrap_roster.json` is used only for the first `rebuild` when
+no catalog pointer exists; commands never rewrite it. Each active generation
+stores a roster that pins the exact gold snapshots used by that bundle.
 
 ## Commands
 
 ```bash
 cd backend
-cargo run --bin openestates-catalog -- apply <request.json>
+cargo run --bin openestates-catalog -- add <society-seed.json>
+cargo run --bin openestates-catalog -- remove <society-id>
+cargo run --bin openestates-catalog -- rebuild
 cargo run --bin openestates-catalog -- undo
 ```
 
-- `apply` accepts one operation ID, society upserts/removals, and selected
-  society or shared refresh modules. Repeating the same operation resumes saved
-  work or returns the completed report.
-- An empty change list rebuilds the bundle from pinned inputs without network
-  collection.
+- `add` is an upsert and atomically replaces a matching RERA/runtime identity.
+- `remove` omits the society from the next generation.
+- `rebuild` recollects every seed in the authoritative roster, then rebuilds
+  global topology and proximity while assembling the new bundle. It does not
+  use old society gold or serving output.
 - `undo` swaps current and previous generations.
-
-An operation whose saved base revision is no longer current is closed as a
-terminal `stale_base_revision` failure. Repeating it returns the same conflict;
-the catalog never rebases it, and its immutable collected inputs remain
-available for diagnosis or an explicit new operation.
 
 Every mutating command builds and validates first, then compare-and-swaps the
 pointer. A corrupt snapshot, structural error, empty projected property set,
@@ -60,32 +57,14 @@ failed operation. Missing optional enrichment and serving quarantines are
 warnings. Geographic search continues to fail closed when topology evidence
 is unavailable.
 
-An existing society whose legacy snapshot has no recoverable asset lineage is
-retained and reported in `skipped` when the requested modules cannot be patched
-using configured contribution ownership. Supported module patches preserve the
-unmodified snapshot contributions.
-Every collection failure and skipped society is also written to immutable
-Parquet at:
-
-```text
-diagnostics/catalog_failures/operation=<operation_id>/part-00000.parquet
-```
-
-The apply report pins that artifact by key, size, and hash. Rows contain a
-stable failure ID, catalog revisions, society and asset scope, stage, error
-code, retryability, disposition, producer hash, and serialized operation
-context. This ledger is operational evidence for automated diagnosis and retry;
-it never contributes buyer facts, ranking, or serving output.
-
 The bundle validator verifies hashes, row counts, typed Parquet schemas,
 Tantivy artifacts, projected properties, eligibility, evidence relations, and
 every local media reference. There is no frontend manifest mutation and no
 separate create/validate/promote workflow.
 
-Cleanup is disabled during migration by `catalog_enrichment.json`. When enabled,
-it defers deletion while any catalog operation remains unfinished. Otherwise,
-it retains current and previous bundles, rosters, and referenced gold/topology
-snapshots, and removes retired release and serving-materialization pointers.
+After a successful pointer swap, cleanup retains only current and previous
+bundles, rosters, and referenced gold/topology snapshots. It also removes the
+retired release, environment, serving-materialization, and asset-pointer data.
 
 ## Runtime
 

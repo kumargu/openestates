@@ -143,7 +143,7 @@ app/config/
 | `data/product/livability_theme_registry.json` | Merged into `concern_taxonomy.json` + `fact_registry.json` |
 | `backend/src/assets/registry.rs` | Exported to `asset_registry.json`; Rust loader in `dag_config/` |
 | `data/product/buyer_context_sections.json` | Copied to `app/config/product/evidence_sections.json` |
-| `data/product/approach_road_visuals.json` | Removed; Street View resolves only from OSM entrance/corridor facts |
+| `data/product/approach_road_visuals.json` | Move to lake as enriched media facts on `road_segment` |
 
 ### 2.2 Leaf schema (every fact)
 
@@ -210,7 +210,7 @@ Track and eliminate these as phases complete.
 | `livability_brief.rs` | `include_str!(livability_theme_registry.json)` | Load `concern_taxonomy.json` |
 | `data_loader.rs` | `.unwrap_or(0.5)` on seed scores | Hydrate from facts; null if missing |
 | `routes/properties.rs` | Evidence section builders (`rera`, `reviews`, …) | Group facts by `ui.section_kind` from config |
-| `routes/properties.rs` | `include_str!(approach_road_visuals.json)` | Removed; property map consumes typed OSM entrance/corridor facts |
+| `routes/properties.rs` | `include_str!(approach_road_visuals.json)` | Reference fact_keys; visuals optional overlay |
 | `scoring/transparency.rs` | Seed-field composite | DAG-backed confidence components |
 
 ### 4.2 Pipeline (Python)
@@ -282,7 +282,7 @@ Each phase has **deliverables**, **acceptance criteria**, and **storage checks**
 
 - [x] `dag_config` loaders for manifest, asset registry, crawl policies
 - [ ] `cargo test` asset registry tests pass from JSON loader only (no embedded fallback)
-- [ ] `openestates-catalog apply <request.json>` follows the configured DAG plan
+- [ ] `openestates-catalog rebuild` follows the configured DAG plan
 - [ ] Parquet output byte-identical for a fixed fixture run (or schema-compatible)
 
 **Storage check:** No new lake tables; manifest keys unchanged.
@@ -602,7 +602,7 @@ Full checklist: `app/config/coverage.json` → `graph_ui_readiness`.
 | Rust unit/integration | `cargo test` |
 | Search quality | `pipeline/eval_search.py` + `data/validation/search_quality_benchmark.json` |
 | Frontend types | `npx tsc --noEmit` |
-| Catalog rebuild | `openestates-catalog apply <request.json>` |
+| Catalog rebuild | `openestates-catalog rebuild` |
 | Parquet schema | serving `schema.json` format_version |
 
 ### 7.2 Per-run artifacts (lake)

@@ -184,7 +184,7 @@ aws s3 sync s3://openestates-prod/lake/ data/lake/
 |------|------|
 | `data/search/fact_schema_registry.json` | Merged into `app/config/dag/fact_registry.json` |
 | `data/product/livability_theme_registry.json` | Merged into `concern_taxonomy.json` |
-| `data/product/approach_road_visuals.json` | Removed; OSM entrance/corridor facts drive runtime Street View lookup |
+| `data/product/approach_road_visuals.json` | Gate coords → lake facts; policy in bootstrap |
 | `data/knowledge/` | Delete when fully in gold KG |
 
 ---

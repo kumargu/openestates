@@ -8,5 +8,4 @@ Buyer-facing landing copy. **No entity instances, no fact values.**
 
 Loaded by Rust at startup (`discovery.rs`). Property evidence sections are owned by `app/config/dag/evidence_sections.json`.
 
-Street View resolves at runtime only from an explicit OSM entrance or exact OSM
-approach corridor. It is visualization coverage, not durable entrance truth.
+`approach_road_visuals` (Street View frames) is **lake data**, not config — see `app/config/coverage.json`.

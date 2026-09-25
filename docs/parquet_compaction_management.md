@@ -74,9 +74,11 @@ confidence, then uses stable content/source identity as the deterministic
 tie-break. Observation timestamps remain provenance and never decide product
 meaning.
 
-OSM society boundaries, entrances, and exact approach corridors are ordinary
-typed facts in `osm_society_access_facts`. Compaction therefore carries them
-through the same pinned `society_fact_snapshot` as other society evidence.
+Graph-shaped assets such as `approach_road_graph_facts` are intentionally not
+folded into `society_fact_snapshot`. They carry road-segment entities and edges
+as well as facts, so the society gold snapshot keeps them as direct
+dependencies while using `society_fact_snapshot` for row-shaped project
+claims.
 
 ## Runtime Rule
 
